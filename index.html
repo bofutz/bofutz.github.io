@@ -131,7 +131,7 @@
                                                             <div class="font-bold text-slate-800 flex items-center group-hover:theme-text transition-colors">
                                                                 <i class="fa-regular fa-image text-[11px] text-slate-300 hover:text-blue-500 transition mr-1.5 py-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                                                 {{ item.etf_name }}
-                                                                <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded ml-1 font-normal leading-none h-max">当前Top3免费</span>
+                                                                <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded ml-1 font-normal leading-none h-max">免费</span>
                                                             </div>
                                                             <div class="text-[11px] text-slate-400 font-mono ml-4">{{ item.etf_code }}</div>
                                                         </div>
@@ -181,7 +181,7 @@
                         <div class="sm:hidden flex flex-col gap-3">
                             <template v-for="(item, index) in sortedData" :key="'m-'+item.etf_code">
                                 <div class="bg-white rounded shadow-sm border border-slate-100 p-4 relative overflow-hidden transition-colors cursor-pointer" @click="toggleRow(item)">
-                                    <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl shadow-sm">当前Top3免费</div>
+                                    <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl shadow-sm">免费</div>
                                     <div class="flex justify-between items-center mb-3">
                                         <div class="flex flex-col">
                                             <div class="font-bold text-slate-800 text-[15px] flex items-center gap-1.5">
@@ -496,7 +496,7 @@
                 const currentRoute = ref(window.location.hash || '#/');
                 const menuOpen = ref(false); 
                 const userMenuOpen = ref(false);
-                const freeEtfCodes = ref([]); // 记录当前最新周期的 Top 3 免费 ETF 代码
+                const freeEtfCodes = ref([]); // 记录当前最新周期的免费ETF代码
 
                 const navigate = (path) => { currentRoute.value = path; window.location.hash = path; menuOpen.value = false; };
                 const closeDropdowns = () => { userMenuOpen.value = false; showDropdown.value = false; };
@@ -925,7 +925,7 @@
                         return;
                     }
                     
-                    if (confirm('此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三的波幅异动标的免费对全网开放，新注册送 1 天体验权限！')) {
+                    if (confirm('此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三免费对全网开放，新注册送 1 天体验权限！')) {
                         if (!isLoggedIn.value) openAuth('login');
                         else navigate('#/plan');
                     }
