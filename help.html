@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本插件使用方法</title>
+    <style>
+        :root {
+            --primary-color: #0f2041;
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --border-color: #e0e6ed;
+            --text-main: #333333;
+            --accent-color: #d4af37;
+            --up-color: #e53935; /* 上涨红 */
+            --down-color: #00b050; /* 下跌绿 */
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            line-height: 1.8;
+        }
+        .header {
+            background-color: var(--primary-color);
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+            border-bottom: 4px solid var(--accent-color);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: 2px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .image-section {
+            padding: 30px;
+            text-align: center;
+            background-color: #fafbfc;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .image-section img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #ebf0f5;
+        }
+        .content-section {
+            padding: 40px;
+        }
+        .content-section h3 {
+            color: var(--primary-color);
+            border-left: 4px solid var(--accent-color);
+            padding-left: 12px;
+            margin-top: 0;
+            font-size: 20px;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 30px 0;
+        }
+        ul li {
+            background-color: #f8fafc;
+            margin-bottom: 15px;
+            padding: 15px 20px;
+            border-radius: 6px;
+            border-left: 3px solid #cbd5e1;
+            font-size: 16px;
+        }
+        ul li strong {
+            color: var(--primary-color);
+        }
+        .highlight-up {
+            color: var(--up-color);
+            font-weight: 600;
+        }
+        .highlight-down {
+            color: var(--down-color);
+            font-weight: 600;
+        }
+        .signal-para {
+            text-indent: 2em;
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #475569;
+        }
+        .strategy-box {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 6px;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+        .strategy-buy {
+            background-color: #fef2f2;
+            border: 1px solid #fca5a5;
+            color: #991b1b;
+        }
+        .strategy-sell {
+            background-color: #f0fdf4;
+            border: 1px solid #86efac;
+            color: #166534;
+            margin-top: 15px;
+        }
+        .strategy-box strong {
+            display: inline-block;
+            margin-bottom: 8px;
+            font-size: 17px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>本插件使用方法</h1>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <!-- 图片区域 -->
+            <div class="image-section">
+                <img src="webpic/1.png" alt="插件指标说明图示">
+            </div>
+            
+            <!-- 文字内容区域 -->
+            <div class="content-section">
+                <h3>名词解析</h3>
+                <ul>
+                    <li style="border-left-color: var(--up-color);">
+                        <strong>上涨标签：</strong> 上涨达到设定阈值，就会出现涨幅标签，上涨K线上方出现<span class="highlight-up">白字红底带数字</span>的标签；
+                    </li>
+                    <li style="border-left-color: var(--down-color);">
+                        <strong>下跌标签：</strong> 下跌达到设定阈值，就会出现跌幅标签，下跌K线下方出现<span class="highlight-down">白字绿底带数字</span>的标签；
+                    </li>
+                </ul>
+
+                <h3>信号识别</h3>
+                <p class="signal-para">如图所示，在下跌过程中，如果出现<span class="highlight-up">红色的上涨标签</span>，且阳线实体超过前一交易日的阴线实体，一般来说，就是<strong>止跌反弹</strong>的信号。</p>
+                <p class="signal-para">相反，如果上涨过程中，如果出现<span class="highlight-down">绿色的下跌标签</span>，且阴线实体超过前一交易日的阳线实体，一般来说，就是<strong>止涨回调</strong>的信号。</p>
+
+                <h3>操作策略</h3>
+                <div class="strategy-box strategy-buy">
+                    <strong>📈 抄底/买入策略</strong><br>
+                    所以，当股票或ETF长期处于下行趋势，某天突然出现上涨标签，大概率是反转信号，可以加倍留意关注，择时买入，止损线设置在这根出现上涨标签K线的最低价位置。
+                </div>
+                
+                <div class="strategy-box strategy-sell">
+                    <strong>📉 逃顶/卖出策略</strong><br>
+                    同理，如果持有某只股票或ETF，上涨过程中，突然出现了下跌标签，大概率也是反转信号，可以多加留意，择时卖出，保住利润。
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
