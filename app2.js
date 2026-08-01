@@ -7,32 +7,31 @@ const API_BASE = "https://vip.hahagw.eu.org";
 const MAIL_API_BASE = "https://mail.hahagw2016.workers.dev";
 const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
-// 日期解析工具函数 (严格过滤2200等异常数据)
+// 日期解析工具函数 (严格过滤2200等异常数据，保持稳定切勿改动)
 const isValidDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return false;
     const match = dateStr.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
     if (!match) return false;
-    const y = parseInt(match[1], 10);
-    const m = parseInt(match[2], 10);
-    const d = parseInt(match[3], 10);
-    // 允许合理的年份范围，过滤掉 2200 等测试或错误数据
+    const y = parseInt(match, 10);
+    const m = parseInt(match, 10);
+    const d = parseInt(match, 10);
     return y >= 2020 && y <= 2030 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
 };
 
 const parseYear = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
+    if (!isValidDate(dateStr)) return 0;
     const parts = dateStr.trim().split(/[-/]/);
-    return parts.length >= 1 ? parseInt(parts[0], 10) || 0 : 0;
+    return parseInt(parts[0], 10) || 0;
 };
 const parseMonth = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
+    if (!isValidDate(dateStr)) return 0;
     const parts = dateStr.trim().split(/[-/]/);
-    return parts.length >= 2 ? parseInt(parts[1], 10) || 0 : 0;
+    return parseInt(parts, 10) || 0;
 };
 const parseDay = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
+    if (!isValidDate(dateStr)) return 0;
     const parts = dateStr.trim().split(/[-/]/);
-    return parts.length >= 3 ? parseInt(parts[2], 10) || 0 : 0;
+    return parseInt(parts, 10) || 0;
 };
 
 createApp({
@@ -45,8 +44,9 @@ createApp({
         const navigate = (path) => { currentRoute.value = path; window.location.hash = path; menuOpen.value = false; };
         const closeDropdowns = () => { userMenuOpen.value = false; showDropdown.value = false; };
         
+        // 简化后的页面标题映射 (匹配精简后的四项菜单)
         const pageTitle = computed(() => {
-            const map = { '#/': '数据看板', '#/plan': '购买套餐', '#/order': '我的订单', '#/profile': '个人中心', '#/invite': '我的邀请', '#/ticket': '在线答疑', '#/docs': '使用说明' };
+            const map = { '#/': '数据看板', '#/plan': '购买套餐', '#/profile': '个人中心', '#/docs': '使用说明' };
             return map[currentRoute.value] || '数据看板';
         });
 
@@ -65,7 +65,6 @@ createApp({
         const isLoggedIn = ref(false); 
         const isVip = ref(false); 
         const username = ref('');
-        const balance = ref(0.00); 
         const vipDaysLeft = ref(0);
         const referralCode = ref('');
 
@@ -74,7 +73,6 @@ createApp({
                 if (localStorage.getItem('etf_token')) {
                     isLoggedIn.value = true;
                     username.value = localStorage.getItem('etf_username') || '';
-                    balance.value = parseFloat(localStorage.getItem('etf_balance')) || 0;
                     referralCode.value = localStorage.getItem('etf_ref') || '';
                     vipDaysLeft.value = parseInt(localStorage.getItem('etf_vip_days')) || 0;
                     isVip.value = vipDaysLeft.value > 0;
@@ -192,12 +190,12 @@ createApp({
                     const data = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ username: authForm.username, password: authForm.password }) });
                     localStorage.setItem('etf_token', data.token);
                     localStorage.setItem('etf_username', authForm.username);
-                    localStorage.setItem('etf_balance', data.balance || 0);
                     localStorage.setItem('etf_ref', data.referral_code || '');
                     localStorage.setItem('etf_vip_days', data.vip_days_left || 0);
                     checkLoginState();
                     closeAuth();
-                    if(currentRoute.value === '#/plan' || currentRoute.value === '#/order' || currentRoute.value === '#/ticket') fetchData(); 
+                    fetchData(); 
+                    if (currentRoute.value === '#/profile') fetchOrders();
                 }
             } catch (err) { alert(err.message); } 
             finally { authLoading.value = false; }
@@ -206,7 +204,7 @@ createApp({
         const logout = (showAlert = true) => {
             try { localStorage.clear(); } catch(e){}
             isLoggedIn.value = false; isVip.value = false;
-            username.value = ''; balance.value = 0; referralCode.value = ''; vipDaysLeft.value = 0;
+            username.value = ''; referralCode.value = ''; vipDaysLeft.value = 0;
             if (showAlert) alert('已退出登录');
             navigate('#/');
         };
@@ -317,7 +315,7 @@ createApp({
             if (!selectedMonday.value) return '';
             const weekDays = getWeekDays(selectedMonday.value);
             if(weekDays.length < 5) return '';
-            const fridayDate = weekDays[4];
+            const fridayDate = weekDays;
             const y = parseYear(fridayDate);
             const m = parseMonth(fridayDate);
             const d = parseDay(fridayDate);
@@ -326,7 +324,7 @@ createApp({
             const isPastFriday16 = Date.now() >= friday16.getTime();
 
             if (isPastFriday16) {
-                return `${parseDay(weekDays[0])}~${parseDay(weekDays[4])}日`;
+                return `${parseDay(weekDays[0])}~${parseDay(weekDays)}日`;
             } else {
                 const my = parseYear(weekDays[0]);
                 const mm = parseMonth(weekDays[0]);
@@ -340,11 +338,12 @@ createApp({
 
         const selectWeek = (mondayStr) => { selectedMonday.value = mondayStr; showDropdown.value = false; };
 
+        // 核心修复 1: 默认优先按最新周线绝对值（绝对增减百分比大小）由大到小（降序）排列，保证 TOP 3 精准匹配
         const sortedData = computed(() => {
             if (!selectedMonday.value) return [];
             const weekDays = getWeekDays(selectedMonday.value); 
             if(weekDays.length < 5) return [];
-            const fridayDate = weekDays[4]; 
+            const fridayDate = weekDays; 
             
             const y = parseYear(fridayDate);
             const m = parseMonth(fridayDate);
@@ -428,9 +427,31 @@ createApp({
                         if (valB === -9999 && valA !== -9999) return -1;
                         return sortOrder.value === 'desc' ? valB - valA : valA - valB;
                     }
+                } else {
+                    // 核心要求：最新周线数据绝对值由大到小（从高到低）排序
+                    const valWkA = a.week_status && a.week_status !== '-' && a.week_status !== '--' ? Math.abs(getStatusVal(a.week_status)) : -9999;
+                    const valWkB = b.week_status && b.week_status !== '-' && b.week_status !== '--' ? Math.abs(getStatusVal(b.week_status)) : -9999;
+                    
+                    if (valWkA !== -9999 || valWkB !== -9999) {
+                        if (valWkA !== -9999 && valWkB !== -9999) return valWkB - valWkA;
+                        if (valWkA !== -9999) return -1;
+                        if (valWkB !== -9999) return 1;
+                    }
+
+                    // 兜底：若周线均无数据，按最新单日数据绝对值由大到小降序排列
+                    let latestIdx = 4;
+                    while (latestIdx >= 0) {
+                        let hasData = validItems.some(i => i.days[latestIdx] && i.days[latestIdx].day_status && i.days[latestIdx].day_status !== '-');
+                        if (hasData) break;
+                        latestIdx--;
+                    }
+                    if (latestIdx >= 0) {
+                        const valA = a.days[latestIdx] && a.days[latestIdx].day_status ? Math.abs(getStatusVal(a.days[latestIdx].day_status)) : -9999;
+                        const valB = b.days[latestIdx] && b.days[latestIdx].day_status ? Math.abs(getStatusVal(b.days[latestIdx].day_status)) : -9999;
+                        return valB - valA;
+                    }
+                    return 0;
                 }
-                // 默认排序逻辑保持不变
-                return 0;
             });
             
             return validItems;
@@ -455,7 +476,7 @@ createApp({
                     weekMap[monday] = {
                         monday: monday, 
                         weekLabel: `${m}月${weekNum}`, 
-                        fridayDate: wDays[4], 
+                        fridayDate: wDays, 
                         days: [null, null, null, null, null], 
                         week_status: null
                     };
@@ -497,6 +518,7 @@ createApp({
                         allData.value = data;
                         if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
                             selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
+                            // 周线绝对值排序后的 TOP 3 标的自动赋予免费看图表权限
                             freeEtfCodes.value = sortedData.value.slice(0, 3).map(item => item.etf_code);
                         }
                     }
@@ -527,7 +549,6 @@ createApp({
             const specificKey = `${etfCode}_${type}`;
             let imgUrl = null;
 
-            // 提取图表逻辑：优先使用 API 返回的 chartsMap，否则拼凑 Cloudflare R2 地址
             if (chartsMap.value && chartsMap.value[specificKey]) {
                 imgUrl = chartsMap.value[specificKey];
             } else if (chartsMap.value && typeof chartsMap.value[etfCode] === 'object' && chartsMap.value[etfCode][type]) {
@@ -629,7 +650,7 @@ createApp({
                 await apiFetch('/api/orders', { method: 'POST', body: JSON.stringify({ plan_id: topUpForm.planId, amount: topUpForm.amount, tx_id_last6: topUpForm.txId }) });
                 orderMessage.value = '✅ 提交成功！系统正在核对订单...';
                 topUpForm.txId = '';
-                setTimeout(() => { navigate('#/order'); fetchOrders(); }, 1500); 
+                setTimeout(() => { fetchOrders(); }, 1500); 
             } catch(err) { orderMessage.value = `❌ ${err.message}`; } 
             finally { orderLoading.value = false; }
         };
@@ -647,57 +668,8 @@ createApp({
             finally { pwdLoading.value = false; pwdForm.old = ''; pwdForm.new = ''; pwdForm.confirm = ''; }
         };
 
-        const ticketModalVisible = ref(false);
-        const ticketForm = reactive({ subject: '', level: 'medium', message: '' });
-        const ticketsList = ref([]);
-        const ticketLoading = ref(false);
-        
-        let hiddenTickets = [];
-        try {
-            const stored = localStorage.getItem('hidden_tickets');
-            if(stored) hiddenTickets = JSON.parse(stored);
-        } catch(e) {
-            try { localStorage.removeItem('hidden_tickets'); } catch(e){}
-            hiddenTickets = [];
-        }
-
-        const fetchTickets = async () => {
-            if(!isLoggedIn.value) return;
-            try {
-                const res = await apiFetch('/api/tickets');
-                ticketsList.value = (res.data || []).filter(t => !hiddenTickets.includes(t.id)).map(t => ({...t, expanded: false}));
-            } catch(e) {}
-        };
-
-        const openTicketModal = () => { if (!isLoggedIn.value) { openAuth('login'); return; } ticketModalVisible.value = true; };
-
-        const submitTicket = async () => {
-            if (!ticketForm.subject || !ticketForm.message) { alert('主题和消息不能为空！'); return; }
-            ticketLoading.value = true;
-            try {
-                await apiFetch('/api/tickets', { method: 'POST', body: JSON.stringify({ subject: ticketForm.subject, level: ticketForm.level, message: ticketForm.message }) });
-                ticketModalVisible.value = false;
-                ticketForm.subject = ''; ticketForm.level = 'medium'; ticketForm.message = '';
-                alert('工单已成功提交！');
-                fetchTickets(); 
-            } catch(err) { alert(err.message); } 
-            finally { ticketLoading.value = false; }
-        };
-
-        const deleteTicket = (id) => {
-            if(!confirm('确定删除该工单记录吗？')) return;
-            hiddenTickets.push(id);
-            try { localStorage.setItem('hidden_tickets', JSON.stringify(hiddenTickets)); } catch(e){}
-            ticketsList.value = ticketsList.value.filter(t => t.id !== id);
-        };
-
-        const clearFinishedTickets = () => {
-            if(!confirm('确定清理所有已回复的工单吗？')) return;
-            const finished = ticketsList.value.filter(t => t.status === 'replied');
-            finished.forEach(t => hiddenTickets.push(t.id));
-            try { localStorage.setItem('hidden_tickets', JSON.stringify(hiddenTickets)); } catch(e){}
-            ticketsList.value = ticketsList.value.filter(t => t.status !== 'replied');
-        };
+        // 核心修复 2: 重新挂载导出在线客服挂件交互逻辑，解决点击右下角客服图标无反应问题
+        const chatModule = typeof useChatModule === 'function' ? useChatModule(Vue) : {};
 
         // 社交 Modal 状态
         const socialModalVisible = ref(false);
@@ -710,8 +682,7 @@ createApp({
         watch(currentRoute, (newRoute) => {
             selectedOrder.value = null; 
             searchQuery.value = ''; 
-            if (newRoute === '#/order') fetchOrders();
-            if (newRoute === '#/ticket') fetchTickets();
+            if (newRoute === '#/profile') fetchOrders();
         });
 
         onMounted(() => {
@@ -728,7 +699,7 @@ createApp({
 
         return {
             currentRoute, menuOpen, userMenuOpen, pageTitle, navigate, closeDropdowns,
-            isLoggedIn, isVip, username, balance, vipDaysLeft, referralCode, logout,
+            isLoggedIn, isVip, username, vipDaysLeft, referralCode, logout,
             authModalVisible, authMode, authForm, authLoading, openAuth, closeAuth, submitAuth, switchAuthMode, sendEmailCode, sendCodeLoading, countdown,
             loading, sortedData, showDropdown, searchQuery, availablePeriods, currentPeriodLabel, selectWeek, selectedMonday, sortColumn, sortOrder, handleSort, currentWeekHeaders, weekStatusHeader,
             expandedRowKey, toggleRow, getPastWeeks, parseDay, parseMonth, parseYear,
@@ -736,9 +707,14 @@ createApp({
             openChart, getColorClass,
             selectedOrder, orderList, viewOrder, getPlanName, formatStatus, formatDateExact,
             pwdForm, pwdLoading, submitPasswordChange,
-            ticketModalVisible, ticketForm, ticketsList, ticketLoading, submitTicket, openTicketModal, deleteTicket, clearFinishedTickets,
             freeEtfCodes,
+            ...chatModule,
             socialModalVisible, currentSocialPlatform, openSocialModal
         };
     }
 }).mount('#app');
+EOF
+}
+');
+EOF
+}}
