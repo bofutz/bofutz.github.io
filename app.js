@@ -7,7 +7,7 @@ const API_BASE = "https://vip.hahagw.eu.org";
 const MAIL_API_BASE = "https://mail.hahagw2016.workers.dev";
 const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
-// 日期解析工具函数 (严格验证并过滤2200等异常污染数据)
+// 日期解析工具函数 (严格过滤2200等异常数据)
 const isValidDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return false;
     const match = dateStr.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
