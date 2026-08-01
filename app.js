@@ -7,25 +7,31 @@ const API_BASE = "https://vip.hahagw.eu.org";
 const MAIL_API_BASE = "https://mail.hahagw2016.workers.dev";
 const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
-// 日期解析工具函数
+// 日期解析工具函数 (严格验证并过滤2200等异常污染数据)
+const isValidDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string') return false;
+    const match = dateStr.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (!match) return false;
+    const y = parseInt(match, 10);
+    const m = parseInt(match, 10);
+    const d = parseInt(match, 10);
+    return y >= 2020 && y <= 2030 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+};
+
 const parseYear = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
-    const match = dateStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (match) {
-        const y = parseInt(match, 10);
-        return (y >= 2020 && y <= 2030) ? y : 0;
-    }
-    return 0;
+    if (!isValidDate(dateStr)) return 0;
+    const parts = dateStr.trim().split(/[-/]/);
+    return parseInt(parts[0], 10) || 0;
 };
 const parseMonth = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
-    const parts = dateStr.split('-');
-    return parts.length >= 2 ? parseInt(parts, 10) || 0 : 0;
+    if (!isValidDate(dateStr)) return 0;
+    const parts = dateStr.trim().split(/[-/]/);
+    return parseInt(parts, 10) || 0;
 };
 const parseDay = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
-    const parts = dateStr.split('-');
-    return parts.length >= 3 ? parseInt(parts, 10) || 0 : 0;
+    if (!isValidDate(dateStr)) return 0;
+    const parts = dateStr.trim().split(/[-/]/);
+    return parseInt(parts, 10) || 0;
 };
 
 createApp({
@@ -267,7 +273,7 @@ createApp({
 
         const uniqueDatesSet = computed(() => {
             const validDates = allData.value
-                .filter(i => (i.day_status || i.week_status) && i.date)
+                .filter(i => (i.day_status || i.week_status) && isValidDate(i.date))
                 .map(i => i.date);
             return new Set(validDates);
         });
