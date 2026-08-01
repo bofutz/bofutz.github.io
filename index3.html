@@ -229,31 +229,7 @@
                         </div>
                     </div>
 
-                    <!-- ====== 页面 1: 购买套餐 ====== -->
-                    <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <div v-for="plan in plans" :key="plan.id" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow relative group">
-                                <div v-if="plan.is_popular" class="absolute top-0 right-0 theme-bg text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold z-10">最受欢迎</div>
-                                <div class="p-6 text-center border-b border-slate-50">
-                                    <h3 class="text-lg font-bold text-slate-800 mb-2">{{ plan.name }}</h3>
-                                    <div class="flex items-baseline justify-center gap-1">
-                                        <span class="text-slate-400 text-sm">¥</span>
-                                        <span class="text-4xl font-light text-slate-800">{{ plan.price }}</span>
-                                    </div>
-                                </div>
-                                <div class="p-6 flex-1 space-y-4">
-                                    <ul class="space-y-3 text-sm text-slate-500">
-                                        <li v-for="feature in plan.features" :key="feature" class="flex items-center gap-2"><i class="fa-solid fa-check theme-text text-xs"></i> {{ feature }}</li>
-                                    </ul>
-                                </div>
-                                <div class="p-6 pt-0">
-                                    <button @click="purchasePlan(plan)" class="w-full py-2.5 rounded-xl text-sm font-medium transition shadow-sm" :class="plan.is_popular ? 'theme-bg text-white hover:opacity-90' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'">立即订阅</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ====== 页面 3: 个人中心 ====== -->
+                    <!-- ====== 页面 2: 个人中心 ====== -->
                     <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-6">
                         <!-- 卡片 1：会员时长与状态 -->
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
@@ -344,7 +320,91 @@
                         </div>
                     </div>
 
-                    <!-- ====== 页面 6: 使用说明 ====== -->
+                    <!-- ====== 页面 3: 购买套餐 (V免签完全自动化模式) ====== -->
+<div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
+        <div>
+            <h2 class="text-xl font-medium text-slate-800">选择 VIP 监控套餐</h2>
+            <p class="text-xs text-slate-400 mt-1">支持微信扫码支付，算法微浮动分钱监听，秒级极速自动开通 VIP</p>
+        </div>
+        <span class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full border border-emerald-100 flex items-center">
+            <i class="fa-solid fa-bolt text-amber-400 mr-1.5 animate-pulse"></i> V免签完全自动化系统已就绪
+        </span>
+    </div>
+    
+    <div v-if="vipPlans.length === 0" class="text-center py-12 text-slate-400">加载套餐配置中...</div>
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div v-for="plan in vipPlans" :key="plan.id" @click="selectTopUpPlan(plan)" class="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col cursor-pointer transition-all border-2 relative group" :class="topUpForm.planId === plan.id ? 'theme-border ring-2 ring-[#4da6a0]/20' : 'border-transparent hover:border-slate-200'">
+            <div v-if="plan.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2.5 py-0.5 rounded-bl shadow-sm font-medium">{{ plan.tag }}</div>
+            <div class="p-6 border-b border-slate-50 bg-slate-50/50">
+                <div class="text-slate-500 text-sm mb-3">{{ plan.name }}</div>
+                <div class="flex items-end mb-1">
+                    <span class="text-3xl font-light text-slate-800">¥ {{ plan.price }}</span>
+                </div>
+                <div class="text-slate-400 text-xs">有效期 {{ plan.days }} 个自然日</div>
+            </div>
+            <div class="p-5 flex-1 flex flex-col justify-between">
+                <ul class="text-xs text-slate-600 space-y-2.5 mb-4">
+                    <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 无限制解锁高清图表</li>
+                    <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 多周期历史快照对比</li>
+                    <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 极速秒级自动化发货</li>
+                </ul>
+                <div class="w-full text-center py-2 rounded text-xs font-medium transition" :class="topUpForm.planId === plan.id ? 'theme-bg text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'">
+                    {{ topUpForm.planId === plan.id ? '已选中' : '选择此套餐' }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 支付展示区域 (V免签完全自动化模式) -->
+    <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 max-w-2xl mx-auto border border-slate-100">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 px-3 py-1 rounded-full mb-3 border border-amber-200">
+                <i class="fa-solid fa-triangle-exclamation text-amber-500"></i> 系统已为你生成专属校验金额
+            </div>
+            <h3 class="text-lg font-bold text-slate-800">微信扫码精准支付</h3>
+            <div class="mt-2 flex items-baseline justify-center gap-1">
+                <span class="text-sm text-slate-500">需严格支付:</span>
+                <span class="text-3xl font-extrabold text-red-500 font-mono">¥{{ topUpForm.floatingAmount }}</span>
+                <span class="text-xs text-slate-400">(含微小随机浮动)</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col items-center mb-6">
+            <div class="w-52 h-52 bg-slate-50 rounded-xl p-3 border-2 border-dashed border-slate-200 mb-3 relative group">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=wxp://f2f0-kIs2bORtc-afpDrigMOnYKVB0HL39jY8zyFUXEB8v2fvB_AtyT148TX2OQpDoby" class="w-full h-full object-cover rounded-lg">
+            </div>
+            
+            <div class="bg-emerald-50 text-emerald-700 text-xs px-4 py-2.5 rounded-lg border border-emerald-100 max-w-md text-center space-y-1">
+                <p class="font-bold"><i class="fa-solid fa-bullhorn text-emerald-500 mr-1"></i> 提示：请严格支付精准金额 {{ topUpForm.floatingAmount }} 元</p>
+                <p class="text-emerald-600">付完后系统 3 秒内自动开通 VIP，无需手动填写订单号！</p>
+            </div>
+        </div>
+
+        <div class="max-w-xs mx-auto text-center space-y-3">
+            <div class="flex items-center justify-center gap-2 text-xs text-slate-500">
+                <i class="fa-solid fa-spinner animate-spin theme-text"></i>
+                <span>云端挂机服务监听中...</span>
+                <button @click="checkPaymentStatus" class="theme-text hover:underline ml-1 font-medium">手动刷新状态</button>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+                <button @click="showManualInput = !showManualInput" class="text-xs text-slate-400 hover:text-slate-600">
+                    若未自动跳转，点击手动补填微信单号(后6位) <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                </button>
+                <div v-if="showManualInput" class="mt-3 space-y-2">
+                    <input v-model="topUpForm.txId" type="text" maxlength="6" class="w-full px-4 py-2 border border-slate-300 rounded focus:outline-none focus:theme-border text-center tracking-widest font-mono text-sm" placeholder="微信单号后6位数字">
+                    <button @click="submitOrder" :disabled="orderLoading || topUpForm.txId.length !== 6" class="w-full py-2 theme-bg text-white rounded text-xs font-medium transition hover:opacity-90 disabled:opacity-50">
+                        提交单号充值
+                    </button>
+                </div>
+            </div>
+            <div v-if="orderMessage" class="text-xs px-3 py-2 rounded text-center font-medium" :class="orderMessage.includes('成功') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'">{{ orderMessage }}</div>
+        </div>
+    </div>
+</div>
+                    
+                    <!-- ====== 页面 4: 使用说明 ====== -->
                     <div v-show="currentRoute === '#/docs'" class="max-w-6xl mx-auto">
                         <div class="bg-white rounded-xl shadow-sm p-8 max-w-3xl mx-auto border border-slate-100">
                             <h2 class="text-2xl font-medium text-center text-slate-800 mb-8">波幅探长监控系统使用指南</h2>
