@@ -10,8 +10,12 @@ const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 // 日期解析工具函数
 const parseYear = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return 0;
-    const parts = dateStr.split('-');
-    return parts.length >= 1 ? parseInt(parts[0], 10) || 0 : 0;
+    const match = dateStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (match) {
+        const y = parseInt(match, 10);
+        return (y >= 2020 && y <= 2030) ? y : 0;
+    }
+    return 0;
 };
 const parseMonth = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return 0;
