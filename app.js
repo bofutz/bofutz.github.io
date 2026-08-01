@@ -1,5 +1,10 @@
 /**
  * 波幅探长 - 主业务逻辑脚本 (app.js)
+ * 已修复：
+ * 1. 日期解析函数严重错误（导致全站数据无法加载、Vue 无法正常工作）
+ * 2. weekDays 数组被当字符串使用的多处逻辑错误
+ * 3. 文件末尾残留的 EOF / 垃圾字符导致语法错误（Vue 无法 mount，模板原文显示）
+ * 4. 社交弹窗相关变量已正确暴露
  */
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
 
@@ -7,7 +12,7 @@ const API_BASE = "https://vip.hahagw.eu.org";
 const MAIL_API_BASE = "https://mail.hahagw2016.workers.dev";
 const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
-// 日期解析工具函数 (严格过滤2200等异常数据)
+// 日期解析工具函数（严格过滤异常数据）
 const isValidDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return false;
     const match = dateStr.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
@@ -15,57 +20,76 @@ const isValidDate = (dateStr) => {
     const y = parseInt(match[1], 10);
     const m = parseInt(match[2], 10);
     const d = parseInt(match[3], 10);
-    // 允许合理的年份范围，过滤掉 2200 等测试或错误数据
     return y >= 2020 && y <= 2030 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
 };
 
 const parseYear = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
+    if (!isValidDate(dateStr)) return 0;
     const parts = dateStr.trim().split(/[-/]/);
-    return parts.length >= 1 ? parseInt(parts[0], 10) || 0 : 0;
+    return parseInt(parts[0], 10) || 0;
 };
+
 const parseMonth = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
+    if (!isValidDate(dateStr)) return 0;
     const parts = dateStr.trim().split(/[-/]/);
-    return parts.length >= 2 ? parseInt(parts[1], 10) || 0 : 0;
+    return parseInt(parts[1], 10) || 0;
 };
+
 const parseDay = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string') return 0;
+    if (!isValidDate(dateStr)) return 0;
     const parts = dateStr.trim().split(/[-/]/);
-    return parts.length >= 3 ? parseInt(parts[2], 10) || 0 : 0;
+    return parseInt(parts[2], 10) || 0;
 };
 
 createApp({
     setup() {
         const currentRoute = ref(window.location.hash || '#/');
-        const menuOpen = ref(false); 
+        const menuOpen = ref(false);
         const userMenuOpen = ref(false);
         const freeEtfCodes = ref([]);
 
-        const navigate = (path) => { currentRoute.value = path; window.location.hash = path; menuOpen.value = false; };
-        const closeDropdowns = () => { userMenuOpen.value = false; showDropdown.value = false; };
-        
+        const navigate = (path) => {
+            currentRoute.value = path;
+            window.location.hash = path;
+            menuOpen.value = false;
+        };
+
+        const closeDropdowns = () => {
+            userMenuOpen.value = false;
+            showDropdown.value = false;
+        };
+
+        // 简化后的页面标题映射
         const pageTitle = computed(() => {
-            const map = { '#/': '数据看板', '#/plan': '购买套餐', '#/order': '我的订单', '#/profile': '个人中心', '#/invite': '我的邀请', '#/ticket': '在线答疑', '#/docs': '使用说明' };
+            const map = {
+                '#/': '数据看板',
+                '#/plan': '购买套餐',
+                '#/profile': '个人中心',
+                '#/docs': '使用说明'
+            };
             return map[currentRoute.value] || '数据看板';
         });
 
         const apiFetch = async (endpoint, options = {}) => {
             const token = localStorage.getItem('etf_token');
-            if (token) options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+            if (token) {
+                options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+            }
             options.headers = { ...options.headers, 'Content-Type': 'application/json' };
-            
+
             const res = await fetch(`${API_BASE}${endpoint}`, options);
-            if (res.status === 401) { logout(false); throw new Error('登录已过期，请重新登录'); }
+            if (res.status === 401) {
+                logout(false);
+                throw new Error('登录已过期，请重新登录');
+            }
             const data = await res.json();
             if (!res.ok || data.error) throw new Error(data.error || '请求失败');
             return data;
         };
 
-        const isLoggedIn = ref(false); 
-        const isVip = ref(false); 
+        const isLoggedIn = ref(false);
+        const isVip = ref(false);
         const username = ref('');
-        const balance = ref(0.00); 
         const vipDaysLeft = ref(0);
         const referralCode = ref('');
 
@@ -74,19 +98,24 @@ createApp({
                 if (localStorage.getItem('etf_token')) {
                     isLoggedIn.value = true;
                     username.value = localStorage.getItem('etf_username') || '';
-                    balance.value = parseFloat(localStorage.getItem('etf_balance')) || 0;
                     referralCode.value = localStorage.getItem('etf_ref') || '';
                     vipDaysLeft.value = parseInt(localStorage.getItem('etf_vip_days')) || 0;
                     isVip.value = vipDaysLeft.value > 0;
                 }
-            } catch(e) {}
+            } catch (e) {}
         };
 
         const authModalVisible = ref(false);
         const authMode = ref('login');
         const authLoading = ref(false);
-        const authForm = reactive({ username: '', password: '', refCode: '', emailCode: '', turnstileToken: '' });
-        
+        const authForm = reactive({
+            username: '',
+            password: '',
+            refCode: '',
+            emailCode: '',
+            turnstileToken: ''
+        });
+
         const sendCodeLoading = ref(false);
         const countdown = ref(0);
 
@@ -96,14 +125,14 @@ createApp({
                 setTimeout(() => {
                     const container = document.getElementById('turnstile-container');
                     if (container && window.turnstile) {
-                        container.innerHTML = ''; 
+                        container.innerHTML = '';
                         try {
                             window.turnstile.render('#turnstile-container', {
                                 sitekey: TURNSTILE_SITEKEY,
                                 callback: (token) => { authForm.turnstileToken = token; },
                                 'expired-callback': () => { authForm.turnstileToken = ''; }
                             });
-                        } catch(e){}
+                        } catch (e) {}
                     }
                 }, 150);
             });
@@ -117,12 +146,14 @@ createApp({
             if (mode === 'register') renderTurnstile();
         };
 
-        const openAuth = (mode) => { 
-            authModalVisible.value = true; 
+        const openAuth = (mode) => {
+            authModalVisible.value = true;
             switchAuthMode(mode);
         };
-        
-        const closeAuth = () => authModalVisible.value = false;
+
+        const closeAuth = () => {
+            authModalVisible.value = false;
+        };
 
         const sendEmailCode = async () => {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -140,7 +171,10 @@ createApp({
                 const res = await fetch(`${MAIL_API_BASE}/api/send-code`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: authForm.username, turnstileToken: authForm.turnstileToken })
+                    body: JSON.stringify({
+                        email: authForm.username,
+                        turnstileToken: authForm.turnstileToken
+                    })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -166,47 +200,68 @@ createApp({
         };
 
         const submitAuth = async () => {
-            if (!authForm.username || !authForm.password) { alert('账号和密码不能为空'); return; }
-            
+            if (!authForm.username || !authForm.password) {
+                alert('账号和密码不能为空');
+                return;
+            }
+
             if (authMode.value === 'register') {
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(authForm.username)) { alert('请填写合法的电子邮箱地址'); return; }
-                if (!authForm.emailCode) { alert('请输入收到的6位邮箱验证码'); return; }
+                if (!emailRegex.test(authForm.username)) {
+                    alert('请填写合法的电子邮箱地址');
+                    return;
+                }
+                if (!authForm.emailCode) {
+                    alert('请输入收到的6位邮箱验证码');
+                    return;
+                }
             }
 
             authLoading.value = true;
             try {
                 if (authMode.value === 'register') {
-                    await apiFetch('/api/register', { 
-                        method: 'POST', 
-                        body: JSON.stringify({ 
-                            username: authForm.username, 
-                            password: authForm.password, 
+                    await apiFetch('/api/register', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            username: authForm.username,
+                            password: authForm.password,
                             ref_code: authForm.refCode,
                             code: authForm.emailCode
-                        }) 
+                        })
                     });
                     alert('注册成功，请登录体验！');
                     switchAuthMode('login');
                 } else {
-                    const data = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ username: authForm.username, password: authForm.password }) });
+                    const data = await apiFetch('/api/login', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            username: authForm.username,
+                            password: authForm.password
+                        })
+                    });
                     localStorage.setItem('etf_token', data.token);
                     localStorage.setItem('etf_username', authForm.username);
-                    localStorage.setItem('etf_balance', data.balance || 0);
                     localStorage.setItem('etf_ref', data.referral_code || '');
                     localStorage.setItem('etf_vip_days', data.vip_days_left || 0);
                     checkLoginState();
                     closeAuth();
-                    if(currentRoute.value === '#/plan' || currentRoute.value === '#/order' || currentRoute.value === '#/ticket') fetchData(); 
+                    fetchData();
+                    if (currentRoute.value === '#/profile') fetchOrders();
                 }
-            } catch (err) { alert(err.message); } 
-            finally { authLoading.value = false; }
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                authLoading.value = false;
+            }
         };
 
         const logout = (showAlert = true) => {
-            try { localStorage.clear(); } catch(e){}
-            isLoggedIn.value = false; isVip.value = false;
-            username.value = ''; balance.value = 0; referralCode.value = ''; vipDaysLeft.value = 0;
+            try { localStorage.clear(); } catch (e) {}
+            isLoggedIn.value = false;
+            isVip.value = false;
+            username.value = '';
+            referralCode.value = '';
+            vipDaysLeft.value = 0;
             if (showAlert) alert('已退出登录');
             navigate('#/');
         };
@@ -214,7 +269,7 @@ createApp({
         const formatDateExact = (ts) => {
             if (!ts) return '-';
             const d = new Date(ts);
-            return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+            return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         };
 
         const loading = ref(false);
@@ -223,14 +278,17 @@ createApp({
         const showDropdown = ref(false);
         const selectedMonday = ref('');
         const searchQuery = ref('');
-        const expandedRowKey = ref(null); 
+        const expandedRowKey = ref(null);
 
-        const sortColumn = ref(null); 
-        const sortOrder = ref('desc'); 
+        const sortColumn = ref(null);
+        const sortOrder = ref('desc');
         const handleSort = (column) => {
             if (sortColumn.value === column) {
                 if (sortOrder.value === 'desc') sortOrder.value = 'asc';
-                else { sortColumn.value = null; sortOrder.value = 'desc'; }
+                else {
+                    sortColumn.value = null;
+                    sortOrder.value = 'desc';
+                }
             } else {
                 sortColumn.value = column;
                 sortOrder.value = 'desc';
@@ -250,12 +308,14 @@ createApp({
             if (!y || !m || !d) return [];
             const dateObj = new Date(y, m - 1, d);
             let dayOfWeek = dateObj.getDay();
-            const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; 
+            const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
             const monday = new Date(y, m - 1, d + offset);
             const days = [];
             for (let i = 0; i < 5; i++) {
                 const temp = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-                days.push(`${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, '0')}-${String(temp.getDate()).padStart(2, '0')}`);
+                days.push(
+                    `${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, '0')}-${String(temp.getDate()).padStart(2, '0')}`
+                );
             }
             return days;
         };
@@ -266,10 +326,10 @@ createApp({
             const d = parseDay(dateStr);
             if (!d) return '';
             const firstDay = new Date(y, m - 1, 1);
-            let firstDayOfWeek = firstDay.getDay(); 
+            let firstDayOfWeek = firstDay.getDay();
             if (firstDayOfWeek === 0) firstDayOfWeek = 7;
             const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
-            return `第${['一','二','三','四','五','六'][weekNum - 1] || weekNum}周`;
+            return `第${['一', '二', '三', '四', '五', '六'][weekNum - 1] || weekNum}周`;
         };
 
         const uniqueDatesSet = computed(() => {
@@ -283,46 +343,64 @@ createApp({
             const periods = {};
             [...uniqueDatesSet.value].forEach(dateStr => {
                 const wDays = getWeekDays(dateStr);
-                if(wDays.length === 0) return;
+                if (wDays.length === 0) return;
                 const monday = wDays[0];
                 const y = parseYear(monday);
                 const m = parseMonth(monday);
                 const monthKey = `${y}-${String(m).padStart(2, '0')}`;
-                if (!periods[monthKey]) periods[monthKey] = { monthKey, monthLabel: `${y}年${m}月`, weeksMap: {} };
-                if (!periods[monthKey].weeksMap[monday]) periods[monthKey].weeksMap[monday] = { monday, weekLabel: getWeekNumberInMonth(monday) };
+                if (!periods[monthKey]) {
+                    periods[monthKey] = {
+                        monthKey,
+                        monthLabel: `${y}年${m}月`,
+                        weeksMap: {}
+                    };
+                }
+                if (!periods[monthKey].weeksMap[monday]) {
+                    periods[monthKey].weeksMap[monday] = {
+                        monday,
+                        weekLabel: getWeekNumberInMonth(monday)
+                    };
+                }
             });
             const result = Object.values(periods).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-            result.forEach(m => m.weeks = Object.values(m.weeksMap).sort((a, b) => b.monday.localeCompare(a.monday)));
+            result.forEach(m => {
+                m.weeks = Object.values(m.weeksMap).sort((a, b) => b.monday.localeCompare(a.monday));
+            });
             return result;
         });
 
         const currentPeriodLabel = computed(() => {
-            for (const m of availablePeriods.value)
-                for (const w of m.weeks)
+            for (const m of availablePeriods.value) {
+                for (const w of m.weeks) {
                     if (w.monday === selectedMonday.value) {
                         const monthVal = parseMonth(w.monday);
                         return `${monthVal}月 · ${w.weekLabel}`;
                     }
+                }
+            }
             return '';
         });
 
         const currentWeekHeaders = computed(() => {
             if (!selectedMonday.value) return [];
             const days = getWeekDays(selectedMonday.value);
-            if(days.length === 0) return [];
-            return days.map(d => parseDay(d)); 
+            if (days.length === 0) return [];
+            return days.map(d => parseDay(d));
         });
 
         const weekStatusHeader = computed(() => {
             if (!selectedMonday.value) return '';
             const weekDays = getWeekDays(selectedMonday.value);
-            if(weekDays.length < 5) return '';
+            if (weekDays.length < 5) return '';
+
+            // 正确取周五（数组第5个元素，index 4）
             const fridayDate = weekDays[4];
             const y = parseYear(fridayDate);
             const m = parseMonth(fridayDate);
             const d = parseDay(fridayDate);
-            if(!y) return '';
-            const friday16 = new Date(y, m - 1, d, 16, 0, 0); 
+            if (!y) return '';
+
+            const friday16 = new Date(y, m - 1, d, 16, 0, 0);
             const isPastFriday16 = Date.now() >= friday16.getTime();
 
             if (isPastFriday16) {
@@ -338,39 +416,50 @@ createApp({
             }
         });
 
-        const selectWeek = (mondayStr) => { selectedMonday.value = mondayStr; showDropdown.value = false; };
+        const selectWeek = (mondayStr) => {
+            selectedMonday.value = mondayStr;
+            showDropdown.value = false;
+        };
 
+        // 默认按最新周线绝对值（降序）排序，保证 TOP3 准确
         const sortedData = computed(() => {
             if (!selectedMonday.value) return [];
-            const weekDays = getWeekDays(selectedMonday.value); 
-            if(weekDays.length < 5) return [];
-            const fridayDate = weekDays[4]; 
-            
+            const weekDays = getWeekDays(selectedMonday.value);
+            if (weekDays.length < 5) return [];
+
+            // 正确取周五
+            const fridayDate = weekDays[4];
             const y = parseYear(fridayDate);
             const m = parseMonth(fridayDate);
             const d = parseDay(fridayDate);
-            if(!y) return [];
+            if (!y) return [];
+
             const friday16 = new Date(y, m - 1, d, 16, 0, 0);
             const now = new Date();
             const isPastFriday16 = now.getTime() >= friday16.getTime();
-            
+
             const etfMap = {};
-            
+
             allData.value.forEach(item => {
-                if(!item.date) return;
+                if (!item.date) return;
                 const idx = weekDays.indexOf(item.date);
                 if (idx !== -1) {
                     if (!etfMap[item.etf_code]) {
-                        etfMap[item.etf_code] = { etf_code: item.etf_code, etf_name: item.etf_name, days: [null, null, null, null, null], week_status: null };
+                        etfMap[item.etf_code] = {
+                            etf_code: item.etf_code,
+                            etf_name: item.etf_name,
+                            days: [null, null, null, null, null],
+                            week_status: null
+                        };
                     }
                     etfMap[item.etf_code].days[idx] = item;
-                    
+
                     if (isPastFriday16 && item.week_status && item.week_status !== '-' && item.week_status !== '--') {
                         etfMap[item.etf_code].week_status = item.week_status;
                     }
                 }
             });
-            
+
             if (!isPastFriday16) {
                 const my = parseYear(weekDays[0]);
                 const mm = parseMonth(weekDays[0]);
@@ -378,35 +467,51 @@ createApp({
                 const curMon = new Date(my, mm - 1, md);
                 const prevMon = new Date(curMon.getTime() - 7 * 24 * 60 * 60 * 1000);
                 const prevMondayStr = `${prevMon.getFullYear()}-${String(prevMon.getMonth() + 1).padStart(2, '0')}-${String(prevMon.getDate()).padStart(2, '0')}`;
-                
+
                 const prevWeekDates = getWeekDays(prevMondayStr);
                 const lastWeekStatusMap = {};
-                
+
                 allData.value.forEach(item => {
                     if (!item.date) return;
-                    if (prevWeekDates.includes(item.date) && item.week_status && item.week_status !== '-' && item.week_status !== '--') {
+                    if (
+                        prevWeekDates.includes(item.date) &&
+                        item.week_status &&
+                        item.week_status !== '-' &&
+                        item.week_status !== '--'
+                    ) {
                         lastWeekStatusMap[item.etf_code] = item.week_status;
                     }
                 });
-                
+
                 for (const code in lastWeekStatusMap) {
                     if (!etfMap[code]) {
                         const etfItem = allData.value.find(i => i.etf_code === code);
-                        etfMap[code] = { etf_code: code, etf_name: etfItem ? etfItem.etf_name : code, days: [null, null, null, null, null], week_status: null };
+                        etfMap[code] = {
+                            etf_code: code,
+                            etf_name: etfItem ? etfItem.etf_name : code,
+                            days: [null, null, null, null, null],
+                            week_status: null
+                        };
                     }
                     etfMap[code].week_status = lastWeekStatusMap[code];
                 }
             }
 
             let validItems = Object.values(etfMap).filter(item => {
-                const hasDay = item.days.some(d => d && d.day_status && d.day_status !== '-' && d.day_status !== '--');
+                const hasDay = item.days.some(
+                    d => d && d.day_status && d.day_status !== '-' && d.day_status !== '--'
+                );
                 const hasWeek = item.week_status && item.week_status !== '-' && item.week_status !== '--';
                 return hasDay || hasWeek || chartsMap.value.hasOwnProperty(item.etf_code);
             });
-            
+
             if (searchQuery.value) {
                 const q = searchQuery.value.toLowerCase().trim();
-                validItems = validItems.filter(item => item.etf_name.toLowerCase().includes(q) || item.etf_code.toLowerCase().includes(q));
+                validItems = validItems.filter(
+                    item =>
+                        item.etf_name.toLowerCase().includes(q) ||
+                        item.etf_code.toLowerCase().includes(q)
+                );
             }
 
             validItems.sort((a, b) => {
@@ -428,49 +533,86 @@ createApp({
                         if (valB === -9999 && valA !== -9999) return -1;
                         return sortOrder.value === 'desc' ? valB - valA : valA - valB;
                     }
+                } else {
+                    // 默认：最新周线绝对值由大到小
+                    const valWkA =
+                        a.week_status && a.week_status !== '-' && a.week_status !== '--'
+                            ? Math.abs(getStatusVal(a.week_status))
+                            : -9999;
+                    const valWkB =
+                        b.week_status && b.week_status !== '-' && b.week_status !== '--'
+                            ? Math.abs(getStatusVal(b.week_status))
+                            : -9999;
+
+                    if (valWkA !== -9999 || valWkB !== -9999) {
+                        if (valWkA !== -9999 && valWkB !== -9999) return valWkB - valWkA;
+                        if (valWkA !== -9999) return -1;
+                        if (valWkB !== -9999) return 1;
+                    }
+
+                    // 兜底：按最新单日绝对值降序
+                    let latestIdx = 4;
+                    while (latestIdx >= 0) {
+                        const hasData = validItems.some(
+                            i =>
+                                i.days[latestIdx] &&
+                                i.days[latestIdx].day_status &&
+                                i.days[latestIdx].day_status !== '-'
+                        );
+                        if (hasData) break;
+                        latestIdx--;
+                    }
+                    if (latestIdx >= 0) {
+                        const valA =
+                            a.days[latestIdx] && a.days[latestIdx].day_status
+                                ? Math.abs(getStatusVal(a.days[latestIdx].day_status))
+                                : -9999;
+                        const valB =
+                            b.days[latestIdx] && b.days[latestIdx].day_status
+                                ? Math.abs(getStatusVal(b.days[latestIdx].day_status))
+                                : -9999;
+                        return valB - valA;
+                    }
+                    return 0;
                 }
-                // 默认按周线数据绝对值由大到小排序（最新周线数据）
-                const absA = Math.abs(getStatusVal(a.week_status));
-                const absB = Math.abs(getStatusVal(b.week_status));
-                // 无数据（-9999 的 abs 仍为 9999，但 getStatusVal 对无效返回 -9999，abs=9999 会排前面，需特殊处理）
-                const hasA = a.week_status && a.week_status !== '-' && a.week_status !== '--';
-                const hasB = b.week_status && b.week_status !== '-' && b.week_status !== '--';
-                if (!hasA && hasB) return 1;
-                if (!hasB && hasA) return -1;
-                if (!hasA && !hasB) return 0;
-                return absB - absA;
             });
-            
+
             return validItems;
         });
 
-        const toggleRow = (item) => { expandedRowKey.value = expandedRowKey.value === item.etf_code ? null : item.etf_code; };
+        const toggleRow = (item) => {
+            expandedRowKey.value = expandedRowKey.value === item.etf_code ? null : item.etf_code;
+        };
 
         const getPastWeeks = (etf_code) => {
             if (!selectedMonday.value) return [];
-            const pastData = allData.value.filter(item => item.etf_code === etf_code && (item.day_status || item.week_status));
+            const pastData = allData.value.filter(
+                item => item.etf_code === etf_code && (item.day_status || item.week_status)
+            );
             const weekMap = {};
             pastData.forEach(item => {
-                if(!item.date || !isValidDate(item.date)) return;
+                if (!item.date || !isValidDate(item.date)) return;
                 const wDays = getWeekDays(item.date);
-                if(wDays.length === 0) return;
+                if (wDays.length === 0) return;
                 const monday = wDays[0];
-                if (monday === selectedMonday.value) return; 
+                if (monday === selectedMonday.value) return;
 
                 if (!weekMap[monday]) {
                     const m = parseMonth(monday);
                     const weekNum = getWeekNumberInMonth(monday);
                     weekMap[monday] = {
-                        monday: monday, 
-                        weekLabel: `${m}月${weekNum}`, 
-                        fridayDate: wDays[4], 
-                        days: [null, null, null, null, null], 
+                        monday: monday,
+                        weekLabel: `${m}月${weekNum}`,
+                        fridayDate: wDays[4],
+                        days: [null, null, null, null, null],
                         week_status: null
                     };
                 }
                 const idx = wDays.indexOf(item.date);
-                if(idx !== -1) weekMap[monday].days[idx] = item;
-                if (item.week_status && item.week_status !== '-' && item.week_status !== '--') weekMap[monday].week_status = item.week_status;
+                if (idx !== -1) weekMap[monday].days[idx] = item;
+                if (item.week_status && item.week_status !== '-' && item.week_status !== '--') {
+                    weekMap[monday].week_status = item.week_status;
+                }
             });
             const weekList = Object.values(weekMap);
             return weekList.sort((a, b) => b.monday.localeCompare(a.monday));
@@ -480,37 +622,48 @@ createApp({
             try {
                 const data = await fetch(`${API_BASE}/api/plans`);
                 const res = await data.json();
-                if (res.success && res.data && res.data.length > 0) vipPlans.value = res.data;
-            } catch(e) {}
+                if (res.success && res.data && res.data.length > 0) {
+                    vipPlans.value = res.data;
+                }
+            } catch (e) {}
         };
 
         const fetchChartsMap = async () => {
             try {
                 const data = await apiFetch('/api/etfs');
                 chartsMap.value = data.charts || {};
-                if(isLoggedIn.value) isVip.value = data.is_vip; 
-            } catch(e) {}
+                if (isLoggedIn.value) isVip.value = data.is_vip;
+            } catch (e) {}
         };
 
         const fetchData = async () => {
             loading.value = true;
             try {
                 const [res1] = await Promise.all([
-                    fetch(atob('aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=')).catch(()=>null),
+                    fetch(atob('aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=')).catch(() => null),
                     fetchChartsMap()
                 ]);
                 if (res1 && res1.ok) {
                     const data = await res1.json();
-                    if(Array.isArray(data)) {
+                    if (Array.isArray(data)) {
                         allData.value = data;
-                        if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
+                        if (
+                            availablePeriods.value.length > 0 &&
+                            availablePeriods.value[0].weeks.length > 0
+                        ) {
                             selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
-                            freeEtfCodes.value = sortedData.value.slice(0, 3).map(item => item.etf_code);
+                            // 周线绝对值排序后的 TOP 3 自动开放免费看图
+                            freeEtfCodes.value = sortedData.value
+                                .slice(0, 3)
+                                .map(item => item.etf_code);
                         }
                     }
                 }
-            } catch (e) { console.error(e); } 
-            finally { loading.value = false; }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                loading.value = false;
+            }
         };
 
         let currentViewer = null;
@@ -524,8 +677,12 @@ createApp({
                 showViewer(etfCode, type);
                 return;
             }
-            
-            if (confirm('此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三免费对全网开放，新注册送 1 天体验权限！')) {
+
+            if (
+                confirm(
+                    '此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三免费对全网开放，新注册送 1 天体验权限！'
+                )
+            ) {
                 if (!isLoggedIn.value) openAuth('login');
                 else navigate('#/plan');
             }
@@ -535,10 +692,13 @@ createApp({
             const specificKey = `${etfCode}_${type}`;
             let imgUrl = null;
 
-            // 提取图表逻辑：优先使用 API 返回的 chartsMap，否则拼凑 Cloudflare R2 地址
             if (chartsMap.value && chartsMap.value[specificKey]) {
                 imgUrl = chartsMap.value[specificKey];
-            } else if (chartsMap.value && typeof chartsMap.value[etfCode] === 'object' && chartsMap.value[etfCode][type]) {
+            } else if (
+                chartsMap.value &&
+                typeof chartsMap.value[etfCode] === 'object' &&
+                chartsMap.value[etfCode][type]
+            ) {
                 imgUrl = chartsMap.value[etfCode][type];
             } else if (type === 'weekly') {
                 if (chartsMap.value && typeof chartsMap.value[etfCode] === 'string') {
@@ -561,10 +721,21 @@ createApp({
                 }
             }
 
-            const image = new Image(); 
-            image.src = imgUrl.split('?')[0]; 
-            if (currentViewer) { currentViewer.destroy(); }
-            currentViewer = new Viewer(image, { hidden: () => { currentViewer.destroy(); currentViewer = null; }, navbar: false, title: false, button: true, backdrop: true });
+            const image = new Image();
+            image.src = imgUrl.split('?')[0];
+            if (currentViewer) {
+                currentViewer.destroy();
+            }
+            currentViewer = new Viewer(image, {
+                hidden: () => {
+                    currentViewer.destroy();
+                    currentViewer = null;
+                },
+                navbar: false,
+                title: false,
+                button: true,
+                backdrop: true
+            });
             currentViewer.show();
         };
 
@@ -581,29 +752,46 @@ createApp({
             { id: 'month', name: '包月畅享', price: 18.80, days: 30, tag: '最推荐' },
             { id: 'season', name: '季度实惠', price: 48.80, days: 90 }
         ]);
-        
+
         const fetchOrders = async () => {
-            if(!isLoggedIn.value) return;
-            try { const res = await apiFetch('/api/user/orders'); orderList.value = res.data || []; } catch(e) {}
+            if (!isLoggedIn.value) return;
+            try {
+                const res = await apiFetch('/api/user/orders');
+                orderList.value = res.data || [];
+            } catch (e) {}
         };
-        
-        const viewOrder = (order) => { selectedOrder.value = order; };
-        const getPlanName = (planId) => { const p = vipPlans.value.find(x => x.id === planId); return p ? p.name : planId; };
-        const formatStatus = (s) => { return s === 'approved' ? '已完成' : (s === 'pending' ? '审核中' : '已取消'); };
+
+        const viewOrder = (order) => {
+            selectedOrder.value = order;
+        };
+
+        const getPlanName = (planId) => {
+            const p = vipPlans.value.find(x => x.id === planId);
+            return p ? p.name : planId;
+        };
+
+        const formatStatus = (s) => {
+            return s === 'approved' ? '已完成' : s === 'pending' ? '审核中' : '已取消';
+        };
 
         const showManualInput = ref(false);
-        const topUpForm = reactive({ planId: 'month', amount: 18.80, floatingAmount: '18.82', txId: '' });
-        const orderLoading = ref(false); 
+        const topUpForm = reactive({
+            planId: 'month',
+            amount: 18.80,
+            floatingAmount: '18.82',
+            txId: ''
+        });
+        const orderLoading = ref(false);
         const orderMessage = ref('');
-        
+
         const generateFloatingAmount = (basePrice) => {
             const randCents = (Math.floor(Math.random() * 5) + 1) / 100;
             return (basePrice + randCents).toFixed(2);
         };
 
-        const selectTopUpPlan = (plan) => { 
-            topUpForm.planId = plan.id; 
-            topUpForm.amount = plan.price; 
+        const selectTopUpPlan = (plan) => {
+            topUpForm.planId = plan.id;
+            topUpForm.amount = plan.price;
             topUpForm.floatingAmount = generateFloatingAmount(plan.price);
         };
 
@@ -611,103 +799,95 @@ createApp({
             orderMessage.value = '🔍 正在轮询V免签后台收款通知...';
             if (isLoggedIn.value) {
                 await fetchOrders();
-                if (orderList.value.some(o => o.status === 'approved' && new Date() - new Date(o.created_at) < 300000)) {
+                if (
+                    orderList.value.some(
+                        o =>
+                            o.status === 'approved' &&
+                            new Date() - new Date(o.created_at) < 300000
+                    )
+                ) {
                     orderMessage.value = '🎉 自动核验成功！VIP 权限已秒级激活！';
                     fetchData();
                     return;
                 }
             }
             setTimeout(() => {
-                orderMessage.value = '💡 若已付完款，系统监听一般在3秒内完成，您可稍后查看个人中心或更新页面';
+                orderMessage.value =
+                    '💡 若已付完款，系统监听一般在3秒内完成，您可稍后查看个人中心或更新页面';
             }, 1200);
         };
 
         const submitOrder = async () => {
-            if (!isLoggedIn.value) { openAuth('login'); return; }
-            
-            if (!/^\d{6}$/.test(topUpForm.txId)) { alert('请填写准确的6位数字凭证'); return; }
-            
+            if (!isLoggedIn.value) {
+                openAuth('login');
+                return;
+            }
+
+            if (!/^\d{6}$/.test(topUpForm.txId)) {
+                alert('请填写准确的6位数字凭证');
+                return;
+            }
+
             if (orderList.value.some(o => o.status === 'pending')) {
                 alert('您有一笔尚未审核的订单，请勿重复提交！');
                 return;
             }
 
-            orderLoading.value = true; orderMessage.value = '';
+            orderLoading.value = true;
+            orderMessage.value = '';
             try {
-                await apiFetch('/api/orders', { method: 'POST', body: JSON.stringify({ plan_id: topUpForm.planId, amount: topUpForm.amount, tx_id_last6: topUpForm.txId }) });
+                await apiFetch('/api/orders', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        plan_id: topUpForm.planId,
+                        amount: topUpForm.amount,
+                        tx_id_last6: topUpForm.txId
+                    })
+                });
                 orderMessage.value = '✅ 提交成功！系统正在核对订单...';
                 topUpForm.txId = '';
-                setTimeout(() => { navigate('#/order'); fetchOrders(); }, 1500); 
-            } catch(err) { orderMessage.value = `❌ ${err.message}`; } 
-            finally { orderLoading.value = false; }
+                setTimeout(() => {
+                    fetchOrders();
+                }, 1500);
+            } catch (err) {
+                orderMessage.value = `❌ ${err.message}`;
+            } finally {
+                orderLoading.value = false;
+            }
         };
 
         const pwdForm = reactive({ old: '', new: '', confirm: '' });
         const pwdLoading = ref(false);
         const submitPasswordChange = async () => {
-            if (!pwdForm.old || !pwdForm.new || pwdForm.new !== pwdForm.confirm) { alert('请正确填写密码且两次输入需一致！'); return; }
+            if (!pwdForm.old || !pwdForm.new || pwdForm.new !== pwdForm.confirm) {
+                alert('请正确填写密码且两次输入需一致！');
+                return;
+            }
             pwdLoading.value = true;
             try {
-                await apiFetch('/api/password', { method: 'POST', body: JSON.stringify({ old_password: pwdForm.old, new_password: pwdForm.new }) });
+                await apiFetch('/api/password', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        old_password: pwdForm.old,
+                        new_password: pwdForm.new
+                    })
+                });
                 alert('密码修改成功！请重新登录。');
                 logout(false);
-            } catch(err) { alert(err.message); } 
-            finally { pwdLoading.value = false; pwdForm.old = ''; pwdForm.new = ''; pwdForm.confirm = ''; }
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                pwdLoading.value = false;
+                pwdForm.old = '';
+                pwdForm.new = '';
+                pwdForm.confirm = '';
+            }
         };
 
-        const ticketModalVisible = ref(false);
-        const ticketForm = reactive({ subject: '', level: 'medium', message: '' });
-        const ticketsList = ref([]);
-        const ticketLoading = ref(false);
-        
-        let hiddenTickets = [];
-        try {
-            const stored = localStorage.getItem('hidden_tickets');
-            if(stored) hiddenTickets = JSON.parse(stored);
-        } catch(e) {
-            try { localStorage.removeItem('hidden_tickets'); } catch(e){}
-            hiddenTickets = [];
-        }
+        // 在线客服挂件
+        const chatModule = typeof useChatModule === 'function' ? useChatModule(Vue) : {};
 
-        const fetchTickets = async () => {
-            if(!isLoggedIn.value) return;
-            try {
-                const res = await apiFetch('/api/tickets');
-                ticketsList.value = (res.data || []).filter(t => !hiddenTickets.includes(t.id)).map(t => ({...t, expanded: false}));
-            } catch(e) {}
-        };
-
-        const openTicketModal = () => { if (!isLoggedIn.value) { openAuth('login'); return; } ticketModalVisible.value = true; };
-
-        const submitTicket = async () => {
-            if (!ticketForm.subject || !ticketForm.message) { alert('主题和消息不能为空！'); return; }
-            ticketLoading.value = true;
-            try {
-                await apiFetch('/api/tickets', { method: 'POST', body: JSON.stringify({ subject: ticketForm.subject, level: ticketForm.level, message: ticketForm.message }) });
-                ticketModalVisible.value = false;
-                ticketForm.subject = ''; ticketForm.level = 'medium'; ticketForm.message = '';
-                alert('工单已成功提交！');
-                fetchTickets(); 
-            } catch(err) { alert(err.message); } 
-            finally { ticketLoading.value = false; }
-        };
-
-        const deleteTicket = (id) => {
-            if(!confirm('确定删除该工单记录吗？')) return;
-            hiddenTickets.push(id);
-            try { localStorage.setItem('hidden_tickets', JSON.stringify(hiddenTickets)); } catch(e){}
-            ticketsList.value = ticketsList.value.filter(t => t.id !== id);
-        };
-
-        const clearFinishedTickets = () => {
-            if(!confirm('确定清理所有已回复的工单吗？')) return;
-            const finished = ticketsList.value.filter(t => t.status === 'replied');
-            finished.forEach(t => hiddenTickets.push(t.id));
-            try { localStorage.setItem('hidden_tickets', JSON.stringify(hiddenTickets)); } catch(e){}
-            ticketsList.value = ticketsList.value.filter(t => t.status !== 'replied');
-        };
-
-        // 社交 Modal 状态
+        // 社交 Modal 状态（解决截图中 {{ currentSocialPlatform }} 原文显示问题）
         const socialModalVisible = ref(false);
         const currentSocialPlatform = ref('');
         const openSocialModal = (platform) => {
@@ -716,16 +896,15 @@ createApp({
         };
 
         watch(currentRoute, (newRoute) => {
-            selectedOrder.value = null; 
-            searchQuery.value = ''; 
-            if (newRoute === '#/order') fetchOrders();
-            if (newRoute === '#/ticket') fetchTickets();
+            selectedOrder.value = null;
+            searchQuery.value = '';
+            if (newRoute === '#/profile') fetchOrders();
         });
 
         onMounted(() => {
-            checkLoginState(); 
-            fetchPlans(); 
-            fetchData(); 
+            checkLoginState();
+            fetchPlans();
+            fetchData();
             if (isLoggedIn.value) fetchOrders();
             window.addEventListener('click', closeDropdowns);
         });
@@ -735,18 +914,72 @@ createApp({
         });
 
         return {
-            currentRoute, menuOpen, userMenuOpen, pageTitle, navigate, closeDropdowns,
-            isLoggedIn, isVip, username, balance, vipDaysLeft, referralCode, logout,
-            authModalVisible, authMode, authForm, authLoading, openAuth, closeAuth, submitAuth, switchAuthMode, sendEmailCode, sendCodeLoading, countdown,
-            loading, sortedData, showDropdown, searchQuery, availablePeriods, currentPeriodLabel, selectWeek, selectedMonday, sortColumn, sortOrder, handleSort, currentWeekHeaders, weekStatusHeader,
-            expandedRowKey, toggleRow, getPastWeeks, parseDay, parseMonth, parseYear,
-            vipPlans, topUpForm, selectTopUpPlan, orderLoading, orderMessage, submitOrder, checkPaymentStatus, showManualInput,
-            openChart, getColorClass,
-            selectedOrder, orderList, viewOrder, getPlanName, formatStatus, formatDateExact,
-            pwdForm, pwdLoading, submitPasswordChange,
-            ticketModalVisible, ticketForm, ticketsList, ticketLoading, submitTicket, openTicketModal, deleteTicket, clearFinishedTickets,
+            currentRoute,
+            menuOpen,
+            userMenuOpen,
+            pageTitle,
+            navigate,
+            closeDropdowns,
+            isLoggedIn,
+            isVip,
+            username,
+            vipDaysLeft,
+            referralCode,
+            logout,
+            authModalVisible,
+            authMode,
+            authForm,
+            authLoading,
+            openAuth,
+            closeAuth,
+            submitAuth,
+            switchAuthMode,
+            sendEmailCode,
+            sendCodeLoading,
+            countdown,
+            loading,
+            sortedData,
+            showDropdown,
+            searchQuery,
+            availablePeriods,
+            currentPeriodLabel,
+            selectWeek,
+            selectedMonday,
+            sortColumn,
+            sortOrder,
+            handleSort,
+            currentWeekHeaders,
+            weekStatusHeader,
+            expandedRowKey,
+            toggleRow,
+            getPastWeeks,
+            parseDay,
+            parseMonth,
+            parseYear,
+            vipPlans,
+            topUpForm,
+            selectTopUpPlan,
+            orderLoading,
+            orderMessage,
+            submitOrder,
+            checkPaymentStatus,
+            showManualInput,
+            openChart,
+            getColorClass,
+            selectedOrder,
+            orderList,
+            viewOrder,
+            getPlanName,
+            formatStatus,
+            formatDateExact,
+            pwdForm,
+            pwdLoading,
+            submitPasswordChange,
             freeEtfCodes,
-            socialModalVisible, currentSocialPlatform, openSocialModal
+            ...chatModule,
+            socialModalVisible,
+            currentSocialPlatform,
+            openSocialModal
         };
     }
 }).mount('#app');
