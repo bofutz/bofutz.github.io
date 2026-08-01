@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ETF监控系统</title>
+    <title>波幅监控系统 - 波幅探长</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.css">
@@ -38,8 +38,8 @@
             <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
                 <div class="flex items-center gap-4">
                     <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2 transition"><i class="fa-solid fa-bars text-xl"></i></button>
-                    <!-- ETF Monitor 跳转链接 -->
-                    <a href="https://gpkx.github.io/#/" class="text-lg font-bold theme-text tracking-wide hidden sm:block mr-2 cursor-pointer hover:opacity-80 transition">ETF Monitor</a>
+                    <!-- 主页跳转链接 -->
+                    <a href="https://gpkx.github.io/#/" class="text-lg font-bold theme-text tracking-wide hidden sm:block mr-2 cursor-pointer hover:opacity-80 transition">波幅探长</a>
                     <span class="text-sm font-semibold text-slate-500 border-l border-slate-200 pl-3 hidden sm:block">{{ pageTitle }}</span>
                     <span class="text-sm font-semibold text-slate-700 sm:hidden">{{ pageTitle }}</span>
                 </div>
@@ -93,7 +93,7 @@
                         </div>
                         <div class="bg-white rounded shadow-sm border border-slate-100 flex items-center sm:w-64">
                             <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3"></i>
-                            <input v-model="searchQuery" type="search" autocomplete="new-password" placeholder="搜索 ETF代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
+                            <input v-model="searchQuery" type="search" autocomplete="new-password" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
                         </div>
                     </div>
 
@@ -109,7 +109,7 @@
                                     <thead class="bg-slate-50 border-b border-slate-100 sticky top-0 z-30">
                                         <tr class="text-xs text-slate-600 font-bold select-none">
                                             <th class="py-3 px-4 text-left cursor-pointer hover:bg-slate-100 transition sticky left-0 bg-slate-50 z-40 etf-name-column" @click="handleSort('etf_name')">
-                                                ETF 名称 <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'etf_name'}"></i>
+                                                标的名称 <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'etf_name'}"></i>
                                             </th>
                                             <th v-for="idx in 5" :key="idx" class="py-3 px-2 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('d'+(idx-1))">
                                                 周{{ ['一','二','三','四','五'][idx-1] }}({{ currentWeekHeaders[idx-1] || '-' }}日) 
@@ -131,7 +131,7 @@
                                                             <div class="font-bold text-slate-800 flex items-center group-hover:theme-text transition-colors">
                                                                 <i class="fa-regular fa-image text-[11px] text-slate-300 hover:text-blue-500 transition mr-1.5 py-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                                                 {{ item.etf_name }}
-                                                                <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded ml-1 font-normal leading-none h-max">当前Top3免费</span>
+                                                                <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded ml-1 font-normal leading-none h-max">免费</span>
                                                             </div>
                                                             <div class="text-[11px] text-slate-400 font-mono ml-4">{{ item.etf_code }}</div>
                                                         </div>
@@ -181,7 +181,7 @@
                         <div class="sm:hidden flex flex-col gap-3">
                             <template v-for="(item, index) in sortedData" :key="'m-'+item.etf_code">
                                 <div class="bg-white rounded shadow-sm border border-slate-100 p-4 relative overflow-hidden transition-colors cursor-pointer" @click="toggleRow(item)">
-                                    <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl shadow-sm">当前Top3免费</div>
+                                    <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl shadow-sm">免费</div>
                                     <div class="flex justify-between items-center mb-3">
                                         <div class="flex flex-col">
                                             <div class="font-bold text-slate-800 text-[15px] flex items-center gap-1.5">
@@ -226,7 +226,7 @@
 
                 <!-- ====== 页面 1: 购买套餐 (Plan) ====== -->
                 <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
-                    <h2 class="text-xl font-normal text-slate-700 mb-6">选择最适合您的 ETF VIP 计划</h2>
+                    <h2 class="text-xl font-normal text-slate-700 mb-6">选择最适合您的 VIP 监控计划</h2>
                     
                     <div v-if="vipPlans.length === 0" class="text-center py-12 text-slate-400">加载套餐配置中...</div>
                     <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -253,7 +253,7 @@
                         </div>
                         <div class="flex flex-col items-center mb-6">
                             <div class="w-48 h-48 bg-slate-100 rounded-lg p-2 border border-slate-200 mb-3">
-                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=ReplaceMeWithRealQR" class="w-full h-full object-cover rounded">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=wxp://f2f0-kIs2bORtc-afpDrigMOnYKVB0HL39jY8zyFUXEB8v2fvB_AtyT148TX2OQpDoby" class="w-full h-full object-cover rounded">
                             </div>
                             <p class="text-xs text-red-400 font-medium"><i class="fa-solid fa-circle-exclamation"></i> 支付成功后，请准确填写下方订单号 (后6位)</p>
                         </div>
@@ -437,7 +437,7 @@
                 <!-- ====== 页面 6: 使用说明 ====== -->
                 <div v-show="currentRoute === '#/docs'" class="max-w-6xl mx-auto">
                     <div class="bg-white rounded shadow-sm p-8 max-w-3xl mx-auto border border-slate-100">
-                        <h2 class="text-2xl font-medium text-center text-slate-800 mb-8">ETF 监控系统使用指南</h2>
+                        <h2 class="text-2xl font-medium text-center text-slate-800 mb-8">波幅探长监控系统使用指南</h2>
                         <div class="space-y-6 text-slate-600 text-sm leading-relaxed">
                             <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">1. 手机端如何放大图表？</h4><p class="pl-4">手机端点击图表图标后，直接使用双指捏合即可无损放大高清图表。单指可随意拖拽平移。</p></section>
                             <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">2. 充值不到账怎么办？</h4><p class="pl-4">扫码支付后，请务必在“购买套餐”界面下方准确输入您的交易单号的最后6位进行核销。如有问题请提交工单。</p></section>
@@ -450,7 +450,7 @@
 
         <aside class="fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 flex flex-col shadow-2xl" :class="menuOpen ? 'translate-x-0' : '-translate-x-full'">
             <div class="h-16 theme-bg text-white flex items-center justify-center text-lg font-normal tracking-wider relative">
-                <a href="https://gpkx.github.io/#/" @click="menuOpen = false" class="text-white hover:text-white/90 transition block">ETF Monitor</a>
+                <a href="https://gpkx.github.io/#/" @click="menuOpen = false" class="text-white hover:text-white/90 transition block">波幅探长</a>
                 <button @click="menuOpen = false" class="absolute right-4 text-white/70 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="flex-1 overflow-y-auto py-2 custom-scrollbar">
@@ -496,7 +496,7 @@
                 const currentRoute = ref(window.location.hash || '#/');
                 const menuOpen = ref(false); 
                 const userMenuOpen = ref(false);
-                const freeEtfCodes = ref([]); // 记录当前最新周期的 Top 3 免费 ETF 代码
+                const freeEtfCodes = ref([]); // 记录当前最新周期的免费ETF代码
 
                 const navigate = (path) => { currentRoute.value = path; window.location.hash = path; menuOpen.value = false; };
                 const closeDropdowns = () => { userMenuOpen.value = false; showDropdown.value = false; };
@@ -925,7 +925,7 @@
                         return;
                     }
                     
-                    if (confirm('此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三异动ETF免费对全网开放，新注册送 1 天体验权限！')) {
+                    if (confirm('此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三免费对全网开放，新注册送 1 天体验权限！')) {
                         if (!isLoggedIn.value) openAuth('login');
                         else navigate('#/plan');
                     }
