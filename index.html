@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
-        [v-cloak] { display: none !important; }
+        [v-cloak] { display: none; }
         body { -webkit-tap-highlight-color: transparent; background-color: #f4f6f8; }
         .theme-bg { background-color: #4da6a0; }
         .theme-text { color: #4da6a0; }
@@ -156,8 +156,8 @@
                                                             <i class="fa-solid text-[10px] text-slate-300 transition-transform duration-200 ml-1" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
                                                         </div>
                                                     </td>
-                                                    <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days && item.days[idx-1] ? item.days[idx-1].day_status : null)">
-                                                        {{ (item.days && item.days[idx-1] && item.days[idx-1].day_status) || '-' }}
+                                                    <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
+                                                        {{ item.days[idx-1]?.day_status || '-' }}
                                                     </td>
                                                     <td class="p-3">
                                                         <div class="flex items-center justify-center gap-1 font-medium" :class="getColorClass(item.week_status)">
@@ -169,23 +169,17 @@
                                                 
                                                 <template v-if="expandedRowKey === item.etf_code">
                                                     <tr v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50/80 border-b border-dashed border-slate-100" @click.stop>
-                                                        <td class="p-3 font-medium text-slate-500 text-center sticky left-0 bg-slate-50/95 shadow-[1px_0_0_0_#f1f5f9] z-10 text-[13px]">
-                                                            {{ week.weekLabel }}
+                                                        <td class="p-3 text-left sticky left-0 bg-slate-50/80 z-10 etf-name-column shadow-[1px_0_0_0_#f1f5f9]">
+                                                            <div class="text-xs text-slate-400 font-medium pl-4">{{ week.monday.substring(5) }} 周</div>
                                                         </td>
-                                                        <td v-for="(day, idx) in week.days" :key="'past-td-'+idx" class="p-2 text-center align-middle">
-                                                            <div v-if="day && day.day_status" class="inline-flex items-center justify-center font-medium text-[13px] whitespace-nowrap">
-                                                                <span class="text-[11px] text-slate-400 mr-1">{{ day.date ? parseDay(day.date) : '-' }}日:</span>
-                                                                <span :class="getColorClass(day.day_status)">{{ day.day_status }}</span>
-                                                            </div>
-                                                            <span v-else class="text-slate-300">-</span>
+                                                        <td v-for="idx in 5" :key="idx" class="p-3 text-xs opacity-70" :class="getColorClass(week.days[idx-1]?.day_status)">
+                                                            {{ week.days[idx-1]?.day_status || '-' }}
                                                         </td>
-                                                        <td class="p-3 text-center font-medium text-[13px]">
-                                                            <div v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="inline-flex items-center justify-center whitespace-nowrap">
-                                                                <span class="text-[11px] text-slate-400 mr-1">({{ week.monday ? parseDay(week.monday) : '-' }}~{{ week.fridayDate ? parseDay(week.fridayDate) : '-' }}日)</span>
-                                                                <span :class="getColorClass(week.week_status)">{{ week.week_status }}</span>
-                                                                <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px] ml-1.5" @click.stop="openChart(item.etf_code, 'weekly', index, true)"></i>
+                                                        <td class="p-3 text-xs opacity-70">
+                                                            <div class="flex items-center justify-center gap-1" :class="getColorClass(week.week_status)">
+                                                                {{ week.week_status || '-' }}
+                                                                <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[11px]" @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
                                                             </div>
-                                                            <span v-else class="text-slate-300">-</span>
                                                         </td>
                                                     </tr>
                                                 </template>
@@ -194,246 +188,160 @@
                                     </table>
                                 </div>
                             </div>
-
-                            <!-- 手机端卡片 -->
-                            <div class="sm:hidden flex flex-col gap-3">
-                                <template v-for="(item, index) in sortedData" :key="'m-'+item.etf_code">
-                                    <div class="bg-white rounded shadow-sm border border-slate-100 p-4 relative overflow-hidden transition-colors cursor-pointer" @click="toggleRow(item)">
-                                        <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl shadow-sm">免费</div>
-                                        <div class="flex justify-between items-center mb-3">
-                                            <div class="flex flex-col">
-                                                <div class="font-bold text-slate-800 text-[15px] flex items-center gap-1.5">
-                                                    <i class="fa-regular fa-image text-slate-300 active:text-blue-500 py-2 px-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
-                                                    {{ item.etf_name }}
-                                                    <i class="fa-solid text-[10px] text-slate-300 transition-transform ml-1" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
-                                                </div>
-                                                <div class="text-xs text-slate-400 font-mono ml-7 -mt-1">{{ item.etf_code }}</div>
+                            <!-- 移动端列表 -->
+                            <div class="sm:hidden space-y-3">
+                                <div v-for="(item, index) in sortedData" :key="item.etf_code" class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden">
+                                    <div class="p-3 flex items-center justify-between bg-slate-50/50 border-b border-slate-100" @click="toggleRow(item)">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition p-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
+                                            <div>
+                                                <div class="text-sm font-bold text-slate-800">{{ item.etf_name }}</div>
+                                                <div class="text-[10px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                                             </div>
-                                            <div class="text-right">
-                                                <div class="text-[10px] text-slate-400 mb-0.5 flex justify-end items-center gap-1">
-                                                    周线状态 
-                                                    <i v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'" class="fa-regular fa-image text-slate-300 active:text-blue-500 p-1" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
-                                                </div>
-                                                <div class="font-bold text-sm" :class="getColorClass(item.week_status)">{{ item.week_status || '--' }}</div>
-                                            </div>
+                                            <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded">免费</span>
                                         </div>
-                                        
-                                        <!-- 当周数据 -->
-                                        <div class="flex justify-between bg-slate-50 rounded p-2">
-                                            <div v-for="idx in 5" :key="'md-'+idx" class="flex flex-col items-center flex-1">
-                                                <span class="text-[10px] text-slate-400 whitespace-nowrap">周{{ ['一','二','三','四','五'][idx-1] }}</span>
-                                                <span class="text-[10px] text-slate-400 scale-90">{{ currentWeekHeaders[idx-1] || '-' }}日</span>
-                                                <span class="text-xs font-semibold mt-0.5" :class="getColorClass(item.days && item.days[idx-1] ? item.days[idx-1].day_status : null)">{{ (item.days && item.days[idx-1] && item.days[idx-1].day_status) || '-' }}</span>
-                                            </div>
+                                        <i class="fa-solid text-[10px] text-slate-300 transition-transform duration-200" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
+                                    </div>
+                                    <div class="p-3 grid grid-cols-3 gap-2 text-center">
+                                        <div v-for="idx in 5" :key="idx" class="flex flex-col gap-1 py-1.5 rounded bg-slate-50/30">
+                                            <span class="text-[10px] text-slate-400">周{{ ['一','二','三','四','五'][idx-1] }}</span>
+                                            <span class="text-xs font-bold" :class="getColorClass(item.days[idx-1]?.day_status)">{{ item.days[idx-1]?.day_status || '-' }}</span>
                                         </div>
-                                        
-                                        <!-- 手机端展开历史周 -->
-                                        <div v-if="expandedRowKey === item.etf_code" class="mt-3 pt-3 border-t border-slate-100 space-y-3" @click.stop>
-                                            <div class="text-xs font-bold text-slate-500 flex items-center gap-1">
-                                                <i class="fa-solid fa-clock-rotate-left theme-text"></i> 历史周度数据对比
+                                        <div class="flex flex-col gap-1 py-1.5 rounded bg-[#4da6a0]/5 border border-[#4da6a0]/10">
+                                            <span class="text-[10px] theme-text font-bold">周线</span>
+                                            <div class="flex items-center justify-center gap-1 text-xs font-bold" :class="getColorClass(item.week_status)">
+                                                {{ item.week_status || '-' }}
+                                                <i v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[10px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
                                             </div>
-                                            <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50/90 p-2.5 rounded-lg border border-slate-100 text-xs">
-                                                <div class="flex justify-between items-center mb-2 pb-1 border-b border-slate-200/60">
-                                                    <div class="font-bold text-slate-700 flex items-center gap-1">
-                                                        <span class="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded text-[11px] font-mono">{{ week.shortWeekLabel }}</span>
-                                                        <span class="text-[11px] text-slate-400 font-normal">({{ parseMonth(week.monday) }}/{{ parseDay(week.monday) }} ~ {{ parseMonth(week.fridayDate) }}/{{ parseDay(week.fridayDate) }})</span>
-                                                    </div>
-                                                    <div class="flex items-center gap-1">
-                                                        <span class="text-[11px] text-slate-400">周线:</span>
-                                                        <span class="font-bold" :class="getColorClass(week.week_status)">{{ week.week_status || '-' }}</span>
-                                                        <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="fa-regular fa-image text-slate-300 active:text-blue-500 p-1" @click.stop="openChart(item.etf_code, 'weekly', index, true)"></i>
-                                                    </div>
-                                                </div>
-                                                <!-- 历史周单日数据 -->
-                                                <div class="flex justify-between items-center">
-                                                    <div v-for="(day, idx) in week.days" :key="'past-m-day-'+idx" class="flex flex-col items-center flex-1">
-                                                        <span class="text-[9px] text-slate-400">周{{ ['一','二','三','四','五'][idx] }}</span>
-                                                        <span class="text-[9px] text-slate-400 scale-90">{{ day && day.date ? parseDay(day.date)+'日' : '-' }}</span>
-                                                        <span class="text-[11px] font-medium mt-0.5" :class="getColorClass(day ? day.day_status : null)">{{ (day && day.day_status) || '-' }}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div v-if="getPastWeeks(item.etf_code).length === 0" class="text-center text-xs text-slate-400 py-2">暂无历史周数据</div>
                                         </div>
                                     </div>
-                                </template>
+                                    <div v-if="expandedRowKey === item.etf_code" class="border-t border-slate-50 bg-slate-50/30 px-3 py-2">
+                                        <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="flex items-center justify-between py-2 border-b border-dashed border-slate-200 last:border-0">
+                                            <span class="text-[10px] text-slate-400">{{ week.monday.substring(5) }} 周线</span>
+                                            <div class="flex items-center gap-2 text-xs font-medium" :class="getColorClass(week.week_status)">
+                                                {{ week.week_status || '-' }}
+                                                <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[10px]" @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- ====== 页面 1: 购买套餐 (V免签完全自动化模式) ====== -->
+                    <!-- ====== 页面 1: 购买套餐 ====== -->
                     <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
-                            <div>
-                                <h2 class="text-xl font-medium text-slate-800">选择 VIP 监控套餐</h2>
-                                <p class="text-xs text-slate-400 mt-1">支持微信扫码支付，算法微浮动分钱监听，秒级极速自动开通 VIP</p>
-                            </div>
-                            <span class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full border border-emerald-100 flex items-center">
-                                <i class="fa-solid fa-bolt text-amber-400 mr-1.5 animate-pulse"></i> V免签完全自动化系统已就绪
-                            </span>
-                        </div>
-                        
-                        <div v-if="vipPlans.length === 0" class="text-center py-12 text-slate-400">加载套餐配置中...</div>
-                        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                            <div v-for="plan in vipPlans" :key="plan.id" @click="selectTopUpPlan(plan)" class="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col cursor-pointer transition-all border-2 relative group" :class="topUpForm.planId === plan.id ? 'theme-border ring-2 ring-[#4da6a0]/20' : 'border-transparent hover:border-slate-200'">
-                                <div v-if="plan.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2.5 py-0.5 rounded-bl shadow-sm font-medium">{{ plan.tag }}</div>
-                                <div class="p-6 border-b border-slate-50 bg-slate-50/50">
-                                    <div class="text-slate-500 text-sm mb-3">{{ plan.name }}</div>
-                                    <div class="flex items-end mb-1">
-                                        <span class="text-3xl font-light text-slate-800">¥ {{ plan.price }}</span>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div v-for="plan in plans" :key="plan.id" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow relative group">
+                                <div v-if="plan.is_popular" class="absolute top-0 right-0 theme-bg text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold z-10">最受欢迎</div>
+                                <div class="p-6 text-center border-b border-slate-50">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-2">{{ plan.name }}</h3>
+                                    <div class="flex items-baseline justify-center gap-1">
+                                        <span class="text-slate-400 text-sm">¥</span>
+                                        <span class="text-4xl font-light text-slate-800">{{ plan.price }}</span>
                                     </div>
-                                    <div class="text-slate-400 text-xs">有效期 {{ plan.days }} 个自然日</div>
                                 </div>
-                                <div class="p-5 flex-1 flex flex-col justify-between">
-                                    <ul class="text-xs text-slate-600 space-y-2.5 mb-4">
-                                        <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 无限制解锁高清图表</li>
-                                        <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 多周期历史快照对比</li>
-                                        <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 极速秒级自动化发货</li>
+                                <div class="p-6 flex-1 space-y-4">
+                                    <ul class="space-y-3 text-sm text-slate-500">
+                                        <li v-for="feature in plan.features" :key="feature" class="flex items-center gap-2"><i class="fa-solid fa-check theme-text text-xs"></i> {{ feature }}</li>
                                     </ul>
-                                    <div class="w-full text-center py-2 rounded text-xs font-medium transition" :class="topUpForm.planId === plan.id ? 'theme-bg text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'">
-                                        {{ topUpForm.planId === plan.id ? '已选中' : '选择此套餐' }}
-                                    </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- 支付展示区域 -->
-                        <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 max-w-2xl mx-auto border border-slate-100">
-                            <div class="text-center mb-6">
-                                <div class="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 px-3 py-1 rounded-full mb-3 border border-amber-200">
-                                    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i> 系统已为你生成专属校验金额
+                                <div class="p-6 pt-0">
+                                    <button @click="purchasePlan(plan)" class="w-full py-2.5 rounded-xl text-sm font-medium transition shadow-sm" :class="plan.is_popular ? 'theme-bg text-white hover:opacity-90' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'">立即订阅</button>
                                 </div>
-                                <h3 class="text-lg font-bold text-slate-800">微信扫码精准支付</h3>
-                                <div class="mt-2 flex items-baseline justify-center gap-1">
-                                    <span class="text-sm text-slate-500">需严格支付:</span>
-                                    <span class="text-3xl font-extrabold text-red-500 font-mono">¥{{ topUpForm.floatingAmount }}</span>
-                                    <span class="text-xs text-slate-400">(含微小随机浮动)</span>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col items-center mb-6">
-                                <div class="w-52 h-52 bg-slate-50 rounded-xl p-3 border-2 border-dashed border-slate-200 mb-3 relative group">
-                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=wxp://f2f0-kIs2bORtc-afpDrigMOnYKVB0HL39jY8zyFUXEB8v2fvB_AtyT148TX2OQpDoby" class="w-full h-full object-cover rounded-lg">
-                                </div>
-                                
-                                <div class="bg-emerald-50 text-emerald-700 text-xs px-4 py-2.5 rounded-lg border border-emerald-100 max-w-md text-center space-y-1">
-                                    <p class="font-bold"><i class="fa-solid fa-bullhorn text-emerald-500 mr-1"></i> 提示：请严格支付精准金额 {{ topUpForm.floatingAmount }} 元</p>
-                                    <p class="text-emerald-600">付完后系统 3 秒内自动开通 VIP，无需手动填写订单号！</p>
-                                </div>
-                            </div>
-
-                            <div class="max-w-xs mx-auto text-center space-y-3">
-                                <div class="flex items-center justify-center gap-2 text-xs text-slate-500">
-                                    <i class="fa-solid fa-spinner animate-spin theme-text"></i>
-                                    <span>云端挂机服务监听中...</span>
-                                    <button @click="checkPaymentStatus" class="theme-text hover:underline ml-1 font-medium">手动刷新状态</button>
-                                </div>
-
-                                <div class="pt-3 border-t border-slate-100">
-                                    <button @click="showManualInput = !showManualInput" class="text-xs text-slate-400 hover:text-slate-600">
-                                        若未自动跳转，点击手动补填微信单号(后6位) <i class="fa-solid fa-chevron-down text-[10px]"></i>
-                                    </button>
-                                    <div v-if="showManualInput" class="mt-3 space-y-2">
-                                        <input v-model="topUpForm.txId" type="text" maxlength="6" class="w-full px-4 py-2 border border-slate-300 rounded focus:outline-none focus:theme-border text-center tracking-widest font-mono text-sm" placeholder="微信单号后6位数字">
-                                        <button @click="submitOrder" :disabled="orderLoading || topUpForm.txId.length !== 6" class="w-full py-2 theme-bg text-white rounded text-xs font-medium transition hover:opacity-90 disabled:opacity-50">
-                                            提交单号充值
-                                        </button>
-                                    </div>
-                                </div>
-                                <div v-if="orderMessage" class="text-xs px-3 py-2 rounded text-center font-medium" :class="orderMessage.includes('成功') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'">{{ orderMessage }}</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- ====== 页面 3: 个人中心 (核心整合: 1.会员时长 2.我的订单 3.邀请码明细 4.密码修改) ====== -->
+                    <!-- ====== 页面 3: 个人中心 ====== -->
                     <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-6">
-                        
-                        <!-- 1. 会员时长与状态 -->
+                        <!-- 卡片 1：会员时长与状态 -->
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                            <h3 class="font-bold text-slate-800 text-base mb-4 flex items-center"><i class="fa-solid fa-id-card theme-text mr-2"></i> 会员时长与状态</h3>
-                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                                <div class="space-y-1">
-                                    <div class="text-sm text-slate-500">当前身份：
-                                        <span :class="isVip ? 'text-emerald-500 font-bold' : 'text-slate-500'">{{ isVip ? 'VIP会员' : '免费用户' }}</span>
-                                    </div>
-                                    <div class="text-2xl font-light text-slate-800">
-                                        <span v-if="isVip" class="font-normal text-emerald-600">VIP 剩余时间: <strong class="font-bold">{{ vipDaysLeft }}</strong> 天</span>
-                                        <span v-else class="text-slate-400 text-lg">尚未开通 VIP 会员</span>
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <div class="text-sm text-slate-500 mb-1">会员身份</div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl font-bold" :class="isVip ? 'theme-text' : 'text-slate-400'">{{ isVip ? 'VIP会员' : '免费用户' }}</span>
+                                        <span v-if="isVip" class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded border border-emerald-100">剩余 {{ vipDaysLeft }} 天</span>
                                     </div>
                                 </div>
-                                <button @click="navigate('#/plan')" class="theme-bg text-white px-6 py-2.5 rounded-lg text-sm hover:opacity-90 shadow-sm whitespace-nowrap">
-                                    <i class="fa-solid fa-bolt mr-1"></i> {{ isVip ? '续费套餐' : '充值开通 VIP' }}
+                                <button @click="navigate('#/plan')" class="theme-bg text-white px-8 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 shadow-sm transition">
+                                    {{ isVip ? '立即续费' : '开通会员' }}
                                 </button>
                             </div>
                         </div>
 
-                        <!-- 2. 我的订单历史列表 -->
+                        <!-- 卡片 2：我的订单 -->
                         <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                             <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                                <h3 class="font-bold text-slate-800 text-base flex items-center"><i class="fa-solid fa-list-ul theme-text mr-2"></i> 我的订单</h3>
+                                <span class="font-medium text-slate-700">我的订单</span>
                             </div>
-                            <div class="p-6">
-                                <div v-if="!selectedOrder" class="overflow-x-auto">
-                                    <table class="w-full text-left text-sm whitespace-nowrap">
-                                        <thead class="bg-slate-50 text-slate-500 border-b border-slate-100">
-                                            <tr><th class="py-3 px-4 font-medium"># 订单号(后6位)</th><th class="py-3 px-4 font-medium">购买套餐</th><th class="py-3 px-4 font-medium">订单金额</th><th class="py-3 px-4 font-medium">订单状态</th><th class="py-3 px-4 font-medium">创建时间</th><th class="py-3 px-4 font-medium text-right">操作</th></tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-slate-50 text-slate-600">
-                                            <tr v-for="order in orderList" :key="order.id" class="hover:bg-slate-50">
-                                                <td class="py-3 px-4 font-mono text-slate-500">{{ order.tx_id_last6 || order.id }}</td>
-                                                <td class="py-3 px-4"><span class="bg-slate-100 px-2 py-1 rounded text-xs">{{ getPlanName(order.plan_id) }}</span></td>
-                                                <td class="py-3 px-4">¥ {{ order.amount }}</td>
-                                                <td class="py-3 px-4"><span :class="order.status === 'approved' ? 'text-emerald-500' : (order.status === 'cancelled' ? 'text-slate-400' : 'text-orange-500')"><i class="fa-solid fa-circle text-[8px] mr-1"></i>{{ formatStatus(order.status) }}</span></td>
-                                                <td class="py-3 px-4 text-slate-400">{{ formatDateExact(order.created_at) }}</td>
-                                                <td class="py-3 px-4 text-right"><button @click="viewOrder(order)" class="theme-text hover:underline">详情</button></td>
-                                            </tr>
-                                            <tr v-if="orderList.length === 0"><td colspan="6" class="py-8 text-center text-slate-400"><p v-if="!isLoggedIn">请先登录查看订单</p><p v-else>暂无订单记录</p></td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div v-else class="space-y-4">
-                                    <button @click="selectedOrder = null" class="text-sm text-slate-500 hover:text-slate-800"><i class="fa-solid fa-arrow-left mr-1"></i> 返回订单列表</button>
-                                    <div class="bg-slate-50 p-4 rounded border border-slate-100 space-y-2 text-sm">
-                                        <div class="flex justify-between"><span class="text-slate-500">套餐类型:</span><span class="font-bold text-slate-700">{{ getPlanName(selectedOrder.plan_id) }} VIP 套餐</span></div>
-                                        <div class="flex justify-between"><span class="text-slate-500">实付金额:</span><span class="text-red-500 font-bold">¥ {{ selectedOrder.amount }}</span></div>
-                                        <div class="flex justify-between"><span class="text-slate-500">流水单号:</span><span class="font-mono text-slate-700">{{ selectedOrder.id }}</span></div>
-                                        <div class="flex justify-between"><span class="text-slate-500">创建时间:</span><span class="text-slate-700">{{ formatDateExact(selectedOrder.created_at) }}</span></div>
-                                    </div>
-                                </div>
+                            <div class="overflow-x-auto custom-scrollbar">
+                                <table class="w-full text-left text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                        <tr>
+                                            <th class="py-4 px-6 font-medium"># 订单号(后6位)</th>
+                                            <th class="py-4 px-6 font-medium">购买套餐</th>
+                                            <th class="py-4 px-6 font-medium">订单金额</th>
+                                            <th class="py-4 px-6 font-medium">订单状态</th>
+                                            <th class="py-4 px-6 font-medium">创建时间</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50 text-slate-600">
+                                        <tr v-for="order in orderList" :key="order.id" class="hover:bg-slate-50 transition-colors">
+                                            <td class="py-4 px-6 font-mono text-slate-500">{{ order.tx_id_last6 || order.id }}</td>
+                                            <td class="py-4 px-6"><span class="bg-slate-100 px-2 py-1 rounded text-xs">{{ getPlanName(order.plan_id) }}</span></td>
+                                            <td class="py-4 px-6">¥ {{ order.amount }}</td>
+                                            <td class="py-4 px-6">
+                                                <span :class="order.status === 'approved' ? 'text-emerald-500' : (order.status === 'cancelled' ? 'text-slate-400' : 'text-orange-500')">
+                                                    <i class="fa-solid fa-circle text-[8px] mr-1"></i>{{ formatStatus(order.status) }}
+                                                </span>
+                                            </td>
+                                            <td class="py-4 px-6 text-slate-400">{{ formatDateExact(order.created_at) }}</td>
+                                        </tr>
+                                        <tr v-if="orderList.length === 0">
+                                            <td colspan="5" class="py-12 text-center text-slate-400">
+                                                <p v-if="!isLoggedIn">请先登录查看订单</p>
+                                                <p v-else>暂无订单记录</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        <!-- 3. 专属邀请码及邀请奖励明细 -->
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                                <h3 class="font-bold text-slate-800 text-base flex items-center"><i class="fa-solid fa-user-group theme-text mr-2"></i> 专属邀请码及奖励</h3>
-                            </div>
-                            <div class="p-6 space-y-4">
-                                <div class="flex justify-between items-center text-sm">
-                                    <span class="text-slate-500">您的专属邀请码：</span>
-                                    <div>
-                                        <span v-if="!isLoggedIn" class="text-slate-400">请先登录获取邀请码</span>
-                                        <span v-else class="font-mono bg-slate-100 px-3 py-1.5 rounded text-slate-700 text-lg tracking-widest font-bold">{{ referralCode }}</span> 
-                                    </div>
-                                </div>
-                                <div class="bg-emerald-50 text-emerald-700 text-xs p-3 rounded-lg border border-emerald-100 leading-relaxed">
-                                    <p class="font-bold"><i class="fa-solid fa-gift text-emerald-500 mr-1"></i> 邀请规则：</p>
-                                    <p>将您的专属邀请码分享给好友，好友在注册时填写该邀请码，双方均可**额外获得 3 天免费 VIP 体验时间**！</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 4. 修改密码 -->
+                        <!-- 卡片 3：专属邀请码及奖励 -->
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                            <h3 class="font-bold text-slate-800 text-base mb-4 flex items-center"><i class="fa-solid fa-lock theme-text mr-2"></i> 修改密码</h3>
-                            <div class="space-y-4 max-w-md">
-                                <div><label class="block text-sm text-slate-500 mb-1">旧密码</label><input v-model="pwdForm.old" type="password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:theme-border text-sm"></div>
-                                <div><label class="block text-sm text-slate-500 mb-1">新密码</label><input v-model="pwdForm.new" type="password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:theme-border text-sm"></div>
-                                <div><label class="block text-sm text-slate-500 mb-1">确认新密码</label><input v-model="pwdForm.confirm" type="password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:theme-border text-sm"></div>
-                                <button @click="submitPasswordChange" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2 rounded-lg text-sm hover:opacity-90 mt-2 shadow-sm disabled:opacity-50 transition">{{ pwdLoading ? '保存中...' : '保 存' }}</button>
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="font-medium text-slate-700">专属邀请码及奖励</span>
+                            </div>
+                            <div class="bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
+                                    <div class="flex items-center gap-3">
+                                        <span v-if="!isLoggedIn" class="text-slate-400">请先登录获取</span>
+                                        <span v-else class="font-mono text-2xl font-bold text-slate-700 tracking-widest">{{ referralCode }}</span>
+                                    </div>
+                                </div>
+                                <div class="sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-200">
+                                    <div class="text-xs text-slate-400 mb-1">邀请规则</div>
+                                    <div class="text-sm font-medium theme-text">邀请与被邀请双方各送 3 天 VIP 体验</div>
+                                </div>
                             </div>
                         </div>
 
+                        <!-- 卡片 4：修改密码 -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                            <h3 class="font-medium text-slate-700 mb-4">修改密码</h3>
+                            <div class="space-y-4 max-w-md">
+                                <div><label class="block text-sm text-slate-500 mb-1">旧密码</label><input v-model="pwdForm.old" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
+                                <div><label class="block text-sm text-slate-500 mb-1">新密码</label><input v-model="pwdForm.new" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
+                                <div><label class="block text-sm text-slate-500 mb-1">确认新密码</label><input v-model="pwdForm.confirm" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
+                                <button @click="submitPasswordChange" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2 rounded text-sm hover:opacity-90 mt-2 shadow-sm disabled:opacity-50 transition">
+                                    {{ pwdLoading ? '保存中...' : '保 存' }}
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- ====== 页面 6: 使用说明 ====== -->
@@ -442,7 +350,7 @@
                             <h2 class="text-2xl font-medium text-center text-slate-800 mb-8">波幅探长监控系统使用指南</h2>
                             <div class="space-y-6 text-slate-600 text-sm leading-relaxed">
                                 <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">1. 手机端如何放大图表？</h4><p class="pl-4">手机端点击图表图标后，直接使用双指捏合即可无损放大高清图表。单指可随意拖拽平移。</p></section>
-                                <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">2. 充值不到账怎么办？</h4><p class="pl-4">扫码支付时请务必严格按提示的微浮动金额支付（例如18.82元），系统监听成功后自动触发开通。若超5分钟未自动激活，可随时通过右下角【在线客服】发送消息或截图协助解决。</p></section>
+                                <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">2. 充值不到账怎么办？</h4><p class="pl-4">扫码支付时请务必严格按提示的微浮动金额支付（例如18.82元），系统监听成功后自动触发开通。若超5分钟未自动激活，可随时通过底部【在线客服】或提交工单协助解决。</p></section>
                             </div>
                         </div>
                     </div>
@@ -470,7 +378,7 @@
             </main>
         </div>
 
-        <!-- ====== 侧边抽屉导航 (已整合精简: 保留 数据看板 / 购买套餐 / 个人中心 / 使用说明) ====== -->
+        <!-- ====== 侧边抽屉导航 ====== -->
         <aside class="fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 flex flex-col shadow-2xl" :class="menuOpen ? 'translate-x-0' : '-translate-x-full'">
             <div class="h-16 theme-bg text-white flex items-center justify-between px-5 text-lg font-normal tracking-wider relative">
                 <a href="https://bofutz.github.io/#/" @click="menuOpen = false" class="flex items-center gap-2 text-white hover:text-white/90 transition">
@@ -480,10 +388,10 @@
                 <button @click="menuOpen = false" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="flex-1 overflow-y-auto py-2 custom-scrollbar">
-                <div @click="navigate('#/')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/'}"><i class="fa-solid fa-gauge-high w-6"></i> 数据看板</div>
+                <div @click="navigate('#/')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/'}"><i class="fa-solid fa-chart-simple w-6"></i> 数据看板</div>
                 <div @click="navigate('#/plan')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/plan'}"><i class="fa-solid fa-bag-shopping w-6"></i> 购买套餐</div>
-                <div @click="navigate('#/profile')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/profile'}"><i class="fa-regular fa-user w-6"></i> 个人中心</div>
-                <div @click="navigate('#/docs')" class="nav-item block px-6 py-3.5" :class="{'active': currentRoute === '#/docs'}"><i class="fa-solid fa-book-open w-6"></i> 使用说明</div>
+                <div @click="navigate('#/profile')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/profile'}"><i class="fa-solid fa-user w-6"></i> 个人中心</div>
+                <div @click="navigate('#/docs')" class="nav-item block px-6 py-3.5" :class="{'active': currentRoute === '#/docs'}"><i class="fa-solid fa-book w-6"></i> 使用说明</div>
             </div>
         </aside>
 
