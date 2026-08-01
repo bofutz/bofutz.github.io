@@ -53,7 +53,7 @@
                 <div class="flex items-center gap-3">
                     <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2 transition"><i class="fa-solid fa-bars text-xl"></i></button>
                     <!-- Logo + 主页跳转链接 -->
-                    <a href="https://bofutz.github.io/#/" class="flex items-center gap-2 cursor-pointer hover:opacity-85 transition">
+                    <a @click.prevent="navigate('#/')" href="#/" class="flex items-center gap-2 cursor-pointer hover:opacity-85 transition">
                         <img src="logo.png" alt="Logo" class="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-100" onerror="this.style.display='none'">
                         <span class="text-lg font-bold theme-text tracking-wide hidden sm:block">波幅探长</span>
                     </a>
