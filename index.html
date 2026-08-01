@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>波幅监控系统 - 波幅探长</title>
+    <!-- Logo & Icon 配置 -->
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        [v-cloak] { display: none; }
+        body { -webkit-tap-highlight-color: transparent; background-color: #f4f6f8; }
+        .theme-bg { background-color: #4da6a0; }
+        .theme-text { color: #4da6a0; }
+        .theme-border { border-color: #4da6a0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .nav-item.active { background-color: #e2e8f0; color: #334155; border-left: 3px solid #4da6a0; padding-left: 21px; }
+        .chat-fab { box-shadow: 0 4px 14px rgba(77, 166, 160, 0.4); transition: all 0.3s; }
+        .chat-fab:hover { transform: scale(1.08); }
+        .message-bubble-user { background-color: #4da6a0; color: #ffffff; }
+        .message-bubble-bot { background-color: #f1f5f9; color: #1e293b; }
+    </style>
+</head>
+<body class="text-slate-700 font-sans h-screen overflow-hidden flex">
+
+    <div id="app" v-cloak class="flex w-full h-full" @click="closeDropdowns">
+        <!-- 主体 Header / 看板 / V免签套餐 / 订单 / 个人中心 / 社交页脚 / 客服悬浮窗 DOM 结构 -->
+    </div>
+
+    <!-- 模块化引入外部 JS 逻辑 -->
+    <script src="chat.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
