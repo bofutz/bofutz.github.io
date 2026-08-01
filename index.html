@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- 引入 Cloudflare Turnstile 人机验证 SDK -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         [v-cloak] { display: none; }
         body { -webkit-tap-highlight-color: transparent; background-color: #f4f6f8; }
@@ -39,7 +41,7 @@
                 <div class="flex items-center gap-4">
                     <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2 transition"><i class="fa-solid fa-bars text-xl"></i></button>
                     <!-- 主页跳转链接 -->
-                    <a href="https://gpkx.github.io/#/" class="text-lg font-bold theme-text tracking-wide hidden sm:block mr-2 cursor-pointer hover:opacity-80 transition">波幅探长</a>
+                    <a href="https://bofutz.github.io/#/" class="text-lg font-bold theme-text tracking-wide hidden sm:block mr-2 cursor-pointer hover:opacity-80 transition">波幅探长</a>
                     <span class="text-sm font-semibold text-slate-500 border-l border-slate-200 pl-3 hidden sm:block">{{ pageTitle }}</span>
                     <span class="text-sm font-semibold text-slate-700 sm:hidden">{{ pageTitle }}</span>
                 </div>
@@ -156,14 +158,14 @@
                                                     </td>
                                                     <td v-for="(day, idx) in week.days" :key="'past-td-'+idx" class="p-2 text-center align-middle">
                                                         <div v-if="day && day.day_status" class="inline-flex items-center justify-center font-medium text-[13px] whitespace-nowrap">
-                                                            <span class="text-[11px] text-slate-400 mr-1">{{ day.date ? parseInt(day.date.split('-')[2], 10) : '-' }}日:</span>
+                                                            <span class="text-[11px] text-slate-400 mr-1">{{ day.date ? parseDay(day.date) : '-' }}日:</span>
                                                             <span :class="getColorClass(day.day_status)">{{ day.day_status }}</span>
                                                         </div>
                                                         <span v-else class="text-slate-300">-</span>
                                                     </td>
                                                     <td class="p-3 text-center font-medium text-[13px]">
                                                         <div v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="inline-flex items-center justify-center whitespace-nowrap">
-                                                            <span class="text-[11px] text-slate-400 mr-1">({{ week.monday ? parseInt(week.monday.split('-')[2], 10) : '-' }}~{{ week.fridayDate ? parseInt(week.fridayDate.split('-')[2], 10) : '-' }}日)</span>
+                                                            <span class="text-[11px] text-slate-400 mr-1">({{ week.monday ? parseDay(week.monday) : '-' }}~{{ week.fridayDate ? parseDay(week.fridayDate) : '-' }}日)</span>
                                                             <span :class="getColorClass(week.week_status)">{{ week.week_status }}</span>
                                                             <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px] ml-1.5" @click.stop="openChart(item.etf_code, 'weekly', index, true)"></i>
                                                         </div>
@@ -258,7 +260,6 @@
                             <p class="text-xs text-red-400 font-medium"><i class="fa-solid fa-circle-exclamation"></i> 支付成功后，请准确填写下方订单号 (后6位)</p>
                         </div>
                         <div class="max-w-xs mx-auto">
-                            <!-- 已移除不稳定的 oninput，改为原生校验 -->
                             <input v-model="topUpForm.txId" type="text" maxlength="6" class="w-full px-4 py-2 border border-slate-300 rounded focus:outline-none focus:theme-border text-center tracking-widest font-mono mb-4" placeholder="必须填写6位纯数字">
                             <div v-if="orderMessage" class="text-xs px-3 py-2 rounded text-center mb-4 font-medium" :class="orderMessage.includes('成功') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'">{{ orderMessage }}</div>
                             <button @click="submitOrder" :disabled="orderLoading || topUpForm.txId.length !== 6" class="w-full py-2.5 theme-bg text-white rounded font-medium transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center">
@@ -450,7 +451,7 @@
 
         <aside class="fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 flex flex-col shadow-2xl" :class="menuOpen ? 'translate-x-0' : '-translate-x-full'">
             <div class="h-16 theme-bg text-white flex items-center justify-center text-lg font-normal tracking-wider relative">
-                <a href="https://gpkx.github.io/#/" @click="menuOpen = false" class="text-white hover:text-white/90 transition block">波幅探长</a>
+                <a href="https://bofutz.github.io/#/" @click="menuOpen = false" class="text-white hover:text-white/90 transition block">波幅探长</a>
                 <button @click="menuOpen = false" class="absolute right-4 text-white/70 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="flex-1 overflow-y-auto py-2 custom-scrollbar">
@@ -465,19 +466,41 @@
             </div>
         </aside>
 
+        <!-- ====== 登录 / 注册 模态框 (包含验证码与Turnstile人机验证) ====== -->
         <div v-if="authModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="closeAuth">
             <div class="bg-white rounded w-full max-w-sm overflow-hidden shadow-2xl">
                 <div class="flex border-b border-slate-100">
-                    <button @click="authMode = 'login'" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'login' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">账号登录</button>
-                    <button @click="authMode = 'register'" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'register' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">免费注册</button>
+                    <button @click="switchAuthMode('login')" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'login' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">账号登录</button>
+                    <button @click="switchAuthMode('register')" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'register' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">免费注册</button>
                 </div>
-                <div class="p-6 space-y-4">
+                <div class="p-6 space-y-3">
                     <div v-if="authMode === 'register'" class="bg-emerald-50 text-emerald-600 text-xs p-2 rounded text-center font-medium border border-emerald-100">
                         🎉 新注册即送 1 天免费体验权限！
                     </div>
-                    <input v-model="authForm.username" type="text" placeholder="邮箱账号 / 手机号" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none">
-                    <input v-model="authForm.password" type="password" placeholder="密码" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none">
+                    
+                    <!-- 账号/邮箱输入框 -->
+                    <input v-model="authForm.username" type="email" :placeholder="authMode === 'register' ? '注册电子邮箱 (如 user@qq.com)' : '邮箱账号 / 手机号'" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none">
+                    
+                    <!-- 注册专属：Turnstile 人机验证容器 -->
+                    <div v-show="authMode === 'register'" class="flex justify-center my-1 min-h-[65px]">
+                        <div id="turnstile-container"></div>
+                    </div>
+
+                    <!-- 注册专属：邮箱验证码获取与输入框 -->
+                    <div v-if="authMode === 'register'" class="flex gap-2">
+                        <input v-model="authForm.emailCode" type="text" placeholder="6位邮箱验证码" class="flex-1 px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none font-mono">
+                        <button @click="sendEmailCode" type="button" :disabled="sendCodeLoading || countdown > 0" class="px-3 py-2 text-xs theme-bg text-white rounded hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap">
+                            {{ countdown > 0 ? `${countdown}s 后可重发` : (sendCodeLoading ? '发送中...' : '获取验证码') }}
+                        </button>
+                    </div>
+
+                    <!-- 密码框 -->
+                    <input v-model="authForm.password" type="password" placeholder="设置密码" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none">
+                    
+                    <!-- 注册专属：推荐码 -->
                     <input v-if="authMode === 'register'" v-model="authForm.refCode" type="text" placeholder="推荐码 (选填，额外送3天)" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none transition">
+                    
+                    <!-- 提交按钮 -->
                     <button @click="submitAuth" :disabled="authLoading" class="w-full theme-bg text-white font-medium py-2.5 rounded text-sm hover:opacity-90 mt-2 disabled:opacity-50">
                         <i v-if="authLoading" class="fa-solid fa-spinner animate-spin mr-1"></i> {{ authMode === 'login' ? '立即登录' : '注册账号' }}
                     </button>
@@ -488,15 +511,36 @@
     </div>
 
     <script>
-        const { createApp, ref, computed, reactive, onMounted, watch } = Vue;
+        const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
         const API_BASE = "https://vip.hahagw.eu.org";
+        // 你的邮件发送后端 Worker 地址
+        const MAIL_API_BASE = "https://mail.hahagw2016.workers.dev";
+        // ⚠️ 请在此处填入你在 Cloudflare 获得的 Turnstile 站点密钥 (Sitekey)
+        const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
+
+        // 安全日、月、年解析小函数
+        const parseYear = (dateStr) => {
+            if (!dateStr || typeof dateStr !== 'string') return 0;
+            const parts = dateStr.split('-');
+            return parts.length >= 1 ? parseInt(parts[0], 10) || 0 : 0;
+        };
+        const parseMonth = (dateStr) => {
+            if (!dateStr || typeof dateStr !== 'string') return 0;
+            const parts = dateStr.split('-');
+            return parts.length >= 2 ? parseInt(parts[1], 10) || 0 : 0;
+        };
+        const parseDay = (dateStr) => {
+            if (!dateStr || typeof dateStr !== 'string') return 0;
+            const parts = dateStr.split('-');
+            return parts.length >= 3 ? parseInt(parts[2], 10) || 0 : 0;
+        };
 
         createApp({
             setup() {
                 const currentRoute = ref(window.location.hash || '#/');
                 const menuOpen = ref(false); 
                 const userMenuOpen = ref(false);
-                const freeEtfCodes = ref([]); // 记录当前最新周期的免费ETF代码
+                const freeEtfCodes = ref([]);
 
                 const navigate = (path) => { currentRoute.value = path; window.location.hash = path; menuOpen.value = false; };
                 const closeDropdowns = () => { userMenuOpen.value = false; showDropdown.value = false; };
@@ -541,19 +585,115 @@
                 const authModalVisible = ref(false);
                 const authMode = ref('login');
                 const authLoading = ref(false);
-                const authForm = reactive({ username: '', password: '', refCode: '' });
+                const authForm = reactive({ username: '', password: '', refCode: '', emailCode: '', turnstileToken: '' });
+                
+                const sendCodeLoading = ref(false);
+                const countdown = ref(0);
 
-                const openAuth = (mode) => { authMode.value = mode; authModalVisible.value = true; authForm.password = ''; };
+                // 安全渲染 Turnstile 人机验证
+                const renderTurnstile = () => {
+                    if (authMode.value !== 'register') return;
+                    nextTick(() => {
+                        setTimeout(() => {
+                            const container = document.getElementById('turnstile-container');
+                            if (container && window.turnstile) {
+                                container.innerHTML = ''; 
+                                try {
+                                    window.turnstile.render('#turnstile-container', {
+                                        sitekey: TURNSTILE_SITEKEY,
+                                        callback: (token) => {
+                                            authForm.turnstileToken = token;
+                                        },
+                                        'expired-callback': () => {
+                                            authForm.turnstileToken = '';
+                                        }
+                                    });
+                                } catch(e){}
+                            }
+                        }, 150);
+                    });
+                };
+
+                const switchAuthMode = (mode) => {
+                    authMode.value = mode;
+                    authForm.password = '';
+                    authForm.emailCode = '';
+                    authForm.turnstileToken = '';
+                    if (mode === 'register') renderTurnstile();
+                };
+
+                const openAuth = (mode) => { 
+                    authModalVisible.value = true; 
+                    switchAuthMode(mode);
+                };
+                
                 const closeAuth = () => authModalVisible.value = false;
+
+                // 发送邮箱验证码
+                const sendEmailCode = async () => {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!authForm.username || !emailRegex.test(authForm.username)) {
+                        alert('请输入格式正确的电子邮箱地址！');
+                        return;
+                    }
+                    if (!authForm.turnstileToken) {
+                        alert('请先勾选/完成人机安全验证！');
+                        return;
+                    }
+
+                    sendCodeLoading.value = true;
+                    try {
+                        const res = await fetch(`${MAIL_API_BASE}/api/send-code`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: authForm.username, turnstileToken: authForm.turnstileToken })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert(data.msg || '验证码发送成功，请登录邮箱查看！');
+                            countdown.value = 60;
+                            const timer = setInterval(() => {
+                                countdown.value--;
+                                if (countdown.value <= 0) {
+                                    clearInterval(timer);
+                                    if (window.turnstile) window.turnstile.reset('#turnstile-container');
+                                }
+                            }, 1000);
+                        } else {
+                            alert(data.msg || '发送失败，请重试');
+                            if (window.turnstile) window.turnstile.reset('#turnstile-container');
+                        }
+                    } catch (e) {
+                        alert('网络连接错误，发送失败！');
+                        if (window.turnstile) window.turnstile.reset('#turnstile-container');
+                    } finally {
+                        sendCodeLoading.value = false;
+                    }
+                };
 
                 const submitAuth = async () => {
                     if (!authForm.username || !authForm.password) { alert('账号和密码不能为空'); return; }
+                    
+                    if (authMode.value === 'register') {
+                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                        if (!emailRegex.test(authForm.username)) { alert('请填写合法的电子邮箱地址'); return; }
+                        if (!authForm.emailCode) { alert('请输入收到的6位邮箱验证码'); return; }
+                    }
+
                     authLoading.value = true;
                     try {
                         if (authMode.value === 'register') {
-                            await apiFetch('/api/register', { method: 'POST', body: JSON.stringify({ username: authForm.username, password: authForm.password, ref_code: authForm.refCode }) });
+                            await apiFetch('/api/register', { 
+                                method: 'POST', 
+                                body: JSON.stringify({ 
+                                    username: authForm.username, 
+                                    password: authForm.password, 
+                                    ref_code: authForm.refCode,
+                                    code: authForm.emailCode
+                                }) 
+                            });
                             alert('注册成功，请登录体验！');
-                            authMode.value = 'login';
+                            switchAuthMode('login');
                         } else {
                             const data = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ username: authForm.username, password: authForm.password }) });
                             localStorage.setItem('etf_token', data.token);
@@ -605,28 +745,21 @@
                     }
                 };
 
-                const getAbsValue = (str) => {
-                    if (!str || typeof str !== 'string' || str === '-' || str === '--') return -9999;
-                    const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
-                    return match ? Math.abs(parseFloat(match[0])) : -9999;
-                };
-
                 const getStatusVal = (str) => {
                     if (!str || typeof str !== 'string' || str === '-' || str === '--') return -9999;
                     const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
                     return match ? parseFloat(match[0]) : -9999;
                 };
 
-                // 【核心容错修复】：防止无 date 字段导致系统彻底崩溃
                 const getWeekDays = (dateStr) => {
-                    if (!dateStr || typeof dateStr !== 'string') return [];
-                    const parts = dateStr.split('-');
-                    if (parts.length < 3) return [];
-                    const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, d = parseInt(parts[2], 10);
-                    const dateObj = new Date(y, m, d);
+                    const y = parseYear(dateStr);
+                    const m = parseMonth(dateStr);
+                    const d = parseDay(dateStr);
+                    if (!y || !m || !d) return [];
+                    const dateObj = new Date(y, m - 1, d);
                     let dayOfWeek = dateObj.getDay();
                     const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; 
-                    const monday = new Date(y, m, d + offset);
+                    const monday = new Date(y, m - 1, d + offset);
                     const days = [];
                     for (let i = 0; i < 5; i++) {
                         const temp = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
@@ -636,18 +769,17 @@
                 };
 
                 const getWeekNumberInMonth = (dateStr) => {
-                    if (!dateStr || typeof dateStr !== 'string') return '';
-                    const parts = dateStr.split('-');
-                    if (parts.length < 3) return '';
-                    const d = parseInt(parts[2], 10);
-                    const firstDay = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+                    const y = parseYear(dateStr);
+                    const m = parseMonth(dateStr);
+                    const d = parseDay(dateStr);
+                    if (!d) return '';
+                    const firstDay = new Date(y, m - 1, 1);
                     let firstDayOfWeek = firstDay.getDay(); 
                     if (firstDayOfWeek === 0) firstDayOfWeek = 7;
                     const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
                     return `第${['一','二','三','四','五','六'][weekNum - 1] || weekNum}周`;
                 };
 
-                // 【核心容错修复】：过滤没有 date 的脏数据
                 const uniqueDatesSet = computed(() => {
                     const validDates = allData.value
                         .filter(i => (i.day_status || i.week_status) && i.date)
@@ -661,9 +793,10 @@
                         const wDays = getWeekDays(dateStr);
                         if(wDays.length === 0) return;
                         const monday = wDays[0];
-                        const parts = monday.split('-');
-                        const monthKey = `${parts[0]}-${parts[1]}`;
-                        if (!periods[monthKey]) periods[monthKey] = { monthKey, monthLabel: `${parts[0]}年${parseInt(parts[1], 10)}月`, weeksMap: {} };
+                        const y = parseYear(monday);
+                        const m = parseMonth(monday);
+                        const monthKey = `${y}-${String(m).padStart(2, '0')}`;
+                        if (!periods[monthKey]) periods[monthKey] = { monthKey, monthLabel: `${y}年${m}月`, weeksMap: {} };
                         if (!periods[monthKey].weeksMap[monday]) periods[monthKey].weeksMap[monday] = { monday, weekLabel: getWeekNumberInMonth(monday) };
                     });
                     const result = Object.values(periods).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
@@ -674,7 +807,10 @@
                 const currentPeriodLabel = computed(() => {
                     for (const m of availablePeriods.value)
                         for (const w of m.weeks)
-                            if (w.monday === selectedMonday.value) return `${parseInt(m.monthKey.split('-')[1], 10)}月 · ${w.weekLabel}`;
+                            if (w.monday === selectedMonday.value) {
+                                const monthVal = parseMonth(w.monday);
+                                return `${monthVal}月 · ${w.weekLabel}`;
+                            }
                     return '';
                 });
 
@@ -682,7 +818,7 @@
                     if (!selectedMonday.value) return [];
                     const days = getWeekDays(selectedMonday.value);
                     if(days.length === 0) return [];
-                    return days.map(d => parseInt(d.split('-')[2], 10)); 
+                    return days.map(d => parseDay(d)); 
                 });
 
                 const weekStatusHeader = computed(() => {
@@ -690,17 +826,20 @@
                     const weekDays = getWeekDays(selectedMonday.value);
                     if(weekDays.length < 5) return '';
                     const fridayDate = weekDays[4];
-                    const parts = fridayDate.split('-');
-                    if(parts.length < 3) return '';
-                    const [y, m, d] = parts;
+                    const y = parseYear(fridayDate);
+                    const m = parseMonth(fridayDate);
+                    const d = parseDay(fridayDate);
+                    if(!y) return '';
                     const friday16 = new Date(y, m - 1, d, 16, 0, 0); 
                     const isPastFriday16 = Date.now() >= friday16.getTime();
 
                     if (isPastFriday16) {
-                        return `${parseInt(weekDays[0].split('-')[2], 10)}~${parseInt(weekDays[4].split('-')[2], 10)}日`;
+                        return `${parseDay(weekDays[0])}~${parseDay(weekDays[4])}日`;
                     } else {
-                        const mParts = weekDays[0].split('-');
-                        const currentMonday = new Date(mParts[0], mParts[1] - 1, mParts[2]);
+                        const my = parseYear(weekDays[0]);
+                        const mm = parseMonth(weekDays[0]);
+                        const md = parseDay(weekDays[0]);
+                        const currentMonday = new Date(my, mm - 1, md);
                         const prevMonday = new Date(currentMonday.getTime() - 7 * 24 * 60 * 60 * 1000);
                         const prevFriday = new Date(currentMonday.getTime() - 3 * 24 * 60 * 60 * 1000);
                         return `${prevMonday.getDate()}~${prevFriday.getDate()}日`;
@@ -715,9 +854,10 @@
                     if(weekDays.length < 5) return [];
                     const fridayDate = weekDays[4]; 
                     
-                    const fParts = fridayDate.split('-');
-                    if(fParts.length < 3) return [];
-                    const [y, m, d] = fParts;
+                    const y = parseYear(fridayDate);
+                    const m = parseMonth(fridayDate);
+                    const d = parseDay(fridayDate);
+                    if(!y) return [];
                     const friday16 = new Date(y, m - 1, d, 16, 0, 0);
                     const now = new Date();
                     const isPastFriday16 = now.getTime() >= friday16.getTime();
@@ -740,8 +880,10 @@
                     });
                     
                     if (!isPastFriday16) {
-                        const parts = weekDays[0].split('-');
-                        const curMon = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                        const my = parseYear(weekDays[0]);
+                        const mm = parseMonth(weekDays[0]);
+                        const md = parseDay(weekDays[0]);
+                        const curMon = new Date(my, mm - 1, md);
                         const prevMon = new Date(curMon.getTime() - 7 * 24 * 60 * 60 * 1000);
                         const prevMondayStr = `${prevMon.getFullYear()}-${String(prevMon.getMonth() + 1).padStart(2, '0')}-${String(prevMon.getDate()).padStart(2, '0')}`;
                         
@@ -860,7 +1002,7 @@
                         if (monday === selectedMonday.value) return; 
 
                         if (!weekMap[monday]) {
-                            const m = parseInt(monday.split('-')[1], 10);
+                            const m = parseMonth(monday);
                             weekMap[monday] = {
                                 monday: monday, weekLabel: `${m}月${getWeekNumberInMonth(monday)}`, fridayDate: wDays[4], days: [null, null, null, null, null], week_status: null
                             };
@@ -901,9 +1043,7 @@
                             if(Array.isArray(data)) {
                                 allData.value = data;
                                 if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
-                                    // 默认选中最新的一周
                                     selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
-                                    // 提取最新周的前3名，并将其锁定为免费开放的 ETF
                                     freeEtfCodes.value = sortedData.value.slice(0, 3).map(item => item.etf_code);
                                 }
                             }
@@ -919,7 +1059,6 @@
                         return;
                     }
 
-                    // 钉死逻辑：只要是在最新周期前三名的名单里，无论历史周期或任何设备，都允许查看
                     if (freeEtfCodes.value.includes(etfCode)) {
                         showViewer(etfCode, type);
                         return;
@@ -1004,7 +1143,6 @@
                 const ticketsList = ref([]);
                 const ticketLoading = ref(false);
                 
-                // 【核心容错修复】：防御缓存损坏导致的彻底白屏
                 let hiddenTickets = [];
                 try {
                     const stored = localStorage.getItem('hidden_tickets');
@@ -1064,20 +1202,25 @@
                     fetchPlans(); 
                     fetchData(); 
                     if (isLoggedIn.value) fetchOrders();
+                    window.addEventListener('click', closeDropdowns);
+                });
+
+                onUnmounted(() => {
+                    window.removeEventListener('click', closeDropdowns);
                 });
 
                 return {
                     currentRoute, menuOpen, userMenuOpen, pageTitle, navigate, closeDropdowns,
                     isLoggedIn, isVip, username, balance, vipDaysLeft, referralCode, logout,
-                    authModalVisible, authMode, authForm, authLoading, openAuth, closeAuth, submitAuth,
+                    authModalVisible, authMode, authForm, authLoading, openAuth, closeAuth, submitAuth, switchAuthMode, sendEmailCode, sendCodeLoading, countdown,
                     loading, sortedData, showDropdown, searchQuery, availablePeriods, currentPeriodLabel, selectWeek, selectedMonday, sortColumn, sortOrder, handleSort, currentWeekHeaders, weekStatusHeader,
-                    expandedRowKey, toggleRow, getPastWeeks,
+                    expandedRowKey, toggleRow, getPastWeeks, parseDay, parseMonth, parseYear,
                     vipPlans, topUpForm, selectTopUpPlan, orderLoading, orderMessage, submitOrder,
                     openChart, getColorClass,
                     selectedOrder, orderList, viewOrder, getPlanName, formatStatus, formatDateExact,
                     pwdForm, pwdLoading, submitPasswordChange,
                     ticketModalVisible, ticketForm, ticketsList, ticketLoading, submitTicket, openTicketModal, deleteTicket, clearFinishedTickets,
-                    freeEtfCodes // 暴露出来给模板使用，进行状态锁定
+                    freeEtfCodes
                 };
             }
         }).mount('#app');
