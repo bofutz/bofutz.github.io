@@ -2,6 +2,7 @@
  * 波幅探长 - 在线客服模块 (chat.js)
  * 支持文字交流、图片发送与预览、离线缓存与自动回复
  */
+
 function useChatModule(Vue) {
     const { ref, watch, nextTick } = Vue;
 
@@ -19,22 +20,28 @@ function useChatModule(Vue) {
         }
     ]);
 
-    // 从本地存储读取历史客服聊天记录
+    // 读取本地客服聊天缓存
     try {
         const savedChat = localStorage.getItem('bofu_chat_messages');
         if (savedChat) {
             const parsed = JSON.parse(savedChat);
-            if (Array.isArray(parsed) && parsed.length > 0) chatMessages.value = parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                chatMessages.value = parsed;
+            }
         }
     } catch (e) {}
 
     const saveChatMessages = () => {
-        try { localStorage.setItem('bofu_chat_messages', JSON.stringify(chatMessages.value)); } catch (e) {}
+        try {
+            localStorage.setItem('bofu_chat_messages', JSON.stringify(chatMessages.value));
+        } catch (e) {}
     };
 
     const scrollToChatBottom = () => {
         nextTick(() => {
-            if (chatScrollArea.value) chatScrollArea.value.scrollTop = chatScrollArea.value.scrollHeight;
+            if (chatScrollArea.value) {
+                chatScrollArea.value.scrollTop = chatScrollArea.value.scrollHeight;
+            }
         });
     };
 
@@ -43,12 +50,17 @@ function useChatModule(Vue) {
         if (!text) return;
 
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        chatMessages.value.push({ sender: 'user', type: 'text', content: text, time: nowTime });
+        chatMessages.value.push({
+            sender: 'user',
+            type: 'text',
+            content: text,
+            time: nowTime
+        });
         chatInput.value = '';
         saveChatMessages();
         scrollToChatBottom();
 
-        // 模拟客服专员自动回复逻辑
+        // 模拟客服回复
         setTimeout(() => {
             let botReply = '收到您的留言！客服专员正在处理中，稍后会为您核对回复。';
             if (text.includes('VIP') || text.includes('套餐') || text.includes('充值')) {
@@ -57,7 +69,12 @@ function useChatModule(Vue) {
                 botReply = '新注册用户免费赠送 1 天体验权限；首页表格前 3 名标的数据免费全网开放体验！';
             }
             
-            chatMessages.value.push({ sender: 'bot', type: 'text', content: botReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+            chatMessages.value.push({
+                sender: 'bot',
+                type: 'text',
+                content: botReply,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
             if (!chatOpen.value) unreadCount.value++;
             saveChatMessages();
             scrollToChatBottom();
@@ -67,18 +84,33 @@ function useChatModule(Vue) {
     const handleChatImageUpload = (event) => {
         const file = event.target.files && event.target.files[0];
         if (!file) return;
-        if (file.size > 5 * 1024 * 1024) { alert('图片大小不能超过 5MB'); return; }
+
+        if (file.size > 5 * 1024 * 1024) {
+            alert('图片大小不能超过 5MB');
+            return;
+        }
 
         const reader = new FileReader();
         reader.onload = (e) => {
             const imgData = e.target.result;
             const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            chatMessages.value.push({ sender: 'user', type: 'image', content: imgData, time: nowTime });
+            
+            chatMessages.value.push({
+                sender: 'user',
+                type: 'image',
+                content: imgData,
+                time: nowTime
+            });
             saveChatMessages();
             scrollToChatBottom();
 
             setTimeout(() => {
-                chatMessages.value.push({ sender: 'bot', type: 'text', content: '已收到您发送的图片凭证，客服人员会即刻帮您核对！', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+                chatMessages.value.push({
+                    sender: 'bot',
+                    type: 'text',
+                    content: '已收到您发送的图片凭证，客服人员会即刻帮您核对！',
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
                 saveChatMessages();
                 scrollToChatBottom();
             }, 1200);
@@ -87,12 +119,33 @@ function useChatModule(Vue) {
     };
 
     const previewChatImage = (imgUrl) => {
-        const image = new Image(); image.src = imgUrl; 
-        const viewer = new Viewer(image, { hidden: () => viewer.destroy(), navbar: false, title: false, button: true, backdrop: true });
+        const image = new Image();
+        image.src = imgUrl; 
+        const viewer = new Viewer(image, {
+            hidden: () => viewer.destroy(),
+            navbar: false,
+            title: false,
+            button: true,
+            backdrop: true
+        });
         viewer.show();
     };
 
-    watch(chatOpen, (isOpen) => { if (isOpen) { unreadCount.value = 0; scrollToChatBottom(); } });
+    watch(chatOpen, (isOpen) => {
+        if (isOpen) {
+            unreadCount.value = 0;
+            scrollToChatBottom();
+        }
+    });
 
-    return { chatOpen, chatInput, unreadCount, chatScrollArea, chatMessages, sendChatMessage, handleChatImageUpload, previewChatImage };
+    return {
+        chatOpen,
+        chatInput,
+        unreadCount,
+        chatScrollArea,
+        chatMessages,
+        sendChatMessage,
+        handleChatImageUpload,
+        previewChatImage
+    };
 }
