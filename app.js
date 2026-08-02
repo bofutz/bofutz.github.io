@@ -1,13 +1,5 @@
 /**
  * 波幅探长 - 主业务逻辑脚本 (app.js)
- * 已修复：
- * 1. 日期解析函数严重错误（导致全站数据无法加载、Vue 无法正常工作）
- * 2. weekDays 数组被当字符串使用的多处逻辑错误
- * 3. 文件末尾残留的 EOF / 垃圾字符导致语法错误（Vue 无法 mount，模板原文显示）
- * 4. 社交弹窗相关变量已正确暴露
- * 5. 日线图标跟随最新有数据列、周线始终有图标、手机端证券风格、日期前缀等
- * 6. 未登录前三免费看图（index < 3 直接放行 + freeEtfCodes 兜底）
- * 7. 手机端恢复 +/- 符号，只去掉 %
  */
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
 
@@ -15,7 +7,7 @@ const API_BASE = "https://vip.hahagw.eu.org";
 const MAIL_API_BASE = "https://mail.hahagw2016.workers.dev";
 const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
-// 日期解析工具函数（严格过滤异常数据）
+// 日期解析工具函数
 const isValidDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return false;
     const match = dateStr.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
@@ -62,7 +54,6 @@ createApp({
             showDropdown.value = false;
         };
 
-        // 简化后的页面标题映射
         const pageTitle = computed(() => {
             const map = {
                 '#/': '数据看板',
@@ -299,8 +290,8 @@ createApp({
         };
 
         const getStatusVal = (str) => {
-            if (!str || typeof str !== 'string' || str === '-' || str === '--') return -9999;
-            const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
+            if (!str || str === '-' || str === '--') return -9999;
+            const match = String(str).match(/[-+]?[0-9]*\.?[0-9]+/);
             return match ? parseFloat(match[0]) : -9999;
         };
 
@@ -332,7 +323,7 @@ createApp({
             let firstDayOfWeek = firstDay.getDay();
             if (firstDayOfWeek === 0) firstDayOfWeek = 7;
             const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
-            return `第${['一', '二', '三', '四', '五', '六'][weekNum - 1] || weekNum}周`;
+            return `第${weekNum}周`;
         };
 
         const uniqueDatesSet = computed(() => {
@@ -384,6 +375,28 @@ createApp({
             return '';
         });
 
+        // 桌面端 Hover 悬浮显示月-日 (如 07-29)
+        const getHoverDailyDate = (mondayStr, idx) => {
+            if (!mondayStr) return '';
+            const days = getWeekDays(mondayStr);
+            if (!days[idx]) return '';
+            const m = parseMonth(days[idx]);
+            const d = parseDay(days[idx]);
+            return `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        };
+
+        // 桌面端 Hover 悬浮显示月-周 (如 07-5w)
+        const getHoverWeeklyDate = (mondayStr) => {
+            if (!mondayStr) return '';
+            const m = parseMonth(mondayStr);
+            const y = parseYear(mondayStr);
+            const d = parseDay(mondayStr);
+            const firstDay = new Date(y, m - 1, 1);
+            let firstDayOfWeek = firstDay.getDay() || 7;
+            const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
+            return `${String(m).padStart(2, '0')}-${weekNum}w`;
+        };
+
         const currentWeekHeaders = computed(() => {
             if (!selectedMonday.value) return [];
             const days = getWeekDays(selectedMonday.value);
@@ -391,107 +404,56 @@ createApp({
             return days.map(d => parseDay(d));
         });
 
-        const weekStatusHeader = computed(() => {
-            if (!selectedMonday.value) return '';
-            const weekDays = getWeekDays(selectedMonday.value);
-            if (weekDays.length < 5) return '';
-
-            const fridayDate = weekDays[4];
-            const y = parseYear(fridayDate);
-            const m = parseMonth(fridayDate);
-            const d = parseDay(fridayDate);
-            if (!y) return '';
-
-            const friday16 = new Date(y, m - 1, d, 16, 0, 0);
-            const isPastFriday16 = Date.now() >= friday16.getTime();
-
-            if (isPastFriday16) {
-                return `${parseDay(weekDays[0])}~${parseDay(weekDays[4])}日`;
-            } else {
-                const my = parseYear(weekDays[0]);
-                const mm = parseMonth(weekDays[0]);
-                const md = parseDay(weekDays[0]);
-                const currentMonday = new Date(my, mm - 1, md);
-                const prevMonday = new Date(currentMonday.getTime() - 7 * 24 * 60 * 60 * 1000);
-                const prevFriday = new Date(currentMonday.getTime() - 3 * 24 * 60 * 60 * 1000);
-                return `${prevMonday.getDate()}~${prevFriday.getDate()}日`;
-            }
+        const currentWeekShortName = computed(() => {
+            if (!selectedMonday.value) return '周线';
+            return getWeekNumberInMonth(selectedMonday.value);
         });
+
+        const formatMobileNumber = (val) => {
+            if (!val || val === '-' || val === '--') return '-';
+            return String(val).replace(/[+\-%]/g, '').trim();
+        };
+
+        const generateMobileWeekLabel = (mondayStr) => {
+            if (!mondayStr) return '';
+            const m = parseMonth(mondayStr);
+            const y = parseYear(mondayStr);
+            const d = parseDay(mondayStr);
+            const firstDay = new Date(y, m - 1, 1);
+            let firstDayOfWeek = firstDay.getDay() || 7;
+            const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
+            return `${m}M${weekNum}W`;
+        };
+
+        const currentMobileWeekLabel = computed(() => {
+            return generateMobileWeekLabel(selectedMonday.value);
+        });
+
+        const getMobileWeekLabel = (mondayStr) => {
+            return generateMobileWeekLabel(mondayStr);
+        };
+
+        const getPastWeekDay = (mondayStr, idx) => {
+            const days = getWeekDays(mondayStr);
+            return days[idx] ? parseDay(days[idx]) : '-';
+        };
+
+        const getPastWeekShortName = (mondayStr) => {
+            return getWeekNumberInMonth(mondayStr);
+        };
 
         const selectWeek = (mondayStr) => {
             selectedMonday.value = mondayStr;
             showDropdown.value = false;
         };
 
-        // 当前周「最新有数据的日线列」索引（所有行统一用这一列放日线图标）
-        const latestDailyColIndex = computed(() => {
-            if (!selectedMonday.value) return -1;
-            const weekDays = getWeekDays(selectedMonday.value);
-            if (weekDays.length < 5) return -1;
-
-            for (let i = 4; i >= 0; i--) {
-                const hasAny = allData.value.some(
-                    item => item.date === weekDays[i] && item.day_status && item.day_status !== '-' && item.day_status !== '--'
-                );
-                if (hasAny) return i;
-            }
-            return 4;
-        });
-
-        const isLatestDailyColumn = (idx, item) => {
-            return idx === latestDailyColIndex.value;
-        };
-
-        // 当前选中周的「第x周」标签（用于周线前缀）
-        const getCurrentWeekLabel = () => {
-            if (!selectedMonday.value) return '';
-            return getWeekNumberInMonth(selectedMonday.value);
-        };
-
-        // 手机端：保留 +/- 符号，只去掉 %
-        const formatMobileStatus = (status) => {
-            if (!status || status === '-' || status === '--') return '-';
-            // 提取带符号的数字，去掉后面的 %
-            const match = String(status).match(/([-+]?[0-9]*\.?[0-9]+)/);
-            if (!match) return '-';
-            return match[1];
-        };
-
-        // 手机端颜色：涨红跌绿
-        const getMobileStatusClass = (status) => {
-            if (!status || status === '-' || status === '--') return 'mobile-status-neutral';
-            if (String(status).includes('+')) return 'mobile-status-up';
-            return 'mobile-status-down';
-        };
-
-        // 手机端历史周标签：7M5W
-        const formatMobileWeekLabel = (mondayStr) => {
-            if (!mondayStr || !isValidDate(mondayStr)) return '';
-            const m = parseMonth(mondayStr);
-            const weekNumStr = getWeekNumberInMonth(mondayStr);
-            const numMatch = weekNumStr.match(/[一二三四五六]/);
-            const map = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
-            const n = numMatch ? (map[numMatch[0]] || 1) : 1;
-            return `${m}M${n}W`;
-        };
-
-        // 默认按最新周线绝对值（降序）排序，保证 TOP3 准确
         const sortedData = computed(() => {
             if (!selectedMonday.value) return [];
             const weekDays = getWeekDays(selectedMonday.value);
             if (weekDays.length < 5) return [];
 
-            const fridayDate = weekDays[4];
-            const y = parseYear(fridayDate);
-            const m = parseMonth(fridayDate);
-            const d = parseDay(fridayDate);
-            if (!y) return [];
-
-            const friday16 = new Date(y, m - 1, d, 16, 0, 0);
-            const now = new Date();
-            const isPastFriday16 = now.getTime() >= friday16.getTime();
-
             const etfMap = {};
+            let hasCurrentWeekData = false;
 
             allData.value.forEach(item => {
                 if (!item.date) return;
@@ -506,14 +468,18 @@ createApp({
                         };
                     }
                     etfMap[item.etf_code].days[idx] = item;
-
-                    if (isPastFriday16 && item.week_status && item.week_status !== '-' && item.week_status !== '--') {
+                    
+                    if (item.day_status && item.day_status !== '-' && item.day_status !== '--') {
+                        hasCurrentWeekData = true; 
+                    }
+                    if (item.week_status && item.week_status !== '-' && item.week_status !== '--') {
                         etfMap[item.etf_code].week_status = item.week_status;
+                        hasCurrentWeekData = true; 
                     }
                 }
             });
 
-            if (!isPastFriday16) {
+            if (!hasCurrentWeekData) {
                 const my = parseYear(weekDays[0]);
                 const mm = parseMonth(weekDays[0]);
                 const md = parseDay(weekDays[0]);
@@ -555,37 +521,22 @@ createApp({
                     d => d && d.day_status && d.day_status !== '-' && d.day_status !== '--'
                 );
                 const hasWeek = item.week_status && item.week_status !== '-' && item.week_status !== '--';
-                return hasDay || hasWeek || (chartsMap.value && chartsMap.value.hasOwnProperty(item.etf_code));
+                return hasDay || hasWeek || chartsMap.value.hasOwnProperty(item.etf_code);
             });
-
-            // 补全只有图表、当前周完全没数据的标的
-            if (chartsMap.value && typeof chartsMap.value === 'object') {
-                Object.keys(chartsMap.value).forEach(code => {
-                    if (!etfMap[code]) {
-                        const etfItem = allData.value.find(i => i.etf_code === code);
-                        validItems.push({
-                            etf_code: code,
-                            etf_name: etfItem ? etfItem.etf_name : code,
-                            days: [null, null, null, null, null],
-                            week_status: null
-                        });
-                    }
-                });
-            }
 
             if (searchQuery.value) {
                 const q = searchQuery.value.toLowerCase().trim();
                 validItems = validItems.filter(
                     item =>
-                        (item.etf_name && item.etf_name.toLowerCase().includes(q)) ||
-                        (item.etf_code && item.etf_code.toLowerCase().includes(q))
+                        item.etf_name.toLowerCase().includes(q) ||
+                        item.etf_code.toLowerCase().includes(q)
                 );
             }
 
             validItems.sort((a, b) => {
                 if (sortColumn.value) {
                     if (sortColumn.value === 'etf_name') {
-                        const cmp = (a.etf_name || '').localeCompare(b.etf_name || '', 'zh-CN');
+                        const cmp = a.etf_name.localeCompare(b.etf_name, 'zh-CN');
                         return sortOrder.value === 'asc' ? cmp : -cmp;
                     } else if (sortColumn.value.startsWith('d')) {
                         const idx = parseInt(sortColumn.value.substring(1), 10);
@@ -602,7 +553,6 @@ createApp({
                         return sortOrder.value === 'desc' ? valB - valA : valA - valB;
                     }
                 } else {
-                    // 默认：最新周线绝对值由大到小
                     const valWkA =
                         a.week_status && a.week_status !== '-' && a.week_status !== '--'
                             ? Math.abs(getStatusVal(a.week_status))
@@ -618,7 +568,6 @@ createApp({
                         if (valWkB !== -9999) return 1;
                     }
 
-                    // 兜底：按最新单日绝对值降序
                     let latestIdx = 4;
                     while (latestIdx >= 0) {
                         const hasData = validItems.some(
@@ -646,6 +595,21 @@ createApp({
             });
 
             return validItems;
+        });
+
+        const latestDailyIndex = computed(() => {
+            if (!selectedMonday.value || sortedData.value.length === 0) return 0;
+            let maxIdx = 0;
+            for (const item of sortedData.value) {
+                for (let i = 4; i >= 0; i--) {
+                    if (item.days[i] && item.days[i].day_status && item.days[i].day_status !== '-' && item.days[i].day_status !== '--') {
+                        if (i > maxIdx) maxIdx = i;
+                        break; 
+                    }
+                }
+                if (maxIdx === 4) break; 
+            }
+            return maxIdx;
         });
 
         const toggleRow = (item) => {
@@ -698,16 +662,9 @@ createApp({
 
         const fetchChartsMap = async () => {
             try {
-                // 未登录也尝试拉取（如果后端允许公开）
-                const token = localStorage.getItem('etf_token');
-                const headers = { 'Content-Type': 'application/json' };
-                if (token) headers['Authorization'] = `Bearer ${token}`;
-                const res = await fetch(`${API_BASE}/api/etfs`, { headers });
-                if (res.ok) {
-                    const data = await res.json();
-                    chartsMap.value = data.charts || {};
-                    if (isLoggedIn.value) isVip.value = !!data.is_vip;
-                }
+                const data = await apiFetch('/api/etfs');
+                chartsMap.value = data.charts || {};
+                if (isLoggedIn.value) isVip.value = data.is_vip;
             } catch (e) {}
         };
 
@@ -727,6 +684,10 @@ createApp({
                             availablePeriods.value[0].weeks.length > 0
                         ) {
                             selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
+                            
+                            freeEtfCodes.value = sortedData.value
+                                .slice(0, 3)
+                                .map(item => item.etf_code);
                         }
                     }
                 }
@@ -738,20 +699,16 @@ createApp({
         };
 
         let currentViewer = null;
+        
         const openChart = (etfCode, type, index, isHistorical = false) => {
-            // 关键修复：index < 3 直接放行（sortedData 已按周线绝对值降序，前三就是最新免费）
-            // 同时保留 freeEtfCodes 兜底 + VIP
             if (isLoggedIn.value && isVip.value) {
                 showViewer(etfCode, type);
                 return;
             }
 
-            if (typeof index === 'number' && index < 3) {
-                showViewer(etfCode, type);
-                return;
-            }
-
-            if (freeEtfCodes.value.includes(etfCode)) {
+            // 修复 Bug：双重物理拦截。
+            // 只要你是当前周列表里的前三行 (index < 3)，直接无条件放行，同时兼顾免签数组！
+            if ((!isHistorical && index < 3) || freeEtfCodes.value.includes(etfCode)) {
                 showViewer(etfCode, type);
                 return;
             }
@@ -819,7 +776,7 @@ createApp({
 
         const getColorClass = (status) => {
             if (!status || status === '-' || status === '--') return 'text-slate-300';
-            return status.includes('+') ? 'text-red-500' : 'text-emerald-500';
+            return String(status).includes('+') ? 'text-red-500' : 'text-emerald-500';
         };
 
         const selectedOrder = ref(null);
@@ -962,10 +919,8 @@ createApp({
             }
         };
 
-        // 在线客服挂件
         const chatModule = typeof useChatModule === 'function' ? useChatModule(Vue) : {};
 
-        // 社交 Modal 状态
         const socialModalVisible = ref(false);
         const currentSocialPlatform = ref('');
         const openSocialModal = (platform) => {
@@ -977,13 +932,6 @@ createApp({
             selectedOrder.value = null;
             searchQuery.value = '';
             if (newRoute === '#/profile') fetchOrders();
-        });
-
-        // 当排序数据变化时，实时更新免费前三
-        watch(sortedData, (newVal) => {
-            if (newVal && newVal.length > 0) {
-                freeEtfCodes.value = newVal.slice(0, 3).map(item => item.etf_code);
-            }
         });
 
         onMounted(() => {
@@ -1034,10 +982,18 @@ createApp({
             sortOrder,
             handleSort,
             currentWeekHeaders,
-            weekStatusHeader,
+            currentWeekShortName,
             expandedRowKey,
             toggleRow,
             getPastWeeks,
+            latestDailyIndex,
+            getHoverDailyDate,
+            getHoverWeeklyDate,
+            formatMobileNumber,
+            currentMobileWeekLabel,
+            getMobileWeekLabel,
+            getPastWeekDay,
+            getPastWeekShortName,
             parseDay,
             parseMonth,
             parseYear,
@@ -1061,12 +1017,6 @@ createApp({
             pwdLoading,
             submitPasswordChange,
             freeEtfCodes,
-            // 新增辅助函数
-            isLatestDailyColumn,
-            getCurrentWeekLabel,
-            formatMobileStatus,
-            getMobileStatusClass,
-            formatMobileWeekLabel,
             ...chatModule,
             socialModalVisible,
             currentSocialPlatform,
