@@ -4,11 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>波幅监控系统 - 波幅探长</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         [v-cloak] { display: none; }
         body { -webkit-tap-highlight-color: transparent; background-color: #f4f6f8; }
@@ -26,20 +30,36 @@
         .nav-item.active i { color: #4da6a0; }
         .modal-overlay { background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); }
         .etf-name-column { width: 130px; min-width: 130px; max-width: 130px; }
+        
+        .chat-fab {
+            box-shadow: 0 4px 14px rgba(77, 166, 160, 0.4);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .chat-fab:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(77, 166, 160, 0.5); }
+        .chat-window { box-shadow: 0 10px 30px rgba(0,0,0,0.15); transition: all 0.3s ease; }
+        .message-bubble-user { background-color: #4da6a0; color: #ffffff; border-bottom-right-radius: 2px; }
+        .message-bubble-bot { background-color: #f1f5f9; color: #1e293b; border-bottom-left-radius: 2px; }
+
+        .mobile-status-up { color: #ef4444 !important; font-weight: 700; }
+        .mobile-status-down { color: #10b981 !important; font-weight: 700; }
+        .mobile-status-neutral { color: #94a3b8 !important; }
+
+        [title] { cursor: default; }
     </style>
 </head>
 <body class="text-slate-700 font-sans h-screen overflow-hidden flex">
 
     <div id="app" v-cloak class="flex w-full h-full" @click="closeDropdowns">
 
-        <!-- ================= 主体内容 ================= -->
         <div class="flex-1 flex flex-col h-full overflow-hidden relative">
             
             <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
                     <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2 transition"><i class="fa-solid fa-bars text-xl"></i></button>
-                    <!-- 主页跳转链接 -->
-                    <a href="https://gpkx.github.io/#/" class="text-lg font-bold theme-text tracking-wide hidden sm:block mr-2 cursor-pointer hover:opacity-80 transition">波幅探长</a>
+                    <a @click.prevent="navigate('#/')" href="#/" class="flex items-center gap-2 cursor-pointer hover:opacity-85 transition">
+                        <img src="logo.png" alt="Logo" class="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-100" onerror="this.style.display='none'">
+                        <span class="text-lg font-bold theme-text tracking-wide hidden sm:block">波幅探长</span>
+                    </a>
                     <span class="text-sm font-semibold text-slate-500 border-l border-slate-200 pl-3 hidden sm:block">{{ pageTitle }}</span>
                     <span class="text-sm font-semibold text-slate-700 sm:hidden">{{ pageTitle }}</span>
                 </div>
@@ -63,1024 +83,540 @@
                 </div>
             </header>
 
-            <main class="flex-1 overflow-auto custom-scrollbar p-3 sm:p-6 relative">
+            <main class="flex-1 overflow-auto custom-scrollbar p-3 sm:p-6 relative flex flex-col justify-between">
                 
-                <!-- ====== 页面 0: 数据看板 ====== -->
-                <div v-show="currentRoute === '#/'" class="max-w-7xl mx-auto">
-                    <div class="flex flex-col sm:flex-row gap-3 mb-4">
-                        <div class="flex-1 bg-white rounded shadow-sm border border-slate-100 relative">
-                            <button @click.stop="showDropdown = !showDropdown" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50">
-                                <span><i class="fa-regular fa-calendar mr-2 text-slate-400"></i>{{ currentPeriodLabel || '历史数据加载中...' }}</span>
-                                <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
-                            </button>
-                            <div v-if="showDropdown" @click.stop class="absolute left-0 mt-1 bg-white border border-slate-200 rounded shadow-lg z-50 p-4 w-full sm:w-80">
-                                <div class="max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
-                                    <template v-if="availablePeriods.length > 0">
-                                        <div v-for="month in availablePeriods" :key="month.monthKey" class="mb-3 last:mb-0">
-                                            <div class="text-xs font-bold text-slate-400 mb-2 border-b pb-1">{{ month.monthLabel }}</div>
-                                            <div class="flex flex-wrap gap-2">
-                                                <button v-for="week in month.weeks" :key="week.monday"
-                                                    @click="selectWeek(week.monday)"
-                                                    class="px-2 py-1 text-xs rounded border transition-all"
-                                                    :class="selectedMonday === week.monday ? 'theme-bg text-white border-transparent' : 'bg-slate-50 text-slate-600 border-slate-200 hover:theme-border hover:theme-text'">
-                                                    {{ week.weekLabel }}
-                                                </button>
+                <div class="flex-1">
+                    <!-- ====== 数据看板 ====== -->
+                    <div v-show="currentRoute === '#/'" class="max-w-7xl mx-auto">
+                        <div class="flex flex-col sm:flex-row gap-3 mb-4">
+                            <div class="flex-1 bg-white rounded shadow-sm border border-slate-100 relative">
+                                <button @click.stop="showDropdown = !showDropdown" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50">
+                                    <span><i class="fa-regular fa-calendar mr-2 text-slate-400"></i>{{ currentPeriodLabel || '历史数据加载中...' }}</span>
+                                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
+                                </button>
+                                <div v-if="showDropdown" @click.stop class="absolute left-0 mt-1 bg-white border border-slate-200 rounded shadow-lg z-50 p-4 w-full sm:w-80">
+                                    <div class="max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
+                                        <template v-if="availablePeriods.length > 0">
+                                            <div v-for="month in availablePeriods" :key="month.monthKey" class="mb-3 last:mb-0">
+                                                <div class="text-xs font-bold text-slate-400 mb-2 border-b pb-1">{{ month.monthLabel }}</div>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <button v-for="week in month.weeks" :key="week.monday"
+                                                        @click="selectWeek(week.monday)"
+                                                        class="px-2 py-1 text-xs rounded border transition-all"
+                                                        :class="selectedMonday === week.monday ? 'theme-bg text-white border-transparent' : 'bg-slate-50 text-slate-600 border-slate-200 hover:theme-border hover:theme-text'">
+                                                        {{ week.weekLabel }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded shadow-sm border border-slate-100 flex items-center sm:w-64">
+                                <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3"></i>
+                                <input v-model="searchQuery" type="search" autocomplete="new-password" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
+                            </div>
+                        </div>
+
+                        <div v-if="loading" class="text-center py-12 text-slate-400"><i class="fa-solid fa-spinner animate-spin text-2xl"></i><p class="mt-2 text-sm">读取云端数据中...</p></div>
+                        <div v-else-if="sortedData.length === 0" class="text-center py-12 text-slate-400">
+                            <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-50"></i><p>该周期暂无相关数据</p>
+                        </div>
+                        <div v-else>
+                            <!-- PC端表格 -->
+                            <div class="hidden sm:block bg-white rounded shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
+                                        <thead class="bg-slate-50 border-b border-slate-100 sticky top-0 z-30">
+                                            <tr class="text-xs text-slate-600 font-bold select-none">
+                                                <th class="py-3 px-4 text-left cursor-pointer hover:bg-slate-100 transition sticky left-0 bg-slate-50 z-40 etf-name-column" @click="handleSort('etf_name')">
+                                                    标的名称 <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'etf_name'}"></i>
+                                                </th>
+                                                <th v-for="idx in 5" :key="idx" class="py-3 px-2 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('d'+(idx-1))">
+                                                    周{{ ['一','二','三','四','五'][idx-1] }}
+                                                    <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'd'+(idx-1)}"></i>
+                                                </th>
+                                                <th class="py-3 px-4 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('week_status')">
+                                                    周线
+                                                    <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'week_status'}"></i>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-50 text-sm">
+                                            <template v-for="(item, index) in sortedData" :key="item.etf_code">
+                                                <tr class="hover:bg-[#4da6a0]/5 transition-colors group cursor-pointer" @click="toggleRow(item)">
+                                                    <td class="p-3 text-left relative sticky left-0 bg-white group-hover:bg-[#f6faf9] z-10 etf-name-column shadow-[1px_0_0_0_#f1f5f9]">
+                                                        <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute left-0 top-0 bottom-0 w-1 theme-bg"></div>
+                                                        <div class="flex items-center justify-between">
+                                                            <div class="flex flex-col">
+                                                                <div class="font-bold text-slate-800 flex items-center group-hover:theme-text transition-colors">
+                                                                    {{ item.etf_name }}
+                                                                    <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded ml-1 font-normal leading-none h-max">免费</span>
+                                                                </div>
+                                                                <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
+                                                            </div>
+                                                            <i class="fa-solid text-[10px] text-slate-300 transition-transform duration-200 ml-1" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
+                                                        </div>
+                                                    </td>
+                                                    <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
+                                                        <div class="flex items-center justify-center gap-1">
+                                                            <span v-if="item.days[idx-1]?.day_status && item.days[idx-1].day_status !== '-' && item.days[idx-1].day_status !== '--'"
+                                                                  :title="getDayTooltip(item.days[idx-1].date)">
+                                                                {{ item.days[idx-1].day_status }}
+                                                            </span>
+                                                            <span v-else>-</span>
+                                                            <i v-if="isLatestDailyColumn(idx-1, item)" 
+                                                               class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" 
+                                                               :title="getDayTooltip(getWeekDays(selectedMonday)[idx-1])"
+                                                               @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
+                                                        </div>
+                                                    </td>
+                                                    <td class="p-3">
+                                                        <div class="flex items-center justify-center gap-1 font-medium" :class="getColorClass(item.week_status)">
+                                                            <span v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'"
+                                                                  :title="getWeekTooltip(selectedMonday)">
+                                                                {{ item.week_status }}
+                                                            </span>
+                                                            <span v-else>-</span>
+                                                            <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" 
+                                                               :title="getWeekTooltip(selectedMonday)"
+                                                               @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                
+                                                <template v-if="expandedRowKey === item.etf_code">
+                                                    <tr v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50/80 border-b border-dashed border-slate-100" @click.stop>
+                                                        <td class="p-3 text-left sticky left-0 bg-slate-50/80 z-10 etf-name-column shadow-[1px_0_0_0_#f1f5f9]"></td>
+                                                        <td v-for="idx in 5" :key="idx" class="p-3 text-xs" :class="getColorClass(week.days[idx-1]?.day_status)">
+                                                            <span v-if="week.days[idx-1]?.day_status && week.days[idx-1].day_status !== '-' && week.days[idx-1].day_status !== '--'"
+                                                                  :title="getDayTooltip(week.days[idx-1].date)">
+                                                                {{ week.days[idx-1].day_status }}
+                                                            </span>
+                                                            <span v-else>-</span>
+                                                        </td>
+                                                        <td class="p-3 text-xs">
+                                                            <div class="flex items-center justify-center gap-1" :class="getColorClass(week.week_status)">
+                                                                <span v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'"
+                                                                      :title="getWeekTooltip(week.monday)">
+                                                                    {{ week.week_status }}
+                                                                </span>
+                                                                <span v-else>-</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- 移动端列表（最终优化版） -->
+                            <div class="sm:hidden space-y-1.5">
+                                <div v-for="(item, index) in sortedData" :key="item.etf_code" class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden">
+                                    <!-- 标题行：代码在前（大号纯黑）+ 名称在后 -->
+                                    <div class="px-3 py-2 flex items-center justify-between border-b border-slate-50" @click="toggleRow(item)">
+                                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                                            <div class="min-w-0 flex items-center gap-1.5">
+                                                <span class="text-[15px] font-bold text-black font-mono shrink-0">{{ item.etf_code }}</span>
+                                                <span class="text-[14px] font-medium text-slate-800 truncate">{{ item.etf_name }}</span>
+                                                <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 font-medium">免费</span>
                                             </div>
                                         </div>
-                                    </template>
+                                        <i class="fa-solid text-[11px] text-slate-400 transition-transform duration-200 shrink-0 ml-2" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
+                                    </div>
+
+                                    <!-- 当前周数据：周几在最上，日期在上，数据在下 -->
+                                    <div class="px-1.5 py-1.5 grid grid-cols-6 gap-0 text-center">
+                                        <div v-for="idx in 5" :key="idx" class="flex flex-col items-center justify-center py-1">
+                                            <span class="text-[11px] text-black font-medium leading-none mb-0.5">周{{ ['一','二','三','四','五'][idx-1] }}</span>
+                                            <span v-if="item.days[idx-1]?.date" class="text-[10px] text-black leading-none">
+                                                {{ getMobileDayDate(item.days[idx-1].date) }}
+                                            </span>
+                                            <div class="flex items-center gap-0.5 mt-0.5">
+                                                <span class="text-[13px] font-bold leading-none tracking-tight" :class="getMobileStatusClass(item.days[idx-1]?.day_status)">
+                                                    {{ formatMobileStatus(item.days[idx-1]?.day_status) }}
+                                                </span>
+                                                <i v-if="isLatestDailyColumn(idx-1, item)" 
+                                                   class="fa-regular fa-image text-slate-400 hover:text-blue-500 transition cursor-pointer text-[10px]" 
+                                                   @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-col items-center justify-center py-1 bg-[#4da6a0]/10 rounded-md">
+                                            <span class="text-[11px] text-black font-bold leading-none mb-0.5">周线</span>
+                                            <span class="text-[10px] text-black leading-none">
+                                                {{ getMobileWeekDate(selectedMonday) }}
+                                            </span>
+                                            <div class="flex items-center gap-0.5 mt-0.5">
+                                                <span class="text-[13px] font-bold leading-none tracking-tight" :class="getMobileStatusClass(item.week_status)">
+                                                    {{ formatMobileStatus(item.week_status) }}
+                                                </span>
+                                                <i class="fa-regular fa-image text-slate-400 hover:text-blue-500 transition cursor-pointer text-[10px]" 
+                                                   @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 展开历史周：只保留顶部周几，日期在上数据在下 -->
+                                    <div v-if="expandedRowKey === item.etf_code" class="border-t border-slate-100 bg-white">
+                                        <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="px-2.5 py-2 border-b border-slate-50 last:border-0">
+                                            <div class="grid grid-cols-6 gap-0 text-center">
+                                                <div v-for="idx in 5" :key="idx" class="flex flex-col items-center justify-center py-0.5">
+                                                    <span v-if="week.days[idx-1]?.date" class="text-[10px] text-black leading-none">
+                                                        {{ getMobileDayDate(week.days[idx-1].date) }}
+                                                    </span>
+                                                    <span class="text-[13px] font-bold leading-none mt-0.5 tracking-tight" :class="getMobileStatusClass(week.days[idx-1]?.day_status)">
+                                                        {{ formatMobileStatus(week.days[idx-1]?.day_status) }}
+                                                    </span>
+                                                </div>
+                                                <div class="flex flex-col items-center justify-center py-0.5">
+                                                    <span class="text-[10px] text-black leading-none">
+                                                        {{ getMobileWeekDate(week.monday) }}
+                                                    </span>
+                                                    <span class="text-[13px] font-bold leading-none mt-0.5 tracking-tight" :class="getMobileStatusClass(week.week_status)">
+                                                        {{ formatMobileStatus(week.week_status) }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="bg-white rounded shadow-sm border border-slate-100 flex items-center sm:w-64">
-                            <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3"></i>
-                            <input v-model="searchQuery" type="search" autocomplete="new-password" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
-                        </div>
                     </div>
 
-                    <div v-if="loading" class="text-center py-12 text-slate-400"><i class="fa-solid fa-spinner animate-spin text-2xl"></i><p class="mt-2 text-sm">读取云端数据中...</p></div>
-                    <div v-else-if="sortedData.length === 0" class="text-center py-12 text-slate-400">
-                        <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-50"></i><p>该周期暂无相关数据</p>
-                    </div>
-                    <div v-else>
-                        <!-- PC端表格 -->
-                        <div class="hidden sm:block bg-white rounded shadow-sm border border-slate-100 overflow-hidden">
+                    <!-- ====== 个人中心 ====== -->
+                    <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                            <div class="flex items-center justify-between mb-6">
+                                <div>
+                                    <div class="text-sm text-slate-500 mb-1">会员身份</div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl font-bold" :class="isVip ? 'theme-text' : 'text-slate-400'">{{ isVip ? 'VIP会员' : '免费用户' }}</span>
+                                        <span v-if="isVip" class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded border border-emerald-100">剩余 {{ vipDaysLeft }} 天</span>
+                                    </div>
+                                </div>
+                                <button @click="navigate('#/plan')" class="theme-bg text-white px-8 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 shadow-sm transition">
+                                    {{ isVip ? '立即续费' : '开通会员' }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <span class="font-medium text-slate-700">我的订单</span>
+                            </div>
                             <div class="overflow-x-auto custom-scrollbar">
-                                <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
-                                    <thead class="bg-slate-50 border-b border-slate-100 sticky top-0 z-30">
-                                        <tr class="text-xs text-slate-600 font-bold select-none">
-                                            <th class="py-3 px-4 text-left cursor-pointer hover:bg-slate-100 transition sticky left-0 bg-slate-50 z-40 etf-name-column" @click="handleSort('etf_name')">
-                                                标的名称 <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'etf_name'}"></i>
-                                            </th>
-                                            <th v-for="idx in 5" :key="idx" class="py-3 px-2 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('d'+(idx-1))">
-                                                周{{ ['一','二','三','四','五'][idx-1] }}({{ currentWeekHeaders[idx-1] || '-' }}日) 
-                                                <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'd'+(idx-1)}"></i>
-                                            </th>
-                                            <th class="py-3 px-4 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('week_status')">
-                                                周线 <span v-if="weekStatusHeader" class="text-[10px] font-normal">({{ weekStatusHeader }})</span> 
-                                                <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'week_status'}"></i>
-                                            </th>
+                                <table class="w-full text-left text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                        <tr>
+                                            <th class="py-4 px-6 font-medium"># 订单号(后6位)</th>
+                                            <th class="py-4 px-6 font-medium">购买套餐</th>
+                                            <th class="py-4 px-6 font-medium">订单金额</th>
+                                            <th class="py-4 px-6 font-medium">订单状态</th>
+                                            <th class="py-4 px-6 font-medium">创建时间</th>
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y divide-slate-50 text-sm">
-                                        <template v-for="(item, index) in sortedData" :key="item.etf_code">
-                                            <tr class="hover:bg-[#4da6a0]/5 transition-colors group cursor-pointer" @click="toggleRow(item)">
-                                                <td class="p-3 text-left relative sticky left-0 bg-white group-hover:bg-[#f6faf9] z-10 etf-name-column shadow-[1px_0_0_0_#f1f5f9]">
-                                                    <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute left-0 top-0 bottom-0 w-1 theme-bg"></div>
-                                                    <div class="flex items-center justify-between">
-                                                        <div class="flex flex-col">
-                                                            <div class="font-bold text-slate-800 flex items-center group-hover:theme-text transition-colors">
-                                                                <i class="fa-regular fa-image text-[11px] text-slate-300 hover:text-blue-500 transition mr-1.5 py-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
-                                                                {{ item.etf_name }}
-                                                                <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded ml-1 font-normal leading-none h-max">免费</span>
-                                                            </div>
-                                                            <div class="text-[11px] text-slate-400 font-mono ml-4">{{ item.etf_code }}</div>
-                                                        </div>
-                                                        <i class="fa-solid text-[10px] text-slate-300 transition-transform duration-200 ml-1" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
-                                                    </div>
-                                                </td>
-                                                <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
-                                                    {{ item.days[idx-1]?.day_status || '-' }}
-                                                </td>
-                                                <td class="p-3">
-                                                    <div class="flex items-center justify-center gap-1 font-medium" :class="getColorClass(item.week_status)">
-                                                        {{ item.week_status || '-' }}
-                                                        <i v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            
-                                            <template v-if="expandedRowKey === item.etf_code">
-                                                <tr v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50/80 border-b border-dashed border-slate-100" @click.stop>
-                                                    <td class="p-3 font-medium text-slate-500 text-center sticky left-0 bg-slate-50/95 shadow-[1px_0_0_0_#f1f5f9] z-10 text-[13px]">
-                                                        {{ week.weekLabel }}
-                                                    </td>
-                                                    <td v-for="(day, idx) in week.days" :key="'past-td-'+idx" class="p-2 text-center align-middle">
-                                                        <div v-if="day && day.day_status" class="inline-flex items-center justify-center font-medium text-[13px] whitespace-nowrap">
-                                                            <span class="text-[11px] text-slate-400 mr-1">{{ day.date ? parseInt(day.date.split('-')[2], 10) : '-' }}日:</span>
-                                                            <span :class="getColorClass(day.day_status)">{{ day.day_status }}</span>
-                                                        </div>
-                                                        <span v-else class="text-slate-300">-</span>
-                                                    </td>
-                                                    <td class="p-3 text-center font-medium text-[13px]">
-                                                        <div v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="inline-flex items-center justify-center whitespace-nowrap">
-                                                            <span class="text-[11px] text-slate-400 mr-1">({{ week.monday ? parseInt(week.monday.split('-')[2], 10) : '-' }}~{{ week.fridayDate ? parseInt(week.fridayDate.split('-')[2], 10) : '-' }}日)</span>
-                                                            <span :class="getColorClass(week.week_status)">{{ week.week_status }}</span>
-                                                            <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px] ml-1.5" @click.stop="openChart(item.etf_code, 'weekly', index, true)"></i>
-                                                        </div>
-                                                        <span v-else class="text-slate-300">-</span>
-                                                    </td>
-                                                </tr>
-                                            </template>
-                                        </template>
+                                    <tbody class="divide-y divide-slate-50 text-slate-600">
+                                        <tr v-for="order in orderList" :key="order.id" class="hover:bg-slate-50 transition-colors">
+                                            <td class="py-4 px-6 font-mono text-slate-500">{{ order.tx_id_last6 || order.id }}</td>
+                                            <td class="py-4 px-6"><span class="bg-slate-100 px-2 py-1 rounded text-xs">{{ getPlanName(order.plan_id) }}</span></td>
+                                            <td class="py-4 px-6">¥ {{ order.amount }}</td>
+                                            <td class="py-4 px-6">
+                                                <span :class="order.status === 'approved' ? 'text-emerald-500' : (order.status === 'cancelled' ? 'text-slate-400' : 'text-orange-500')">
+                                                    <i class="fa-solid fa-circle text-[8px] mr-1"></i>{{ formatStatus(order.status) }}
+                                                </span>
+                                            </td>
+                                            <td class="py-4 px-6 text-slate-400">{{ formatDateExact(order.created_at) }}</td>
+                                        </tr>
+                                        <tr v-if="orderList.length === 0">
+                                            <td colspan="5" class="py-12 text-center text-slate-400">
+                                                <p v-if="!isLoggedIn">请先登录查看订单</p>
+                                                <p v-else>暂无订单记录</p>
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
 
-                        <!-- 手机端卡片 -->
-                        <div class="sm:hidden flex flex-col gap-3">
-                            <template v-for="(item, index) in sortedData" :key="'m-'+item.etf_code">
-                                <div class="bg-white rounded shadow-sm border border-slate-100 p-4 relative overflow-hidden transition-colors cursor-pointer" @click="toggleRow(item)">
-                                    <div v-if="freeEtfCodes.includes(item.etf_code)" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl shadow-sm">免费</div>
-                                    <div class="flex justify-between items-center mb-3">
-                                        <div class="flex flex-col">
-                                            <div class="font-bold text-slate-800 text-[15px] flex items-center gap-1.5">
-                                                <i class="fa-regular fa-image text-slate-300 active:text-blue-500 py-2 px-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
-                                                {{ item.etf_name }}
-                                                <i class="fa-solid text-[10px] text-slate-300 transition-transform ml-1" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
-                                            </div>
-                                            <div class="text-xs text-slate-400 font-mono ml-7 -mt-1">{{ item.etf_code }}</div>
-                                        </div>
-                                        <div class="text-right">
-                                            <div class="text-[10px] text-slate-400 mb-0.5 flex justify-end items-center gap-1">
-                                                周线状态 
-                                                <i v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'" class="fa-regular fa-image text-slate-300 active:text-blue-500 p-1" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
-                                            </div>
-                                            <div class="font-bold text-sm" :class="getColorClass(item.week_status)">{{ item.week_status || '--' }}</div>
-                                        </div>
-                                    </div>
-                                    <div class="flex justify-between bg-slate-50 rounded p-2">
-                                        <div v-for="idx in 5" :key="'md-'+idx" class="flex flex-col items-center">
-                                            <span class="text-[10px] text-slate-400 whitespace-nowrap">周{{ ['一','二','三','四','五'][idx-1] }}</span>
-                                            <span class="text-[10px] text-slate-400 scale-90">{{ currentWeekHeaders[idx-1] || '-' }}日</span>
-                                            <span class="text-xs font-semibold mt-0.5" :class="getColorClass(item.days[idx-1]?.day_status)">{{ item.days[idx-1]?.day_status || '-' }}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- 手机端展开历史 -->
-                                    <div v-if="expandedRowKey === item.etf_code" class="mt-3 pt-3 border-t border-slate-100 space-y-2" @click.stop>
-                                        <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50 p-2 rounded text-xs flex justify-between items-center">
-                                            <div class="text-slate-500 font-medium">{{ week.weekLabel }}</div>
-                                            <div class="flex items-center gap-1">
-                                                <span :class="getColorClass(week.week_status)">{{ week.week_status || '-' }}</span>
-                                                <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="fa-regular fa-image text-slate-300 active:text-blue-500 p-1" @click.stop="openChart(item.etf_code, 'weekly', index, true)"></i>
-                                            </div>
-                                        </div>
-                                        <div v-if="getPastWeeks(item.etf_code).length === 0" class="text-center text-xs text-slate-400 py-2">暂无历史周数据</div>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ====== 页面 1: 购买套餐 (Plan) ====== -->
-                <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
-                    <h2 class="text-xl font-normal text-slate-700 mb-6">选择最适合您的 VIP 监控计划</h2>
-                    
-                    <div v-if="vipPlans.length === 0" class="text-center py-12 text-slate-400">加载套餐配置中...</div>
-                    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                        <div v-for="plan in vipPlans" :key="plan.id" @click="selectTopUpPlan(plan)" class="bg-white rounded shadow-sm overflow-hidden flex flex-col cursor-pointer transition-all border-2 relative" :class="topUpForm.planId === plan.id ? 'theme-border ring-1 ring-[#4da6a0]/30' : 'border-transparent hover:border-slate-200'">
-                            <div v-if="plan.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl shadow-sm">{{ plan.tag }}</div>
-                            <div class="p-6 border-b border-slate-50 bg-slate-50/50">
-                                <div class="text-slate-500 text-sm mb-4">{{ plan.name }}</div>
-                                <div class="flex items-end mb-1"><span class="text-3xl font-light text-slate-800">¥ {{ plan.price }}</span></div>
-                                <div class="text-slate-400 text-xs">有效期 {{ plan.days }} 个自然日</div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="font-medium text-slate-700">专属邀请码及奖励</span>
                             </div>
-                            <div class="p-5 flex-1 flex flex-col">
-                                <ul class="text-xs text-slate-600 space-y-3 mb-4">
-                                    <li class="flex items-center"><i class="fa-solid fa-check text-[#4da6a0] mr-2"></i> 无限制解锁高清图表</li>
-                                    <li class="flex items-center"><i class="fa-solid fa-check text-[#4da6a0] mr-2"></i> 多周期历史快照对比</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white rounded shadow-sm p-6 max-w-2xl mx-auto border border-slate-100">
-                        <div class="text-center mb-6">
-                            <h3 class="text-lg font-medium text-slate-700 mb-2">扫码完成支付</h3>
-                            <p class="text-sm text-slate-500">扫码支付 <span class="font-bold text-red-500 text-lg">¥{{ topUpForm.amount }}</span></p>
-                        </div>
-                        <div class="flex flex-col items-center mb-6">
-                            <div class="w-48 h-48 bg-slate-100 rounded-lg p-2 border border-slate-200 mb-3">
-                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=wxp://f2f0-kIs2bORtc-afpDrigMOnYKVB0HL39jY8zyFUXEB8v2fvB_AtyT148TX2OQpDoby" class="w-full h-full object-cover rounded">
-                            </div>
-                            <p class="text-xs text-red-400 font-medium"><i class="fa-solid fa-circle-exclamation"></i> 支付成功后，请准确填写下方订单号 (后6位)</p>
-                        </div>
-                        <div class="max-w-xs mx-auto">
-                            <!-- 已移除不稳定的 oninput，改为原生校验 -->
-                            <input v-model="topUpForm.txId" type="text" maxlength="6" class="w-full px-4 py-2 border border-slate-300 rounded focus:outline-none focus:theme-border text-center tracking-widest font-mono mb-4" placeholder="必须填写6位纯数字">
-                            <div v-if="orderMessage" class="text-xs px-3 py-2 rounded text-center mb-4 font-medium" :class="orderMessage.includes('成功') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'">{{ orderMessage }}</div>
-                            <button @click="submitOrder" :disabled="orderLoading || topUpForm.txId.length !== 6" class="w-full py-2.5 theme-bg text-white rounded font-medium transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center">
-                                <i v-if="orderLoading" class="fa-solid fa-spinner animate-spin mr-2"></i> 提交审核，自动开通
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ====== 页面 2: 我的订单 ====== -->
-                <div v-show="currentRoute === '#/order'" class="max-w-6xl mx-auto">
-                    <div v-if="!selectedOrder" class="bg-white shadow-sm rounded overflow-hidden">
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left text-sm whitespace-nowrap">
-                                <thead class="bg-slate-50 text-slate-500 border-b border-slate-100">
-                                    <tr><th class="py-4 px-6 font-medium"># 订单号(后6位)</th><th class="py-4 px-6 font-medium">购买套餐</th><th class="py-4 px-6 font-medium">订单金额</th><th class="py-4 px-6 font-medium">订单状态</th><th class="py-4 px-6 font-medium">创建时间</th><th class="py-4 px-6 font-medium text-right">操作</th></tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-50 text-slate-600">
-                                    <tr v-for="order in orderList" :key="order.id" class="hover:bg-slate-50">
-                                        <td class="py-4 px-6 font-mono text-slate-500">{{ order.tx_id_last6 || order.id }}</td>
-                                        <td class="py-4 px-6"><span class="bg-slate-100 px-2 py-1 rounded text-xs">{{ getPlanName(order.plan_id) }}</span></td>
-                                        <td class="py-4 px-6">¥ {{ order.amount }}</td>
-                                        <td class="py-4 px-6"><span :class="order.status === 'approved' ? 'text-emerald-500' : (order.status === 'cancelled' ? 'text-slate-400' : 'text-orange-500')"><i class="fa-solid fa-circle text-[8px] mr-1"></i>{{ formatStatus(order.status) }}</span></td>
-                                        <td class="py-4 px-6 text-slate-400">{{ formatDateExact(order.created_at) }}</td>
-                                        <td class="py-4 px-6 text-right"><button @click="viewOrder(order)" class="theme-text hover:underline">查看详情</button></td>
-                                    </tr>
-                                    <tr v-if="orderList.length === 0"><td colspan="6" class="py-12 text-center text-slate-400"><p v-if="!isLoggedIn">请先登录查看订单</p><p v-else>暂无订单记录</p></td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div v-else class="space-y-4">
-                        <button @click="selectedOrder = null" class="text-sm text-slate-500 hover:text-slate-800"><i class="fa-solid fa-arrow-left mr-1"></i> 返回列表</button>
-                        <div class="flex flex-col md:flex-row gap-6">
-                            <div class="flex-1 space-y-4">
-                                <div v-if="selectedOrder.status === 'approved'" class="bg-white p-10 rounded shadow-sm text-center border border-slate-100">
-                                    <div class="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fa-solid fa-check text-4xl text-white"></i></div>
-                                    <h2 class="text-2xl font-medium text-slate-700 mb-1">已完成</h2><p class="text-slate-500 text-sm mb-6">订单已支付并开通。</p>
-                                    <button @click="navigate('#/')" class="theme-bg text-white px-6 py-2 rounded shadow-sm hover:opacity-90"><i class="fa-solid fa-book-open mr-1"></i> 查看数据看板</button>
-                                </div>
-                                <div class="bg-white rounded shadow-sm border border-slate-100">
-                                    <div class="p-4 border-b border-slate-50 font-medium text-slate-700">商品信息</div>
-                                    <div class="p-4 flex justify-between text-sm"><span class="text-slate-500">产品名称:</span><span class="text-slate-700">{{ getPlanName(selectedOrder.plan_id) }} VIP 套餐</span></div>
-                                </div>
-                                <div class="bg-white rounded shadow-sm border border-slate-100">
-                                    <div class="p-4 border-b border-slate-50 font-medium text-slate-700 flex justify-between items-center">订单信息</div>
-                                    <div class="p-4 space-y-3 text-sm">
-                                        <div class="flex justify-between"><span class="text-slate-500">流水号:</span><span class="font-mono text-slate-700">{{ selectedOrder.id }}</span></div>
-                                        <div class="flex justify-between"><span class="text-slate-500">创建时间:</span><span class="text-slate-700">{{ formatDateExact(selectedOrder.created_at) }}</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ====== 页面 3: 个人中心 ====== -->
-                <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white p-6 rounded shadow-sm border border-slate-100">
-                            <div class="text-sm text-slate-500 mb-2">我的钱包(余额可抵扣)</div>
-                            <div class="text-4xl font-light text-slate-800 mb-4">{{ Number(balance).toFixed(2) }} <span class="text-lg text-slate-400">CNY</span></div>
-                            <div class="flex items-center gap-2 mb-6 text-sm text-slate-500">
-                                <span>身份:</span> 
-                                <span :class="isVip ? 'text-emerald-500 font-bold' : 'text-slate-400'">{{ isVip ? 'VIP会员' : '免费用户' }}</span>
-                                <span v-if="isVip" class="ml-2 text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded">剩余 {{ vipDaysLeft }} 天</span>
-                            </div>
-                            <button @click="navigate('#/plan')" class="theme-bg text-white px-8 py-2 rounded text-sm hover:opacity-90 shadow-sm">充 值</button>
-                        </div>
-                    </div>
-                    <div class="bg-white p-6 rounded shadow-sm border border-slate-100">
-                        <h3 class="font-medium text-slate-700 mb-4">修改密码</h3>
-                        <div class="space-y-4 max-w-md">
-                            <div><label class="block text-sm text-slate-500 mb-1">旧密码</label><input v-model="pwdForm.old" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
-                            <div><label class="block text-sm text-slate-500 mb-1">新密码</label><input v-model="pwdForm.new" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
-                            <div><label class="block text-sm text-slate-500 mb-1">确认新密码</label><input v-model="pwdForm.confirm" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
-                            <button @click="submitPasswordChange" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2 rounded text-sm hover:opacity-90 mt-2 shadow-sm disabled:opacity-50">{{ pwdLoading ? '保存中...' : '保 存' }}</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ====== 页面 4: 我的邀请 ====== -->
-                <div v-show="currentRoute === '#/invite'" class="max-w-6xl mx-auto space-y-6">
-                    <div class="bg-white p-6 rounded shadow-sm border border-slate-100">
-                        <div class="text-sm text-slate-500 mb-2">我的邀请</div>
-                        <div class="text-4xl font-light text-slate-800 mb-2">{{ Number(balance).toFixed(2) }} <span class="text-lg text-slate-400">CNY</span></div>
-                        <div class="text-sm text-slate-500 mb-4">当前剩余佣金 (钱包余额同步)</div>
-                    </div>
-                    <div class="bg-white rounded shadow-sm border border-slate-100 overflow-hidden">
-                        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center"><span class="font-medium text-slate-700">邀请码管理</span></div>
-                        <div class="p-6">
-                            <div class="flex justify-between text-sm text-slate-500 mb-3"><span>您的专属邀请码</span><span>规则</span></div>
-                            <div class="flex justify-between text-sm items-center py-3 border-t border-slate-50">
+                            <div class="bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div>
-                                    <span v-if="!isLoggedIn" class="text-slate-400">请先登录获取邀请码</span>
-                                    <span v-else class="font-mono bg-slate-100 px-3 py-1.5 rounded text-slate-700 mr-2 text-lg tracking-widest">{{ referralCode }}</span> 
+                                    <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
+                                    <div class="flex items-center gap-3">
+                                        <span v-if="!isLoggedIn" class="text-slate-400">请先登录获取</span>
+                                        <span v-else class="font-mono text-2xl font-bold text-slate-700 tracking-widest">{{ referralCode }}</span>
+                                    </div>
                                 </div>
-                                <span class="text-slate-400 text-xs">邀请与被邀请各送 3 天VIP</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ====== 页面 5: 在线答疑 ====== -->
-                <div v-show="currentRoute === '#/ticket'" class="max-w-6xl mx-auto space-y-6 relative">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-lg font-medium text-slate-700">工单历史</h2>
-                        <div class="space-x-2">
-                            <button v-if="ticketsList.some(t => t.status==='replied')" @click="clearFinishedTickets" class="bg-slate-200 text-slate-600 px-4 py-2 rounded-full text-sm shadow-sm hover:bg-slate-300">清理已回复</button>
-                            <button @click="openTicketModal" class="theme-bg text-white px-4 py-2 rounded-full text-sm shadow-sm hover:opacity-90">新的工单</button>
-                        </div>
-                    </div>
-                    <div class="bg-white shadow-sm rounded border border-slate-100 overflow-hidden">
-                        <table class="w-full text-left text-sm whitespace-nowrap">
-                            <thead class="bg-slate-50 text-slate-500 border-b border-slate-100">
-                                <tr>
-                                    <th class="py-4 px-6 font-medium"># 主题</th>
-                                    <th class="py-4 px-6 font-medium">状态</th>
-                                    <th class="py-4 px-6 font-medium">提交时间</th>
-                                    <th class="py-4 px-6 font-medium text-right">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-50 text-slate-600">
-                                <template v-for="t in ticketsList" :key="t.id">
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="py-4 px-6 cursor-pointer" @click="t.expanded = !t.expanded"><i class="fa-solid fa-chevron-right text-slate-300 text-[10px] mr-2 transition-transform" :class="{'rotate-90': t.expanded}"></i> {{ t.subject }}</td>
-                                        <td class="py-4 px-6"><span :class="t.status === 'replied' ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'" class="px-2 py-1 rounded text-xs">{{ t.status === 'replied' ? '已回复' : '处理中' }}</span></td>
-                                        <td class="py-4 px-6 text-slate-400">{{ formatDateExact(t.created_at) }}</td>
-                                        <td class="py-4 px-6 text-right">
-                                            <button v-if="t.status === 'replied'" @click="deleteTicket(t.id)" class="text-red-400 hover:text-red-500 text-xs transition">删除</button>
-                                            <span v-else class="text-slate-300 text-xs">-</span>
-                                        </td>
-                                    </tr>
-                                    <tr v-if="t.expanded" class="bg-slate-50/50">
-                                        <td colspan="4" class="px-6 py-4 space-y-3 shadow-inner">
-                                            <div class="bg-white p-4 rounded border border-slate-200">
-                                                <div class="text-xs font-bold text-slate-500 mb-1">我的提问：</div>
-                                                <div class="text-sm text-slate-700 whitespace-pre-wrap">{{ t.message }}</div>
-                                            </div>
-                                            <div v-if="t.admin_reply" class="bg-emerald-50 p-4 rounded border border-emerald-100">
-                                                <div class="text-xs font-bold text-emerald-600 mb-1">官方回复：</div>
-                                                <div class="text-sm text-emerald-700 whitespace-pre-wrap">{{ t.admin_reply }}</div>
-                                            </div>
-                                            <div v-else class="text-xs text-slate-400 italic pl-1">等待管理员处理...</div>
-                                        </td>
-                                    </tr>
-                                </template>
-                                <tr v-if="ticketsList.length === 0"><td colspan="4" class="py-12 text-center text-slate-400"><p v-if="!isLoggedIn">请先登录查看工单</p><p v-else>暂无工单记录</p></td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div v-if="ticketModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4">
-                        <div class="bg-white rounded shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
-                            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                                <span class="font-medium text-slate-700">新的工单</span>
-                                <button @click="ticketModalVisible = false" class="text-slate-400 hover:text-slate-600 text-xl"><i class="fa-solid fa-xmark"></i></button>
-                            </div>
-                            <div class="p-6 space-y-4">
-                                <div><label class="block text-sm text-slate-700 mb-1">主题</label><input v-model="ticketForm.subject" type="text" placeholder="请输入工单主题" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:outline-none focus:theme-border"></div>
-                                <div><label class="block text-sm text-slate-700 mb-1">工单等级</label>
-                                    <select v-model="ticketForm.level" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:outline-none focus:theme-border text-slate-500 bg-white">
-                                        <option value="low">低</option><option value="medium">中</option><option value="high">高</option>
-                                    </select>
+                                <div class="sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-200">
+                                    <div class="text-xs text-slate-400 mb-1">邀请规则</div>
+                                    <div class="text-sm font-medium theme-text">邀请与被邀请双方各送 3 天 VIP 体验</div>
                                 </div>
-                                <div><label class="block text-sm text-slate-700 mb-1">消息</label><textarea v-model="ticketForm.message" rows="4" placeholder="请描述您遇到的问题" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:outline-none focus:theme-border custom-scrollbar"></textarea></div>
                             </div>
-                            <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
-                                <button @click="ticketModalVisible = false" class="px-5 py-2 rounded text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-100">取消</button>
-                                <button @click="submitTicket" :disabled="ticketLoading" class="px-5 py-2 rounded text-sm text-white theme-bg hover:opacity-90 disabled:opacity-50">确认</button>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                            <h3 class="font-medium text-slate-700 mb-4">修改密码</h3>
+                            <div class="space-y-4 max-w-md">
+                                <div><label class="block text-sm text-slate-500 mb-1">旧密码</label><input v-model="pwdForm.old" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
+                                <div><label class="block text-sm text-slate-500 mb-1">新密码</label><input v-model="pwdForm.new" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
+                                <div><label class="block text-sm text-slate-500 mb-1">确认新密码</label><input v-model="pwdForm.confirm" type="password" class="w-full px-4 py-2 border border-slate-200 rounded focus:outline-none focus:theme-border text-sm"></div>
+                                <button @click="submitPasswordChange" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2 rounded text-sm hover:opacity-90 mt-2 shadow-sm disabled:opacity-50 transition">
+                                    {{ pwdLoading ? '保存中...' : '保 存' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ====== 购买套餐 ====== -->
+                    <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
+                            <div>
+                                <h2 class="text-xl font-medium text-slate-800">选择 VIP 监控套餐</h2>
+                                <p class="text-xs text-slate-400 mt-1">支持微信扫码支付，算法微浮动分钱监听，秒级极速自动开通 VIP</p>
+                            </div>
+                            <span class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full border border-emerald-100 flex items-center">
+                                <i class="fa-solid fa-bolt text-amber-400 mr-1.5 animate-pulse"></i> V免签完全自动化系统已就绪
+                            </span>
+                        </div>
+                        
+                        <div v-if="vipPlans.length === 0" class="text-center py-12 text-slate-400">加载套餐配置中...</div>
+                        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                            <div v-for="plan in vipPlans" :key="plan.id" @click="selectTopUpPlan(plan)" class="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col cursor-pointer transition-all border-2 relative group" :class="topUpForm.planId === plan.id ? 'theme-border ring-2 ring-[#4da6a0]/20' : 'border-transparent hover:border-slate-200'">
+                                <div v-if="plan.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2.5 py-0.5 rounded-bl shadow-sm font-medium">{{ plan.tag }}</div>
+                                <div class="p-6 border-b border-slate-50 bg-slate-50/50">
+                                    <div class="text-slate-500 text-sm mb-3">{{ plan.name }}</div>
+                                    <div class="flex items-end mb-1">
+                                        <span class="text-3xl font-light text-slate-800">¥ {{ plan.price }}</span>
+                                    </div>
+                                    <div class="text-slate-400 text-xs">有效期 {{ plan.days }} 个自然日</div>
+                                </div>
+                                <div class="p-5 flex-1 flex flex-col justify-between">
+                                    <ul class="text-xs text-slate-600 space-y-2.5 mb-4">
+                                        <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 无限制解锁高清图表</li>
+                                        <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 多周期历史快照对比</li>
+                                        <li class="flex items-center"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 极速秒级自动化发货</li>
+                                    </ul>
+                                    <div class="w-full text-center py-2 rounded text-xs font-medium transition" :class="topUpForm.planId === plan.id ? 'theme-bg text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'">
+                                        {{ topUpForm.planId === plan.id ? '已选中' : '选择此套餐' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 max-w-2xl mx-auto border border-slate-100">
+                            <div class="text-center mb-6">
+                                <div class="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 px-3 py-1 rounded-full mb-3 border border-amber-200">
+                                    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i> 系统已为你生成专属校验金额
+                                </div>
+                                <h3 class="text-lg font-bold text-slate-800">微信扫码精准支付</h3>
+                                <div class="mt-2 flex items-baseline justify-center gap-1">
+                                    <span class="text-sm text-slate-500">需严格支付:</span>
+                                    <span class="text-3xl font-extrabold text-red-500 font-mono">¥{{ topUpForm.floatingAmount }}</span>
+                                    <span class="text-xs text-slate-400">(含微小随机浮动)</span>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col items-center mb-6">
+                                <div class="w-52 h-52 bg-slate-50 rounded-xl p-3 border-2 border-dashed border-slate-200 mb-3 relative group">
+                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=wxp://f2f0-kIs2bORtc-afpDrigMOnYKVB0HL39jY8zyFUXEB8v2fvB_AtyT148TX2OQpDoby" class="w-full h-full object-cover rounded-lg">
+                                </div>
+                                
+                                <div class="bg-emerald-50 text-emerald-700 text-xs px-4 py-2.5 rounded-lg border border-emerald-100 max-w-md text-center space-y-1">
+                                    <p class="font-bold"><i class="fa-solid fa-bullhorn text-emerald-500 mr-1"></i> 提示：请严格支付精准金额 {{ topUpForm.floatingAmount }} 元</p>
+                                    <p class="text-emerald-600">付完后系统 3 秒内自动开通 VIP，无需手动填写订单号！</p>
+                                </div>
+                            </div>
+
+                            <div class="max-w-xs mx-auto text-center space-y-3">
+                                <div class="flex items-center justify-center gap-2 text-xs text-slate-500">
+                                    <i class="fa-solid fa-spinner animate-spin theme-text"></i>
+                                    <span>云端挂机服务监听中...</span>
+                                    <button @click="checkPaymentStatus" class="theme-text hover:underline ml-1 font-medium">手动刷新状态</button>
+                                </div>
+
+                                <div class="pt-3 border-t border-slate-100">
+                                    <button @click="showManualInput = !showManualInput" class="text-xs text-slate-400 hover:text-slate-600">
+                                        若未自动跳转，点击手动补填微信单号(后6位) <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                                    </button>
+                                    <div v-if="showManualInput" class="mt-3 space-y-2">
+                                        <input v-model="topUpForm.txId" type="text" maxlength="6" class="w-full px-4 py-2 border border-slate-300 rounded focus:outline-none focus:theme-border text-center tracking-widest font-mono text-sm" placeholder="微信单号后6位数字">
+                                        <button @click="submitOrder" :disabled="orderLoading || topUpForm.txId.length !== 6" class="w-full py-2 theme-bg text-white rounded text-xs font-medium transition hover:opacity-90 disabled:opacity-50">
+                                            提交单号充值
+                                        </button>
+                                    </div>
+                                </div>
+                                <div v-if="orderMessage" class="text-xs px-3 py-2 rounded text-center font-medium" :class="orderMessage.includes('成功') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'">{{ orderMessage }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ====== 使用说明 ====== -->
+                    <div v-show="currentRoute === '#/docs'" class="max-w-6xl mx-auto">
+                        <div class="bg-white rounded-xl shadow-sm p-8 max-w-3xl mx-auto border border-slate-100">
+                            <h2 class="text-2xl font-medium text-center text-slate-800 mb-8">波幅探长监控系统使用指南</h2>
+                            <div class="space-y-6 text-slate-600 text-sm leading-relaxed">
+                                <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">1. 手机端如何放大图表？</h4><p class="pl-4">手机端点击图表图标后，直接使用双指捏合即可无损放大高清图表。单指可随意拖拽平移。</p></section>
+                                <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">2. 充值不到账怎么办？</h4><p class="pl-4">扫码支付时请务必严格按提示的微浮动金额支付（例如18.82元），系统监听成功后自动触发开通。若超5分钟未自动激活，可随时通过底部【在线客服】或提交工单协助解决。</p></section>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ====== 页面 6: 使用说明 ====== -->
-                <div v-show="currentRoute === '#/docs'" class="max-w-6xl mx-auto">
-                    <div class="bg-white rounded shadow-sm p-8 max-w-3xl mx-auto border border-slate-100">
-                        <h2 class="text-2xl font-medium text-center text-slate-800 mb-8">波幅探长监控系统使用指南</h2>
-                        <div class="space-y-6 text-slate-600 text-sm leading-relaxed">
-                            <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">1. 手机端如何放大图表？</h4><p class="pl-4">手机端点击图表图标后，直接使用双指捏合即可无损放大高清图表。单指可随意拖拽平移。</p></section>
-                            <section><h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">2. 充值不到账怎么办？</h4><p class="pl-4">扫码支付后，请务必在“购买套餐”界面下方准确输入您的交易单号的最后6位进行核销。如有问题请提交工单。</p></section>
+                <footer class="mt-12 pt-6 pb-6 border-t border-slate-200/80 text-center text-xs text-slate-500 shrink-0">
+                    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div class="flex items-center gap-2">
+                            <img src="logo.png" alt="Logo" class="w-5 h-5 rounded object-cover" onerror="this.style.display='none'">
+                            <span>© 2026 波幅探长 · 专业的波幅监控与数据分析平台</span>
+                        </div>
+                        <div class="flex items-center gap-4 text-base">
+                            <a href="javascript:void(0)" @click="openSocialModal('抖音')" title="抖音" class="text-slate-400 hover:theme-text transition"><i class="fa-brands fa-tiktok"></i></a>
+                            <a href="javascript:void(0)" @click="openSocialModal('视频号')" title="微信视频号" class="text-slate-400 hover:theme-text transition"><i class="fa-solid fa-circle-play"></i></a>
+                            <a href="javascript:void(0)" @click="openSocialModal('公众号')" title="微信公众号" class="text-slate-400 hover:theme-text transition"><i class="fa-brands fa-weixin"></i></a>
+                            <a href="javascript:void(0)" @click="openSocialModal('小红书')" title="小红书" class="text-slate-400 hover:theme-text transition"><i class="fa-solid fa-book-bookmark"></i></a>
+                            <a href="javascript:void(0)" @click="openSocialModal('快手')" title="快手" class="text-slate-400 hover:theme-text transition"><i class="fa-solid fa-video"></i></a>
+                            <a href="javascript:void(0)" @click="openSocialModal('微信')" title="官方微信" class="text-slate-400 hover:theme-text transition"><i class="fa-solid fa-comments"></i></a>
+                            <a href="javascript:void(0)" @click="openSocialModal('手机')" title="手机联系" class="text-slate-400 hover:theme-text transition"><i class="fa-solid fa-mobile-screen-button"></i></a>
                         </div>
                     </div>
-                </div>
-
+                </footer>
             </main>
         </div>
 
+        <!-- 侧边抽屉 -->
         <aside class="fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 flex flex-col shadow-2xl" :class="menuOpen ? 'translate-x-0' : '-translate-x-full'">
-            <div class="h-16 theme-bg text-white flex items-center justify-center text-lg font-normal tracking-wider relative">
-                <a href="https://gpkx.github.io/#/" @click="menuOpen = false" class="text-white hover:text-white/90 transition block">波幅探长</a>
-                <button @click="menuOpen = false" class="absolute right-4 text-white/70 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            <div class="h-16 theme-bg text-white flex items-center justify-between px-5 text-lg font-normal tracking-wider relative">
+                <a href="https://bofutz.github.io/#/" @click="menuOpen = false" class="flex items-center gap-2 text-white hover:text-white/90 transition">
+                    <img src="logo.png" alt="Logo" class="w-7 h-7 rounded-full bg-white/20 p-0.5 object-cover" onerror="this.style.display='none'">
+                    <span>波幅探长</span>
+                </a>
+                <button @click="menuOpen = false" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="flex-1 overflow-y-auto py-2 custom-scrollbar">
-                <div @click="navigate('#/')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/'}"><i class="fa-solid fa-gauge-high w-6"></i> 数据看板</div>
+                <div @click="navigate('#/')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/'}"><i class="fa-solid fa-chart-simple w-6"></i> 数据看板</div>
+                <div @click="navigate('#/profile')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/profile'}"><i class="fa-solid fa-user w-6"></i> 个人中心</div>
                 <div @click="navigate('#/plan')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/plan'}"><i class="fa-solid fa-bag-shopping w-6"></i> 购买套餐</div>
-                <div @click="navigate('#/order')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/order'}"><i class="fa-solid fa-list-ul w-6"></i> 我的订单</div>
-                <div @click="navigate('#/profile')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/profile'}"><i class="fa-regular fa-user w-6"></i> 个人中心</div>
-                <div @click="navigate('#/invite')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/invite'}"><i class="fa-solid fa-user-group w-6"></i> 我的邀请</div>
-                <div class="px-6 text-xs text-slate-400 mt-3 mb-1">支持与帮助</div>
-                <div @click="navigate('#/ticket')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{'active': currentRoute === '#/ticket'}"><i class="fa-solid fa-headset w-6"></i> 在线答疑</div>
-                <div @click="navigate('#/docs')" class="nav-item block px-6 py-3.5" :class="{'active': currentRoute === '#/docs'}"><i class="fa-solid fa-book-open w-6"></i> 使用说明</div>
+                <div @click="navigate('#/docs')" class="nav-item block px-6 py-3.5" :class="{'active': currentRoute === '#/docs'}"><i class="fa-solid fa-book w-6"></i> 使用说明</div>
             </div>
         </aside>
 
+        <!-- 登录 / 注册 -->
         <div v-if="authModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="closeAuth">
-            <div class="bg-white rounded w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
                 <div class="flex border-b border-slate-100">
-                    <button @click="authMode = 'login'" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'login' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">账号登录</button>
-                    <button @click="authMode = 'register'" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'register' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">免费注册</button>
+                    <button @click="switchAuthMode('login')" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'login' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">账号登录</button>
+                    <button @click="switchAuthMode('register')" class="flex-1 py-4 text-sm font-medium transition-colors" :class="authMode === 'register' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">免费注册</button>
                 </div>
-                <div class="p-6 space-y-4">
-                    <div v-if="authMode === 'register'" class="bg-emerald-50 text-emerald-600 text-xs p-2 rounded text-center font-medium border border-emerald-100">
-                        🎉 新注册即送 1 天免费体验权限！
+                <div class="p-6 space-y-3.5">
+                    <div v-if="authMode === 'register'" class="bg-emerald-50 text-emerald-600 text-xs p-2 rounded-lg text-center font-medium border border-emerald-100">
+                        🎉 新注册即送 1 天免费 VIP 体验权限！
                     </div>
-                    <input v-model="authForm.username" type="text" placeholder="邮箱账号 / 手机号" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none">
-                    <input v-model="authForm.password" type="password" placeholder="密码" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none">
-                    <input v-if="authMode === 'register'" v-model="authForm.refCode" type="text" placeholder="推荐码 (选填，额外送3天)" class="w-full px-3 py-2 border border-slate-200 rounded text-sm focus:theme-border outline-none transition">
-                    <button @click="submitAuth" :disabled="authLoading" class="w-full theme-bg text-white font-medium py-2.5 rounded text-sm hover:opacity-90 mt-2 disabled:opacity-50">
+                    
+                    <input v-model="authForm.username" type="email" :placeholder="authMode === 'register' ? '注册电子邮箱 (如 user@qq.com)' : '邮箱账号'" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none transition">
+                    
+                    <div v-show="authMode === 'register'" class="flex justify-center my-1 min-h-[65px]">
+                        <div id="turnstile-container"></div>
+                    </div>
+
+                    <div v-if="authMode === 'register'" class="flex gap-2">
+                        <input v-model="authForm.emailCode" type="text" placeholder="6位邮箱验证码" class="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none font-mono">
+                        <button @click="sendEmailCode" type="button" :disabled="sendCodeLoading || countdown > 0" class="px-3 py-2 text-xs theme-bg text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap">
+                            {{ countdown > 0 ? `${countdown}s 后重发` : (sendCodeLoading ? '发送中...' : '获取验证码') }}
+                        </button>
+                    </div>
+
+                    <input v-model="authForm.password" type="password" :placeholder="authMode === 'register' ? '设置密码 (至少6位)' : '输入密码'" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none transition">
+                    
+                    <input v-if="authMode === 'register'" v-model="authForm.refCode" type="text" placeholder="推荐码 (选填，额外送3天)" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none transition">
+                    
+                    <button @click="submitAuth" :disabled="authLoading" class="w-full theme-bg text-white font-medium py-2.5 rounded-lg text-sm hover:opacity-90 mt-2 disabled:opacity-50 shadow-sm transition">
                         <i v-if="authLoading" class="fa-solid fa-spinner animate-spin mr-1"></i> {{ authMode === 'login' ? '立即登录' : '注册账号' }}
                     </button>
                 </div>
             </div>
         </div>
 
+        <!-- 在线客服 -->
+        <div v-if="!chatOpen" @click="chatOpen = true" class="fixed bottom-6 right-6 z-50 cursor-pointer flex items-center justify-center w-14 h-14 rounded-full theme-bg text-white chat-fab select-none">
+            <i class="fa-solid fa-comment-dots text-2xl"></i>
+            <span v-if="unreadCount > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-white font-bold">{{ unreadCount }}</span>
+        </div>
+
+        <div v-else class="fixed bottom-4 right-4 sm:right-6 w-[92vw] sm:w-[380px] h-[520px] max-h-[85vh] bg-white rounded-2xl chat-window border border-slate-100 flex flex-col z-50 overflow-hidden">
+            <div class="theme-bg text-white p-3.5 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm">
+                        <img src="logo.png" alt="客服" class="w-full h-full rounded-full object-cover" onerror="this.style.display='none'">
+                        <i class="fa-solid fa-headset" onerror="this.style.display='block'"></i>
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm leading-tight">波幅探长 在线客服</div>
+                        <div class="text-[11px] text-white/80 flex items-center gap-1 mt-0.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span> 在线 | 随时为您解答
+                        </div>
+                    </div>
+                </div>
+                <button @click="chatOpen = false" class="text-white/80 hover:text-white p-1 text-lg transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div ref="chatScrollArea" class="flex-1 overflow-y-auto p-3.5 space-y-3.5 custom-scrollbar bg-slate-50/50">
+                <div v-for="(msg, index) in chatMessages" :key="index" class="flex flex-col" :class="msg.sender === 'user' ? 'items-end' : 'items-start'">
+                    <div class="text-[10px] text-slate-400 mb-1 px-1">{{ msg.time }}</div>
+                    <div class="flex items-start gap-2 max-w-[85%]" :class="msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'">
+                        <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 select-none" :class="msg.sender === 'user' ? 'bg-slate-200 text-slate-600' : 'theme-bg text-white'">
+                            {{ msg.sender === 'user' ? '我' : '客' }}
+                        </div>
+                        <div class="p-3 rounded-2xl text-xs leading-relaxed shadow-sm break-words" :class="msg.sender === 'user' ? 'message-bubble-user' : 'message-bubble-bot'">
+                            <div v-if="msg.type === 'text'" class="whitespace-pre-wrap">{{ msg.content }}</div>
+                            <div v-else-if="msg.type === 'image'" class="cursor-pointer" @click="previewChatImage(msg.content)">
+                                <img :src="msg.content" class="max-w-[180px] max-h-[180px] rounded-lg object-cover border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-2.5 bg-white border-t border-slate-100 flex flex-col gap-1.5 shrink-0">
+                <div class="flex items-center gap-2">
+                    <label class="text-slate-400 hover:theme-text cursor-pointer p-1.5 transition text-lg" title="发送图片">
+                        <i class="fa-solid fa-paperclip"></i>
+                        <input type="file" accept="image/*" class="hidden" @change="handleChatImageUpload">
+                    </label>
+                    <input v-model="chatInput" @keyup.enter="sendChatMessage" type="text" placeholder="输入您的消息..." class="flex-1 bg-slate-100 border-none outline-none text-xs py-2 px-3 rounded-full focus:bg-slate-50 transition">
+                    <button @click="sendChatMessage" :disabled="!chatInput.trim()" class="theme-bg text-white w-8 h-8 rounded-full flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition shrink-0">
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </div>
+                <div class="text-[10px] text-slate-400 text-center select-none pt-0.5">● 由 波幅探长 客服系统 支持</div>
+            </div>
+        </div>
+
+        <!-- 平台联系方式 Modal -->
+        <div v-if="socialModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="socialModalVisible = false">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-xs text-center space-y-4 shadow-2xl relative">
+                <button @click="socialModalVisible = false" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                <div class="w-12 h-12 rounded-full theme-bg text-white flex items-center justify-center mx-auto text-xl shadow-sm">
+                    <i class="fa-solid fa-share-nodes"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800 text-base">官方{{ currentSocialPlatform }}</h3>
+                    <p class="text-xs text-slate-400 mt-1">欢迎关注与联系我们</p>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col items-center">
+                    <img src="logo.png" class="w-28 h-28 object-cover rounded-lg border border-slate-200 mb-2" onerror="this.src='https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://bofutz.github.io/'">
+                    <span class="text-xs text-slate-600 font-medium">波幅探长官方服务号/账号</span>
+                </div>
+            </div>
+        </div>
+
     </div>
 
-    <script>
-        const { createApp, ref, computed, reactive, onMounted, watch } = Vue;
-        const API_BASE = "https://vip.hahagw.eu.org";
-
-        createApp({
-            setup() {
-                const currentRoute = ref(window.location.hash || '#/');
-                const menuOpen = ref(false); 
-                const userMenuOpen = ref(false);
-                const freeEtfCodes = ref([]); // 记录当前最新周期的免费ETF代码
-
-                const navigate = (path) => { currentRoute.value = path; window.location.hash = path; menuOpen.value = false; };
-                const closeDropdowns = () => { userMenuOpen.value = false; showDropdown.value = false; };
-                
-                const pageTitle = computed(() => {
-                    const map = { '#/': '数据看板', '#/plan': '购买套餐', '#/order': '我的订单', '#/profile': '个人中心', '#/invite': '我的邀请', '#/ticket': '在线答疑', '#/docs': '使用说明' };
-                    return map[currentRoute.value] || '数据看板';
-                });
-
-                const apiFetch = async (endpoint, options = {}) => {
-                    const token = localStorage.getItem('etf_token');
-                    if (token) options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-                    options.headers = { ...options.headers, 'Content-Type': 'application/json' };
-                    
-                    const res = await fetch(`${API_BASE}${endpoint}`, options);
-                    if (res.status === 401) { logout(false); throw new Error('登录已过期，请重新登录'); }
-                    const data = await res.json();
-                    if (!res.ok || data.error) throw new Error(data.error || '请求失败');
-                    return data;
-                };
-
-                const isLoggedIn = ref(false); 
-                const isVip = ref(false); 
-                const username = ref('');
-                const balance = ref(0.00); 
-                const vipDaysLeft = ref(0);
-                const referralCode = ref('');
-
-                const checkLoginState = () => {
-                    try {
-                        if (localStorage.getItem('etf_token')) {
-                            isLoggedIn.value = true;
-                            username.value = localStorage.getItem('etf_username') || '';
-                            balance.value = parseFloat(localStorage.getItem('etf_balance')) || 0;
-                            referralCode.value = localStorage.getItem('etf_ref') || '';
-                            vipDaysLeft.value = parseInt(localStorage.getItem('etf_vip_days')) || 0;
-                            isVip.value = vipDaysLeft.value > 0;
-                        }
-                    } catch(e) {}
-                };
-
-                const authModalVisible = ref(false);
-                const authMode = ref('login');
-                const authLoading = ref(false);
-                const authForm = reactive({ username: '', password: '', refCode: '' });
-
-                const openAuth = (mode) => { authMode.value = mode; authModalVisible.value = true; authForm.password = ''; };
-                const closeAuth = () => authModalVisible.value = false;
-
-                const submitAuth = async () => {
-                    if (!authForm.username || !authForm.password) { alert('账号和密码不能为空'); return; }
-                    authLoading.value = true;
-                    try {
-                        if (authMode.value === 'register') {
-                            await apiFetch('/api/register', { method: 'POST', body: JSON.stringify({ username: authForm.username, password: authForm.password, ref_code: authForm.refCode }) });
-                            alert('注册成功，请登录体验！');
-                            authMode.value = 'login';
-                        } else {
-                            const data = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ username: authForm.username, password: authForm.password }) });
-                            localStorage.setItem('etf_token', data.token);
-                            localStorage.setItem('etf_username', authForm.username);
-                            localStorage.setItem('etf_balance', data.balance || 0);
-                            localStorage.setItem('etf_ref', data.referral_code || '');
-                            localStorage.setItem('etf_vip_days', data.vip_days_left || 0);
-                            checkLoginState();
-                            closeAuth();
-                            if(currentRoute.value === '#/plan' || currentRoute.value === '#/order' || currentRoute.value === '#/ticket') fetchData(); 
-                        }
-                    } catch (err) { alert(err.message); } 
-                    finally { authLoading.value = false; }
-                };
-
-                const logout = (showAlert = true) => {
-                    try {
-                        localStorage.clear();
-                    } catch(e){}
-                    isLoggedIn.value = false; isVip.value = false;
-                    username.value = ''; balance.value = 0; referralCode.value = ''; vipDaysLeft.value = 0;
-                    if (showAlert) alert('已退出登录');
-                    navigate('#/');
-                };
-
-                const formatDateExact = (ts) => {
-                    if (!ts) return '-';
-                    const d = new Date(ts);
-                    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                };
-
-                const loading = ref(false);
-                const allData = ref([]);
-                const chartsMap = ref({});
-                const showDropdown = ref(false);
-                const selectedMonday = ref('');
-                const searchQuery = ref('');
-                const expandedRowKey = ref(null); 
-
-                const sortColumn = ref(null); 
-                const sortOrder = ref('desc'); 
-                const handleSort = (column) => {
-                    if (sortColumn.value === column) {
-                        if (sortOrder.value === 'desc') sortOrder.value = 'asc';
-                        else { sortColumn.value = null; sortOrder.value = 'desc'; }
-                    } else {
-                        sortColumn.value = column;
-                        sortOrder.value = 'desc';
-                    }
-                };
-
-                const getAbsValue = (str) => {
-                    if (!str || typeof str !== 'string' || str === '-' || str === '--') return -9999;
-                    const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
-                    return match ? Math.abs(parseFloat(match[0])) : -9999;
-                };
-
-                const getStatusVal = (str) => {
-                    if (!str || typeof str !== 'string' || str === '-' || str === '--') return -9999;
-                    const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
-                    return match ? parseFloat(match[0]) : -9999;
-                };
-
-                // 【核心容错修复】：防止无 date 字段导致系统彻底崩溃
-                const getWeekDays = (dateStr) => {
-                    if (!dateStr || typeof dateStr !== 'string') return [];
-                    const parts = dateStr.split('-');
-                    if (parts.length < 3) return [];
-                    const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, d = parseInt(parts[2], 10);
-                    const dateObj = new Date(y, m, d);
-                    let dayOfWeek = dateObj.getDay();
-                    const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; 
-                    const monday = new Date(y, m, d + offset);
-                    const days = [];
-                    for (let i = 0; i < 5; i++) {
-                        const temp = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-                        days.push(`${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, '0')}-${String(temp.getDate()).padStart(2, '0')}`);
-                    }
-                    return days;
-                };
-
-                const getWeekNumberInMonth = (dateStr) => {
-                    if (!dateStr || typeof dateStr !== 'string') return '';
-                    const parts = dateStr.split('-');
-                    if (parts.length < 3) return '';
-                    const d = parseInt(parts[2], 10);
-                    const firstDay = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
-                    let firstDayOfWeek = firstDay.getDay(); 
-                    if (firstDayOfWeek === 0) firstDayOfWeek = 7;
-                    const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
-                    return `第${['一','二','三','四','五','六'][weekNum - 1] || weekNum}周`;
-                };
-
-                // 【核心容错修复】：过滤没有 date 的脏数据
-                const uniqueDatesSet = computed(() => {
-                    const validDates = allData.value
-                        .filter(i => (i.day_status || i.week_status) && i.date)
-                        .map(i => i.date);
-                    return new Set(validDates);
-                });
-
-                const availablePeriods = computed(() => {
-                    const periods = {};
-                    [...uniqueDatesSet.value].forEach(dateStr => {
-                        const wDays = getWeekDays(dateStr);
-                        if(wDays.length === 0) return;
-                        const monday = wDays[0];
-                        const parts = monday.split('-');
-                        const monthKey = `${parts[0]}-${parts[1]}`;
-                        if (!periods[monthKey]) periods[monthKey] = { monthKey, monthLabel: `${parts[0]}年${parseInt(parts[1], 10)}月`, weeksMap: {} };
-                        if (!periods[monthKey].weeksMap[monday]) periods[monthKey].weeksMap[monday] = { monday, weekLabel: getWeekNumberInMonth(monday) };
-                    });
-                    const result = Object.values(periods).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-                    result.forEach(m => m.weeks = Object.values(m.weeksMap).sort((a, b) => b.monday.localeCompare(a.monday)));
-                    return result;
-                });
-
-                const currentPeriodLabel = computed(() => {
-                    for (const m of availablePeriods.value)
-                        for (const w of m.weeks)
-                            if (w.monday === selectedMonday.value) return `${parseInt(m.monthKey.split('-')[1], 10)}月 · ${w.weekLabel}`;
-                    return '';
-                });
-
-                const currentWeekHeaders = computed(() => {
-                    if (!selectedMonday.value) return [];
-                    const days = getWeekDays(selectedMonday.value);
-                    if(days.length === 0) return [];
-                    return days.map(d => parseInt(d.split('-')[2], 10)); 
-                });
-
-                const weekStatusHeader = computed(() => {
-                    if (!selectedMonday.value) return '';
-                    const weekDays = getWeekDays(selectedMonday.value);
-                    if(weekDays.length < 5) return '';
-                    const fridayDate = weekDays[4];
-                    const parts = fridayDate.split('-');
-                    if(parts.length < 3) return '';
-                    const [y, m, d] = parts;
-                    const friday16 = new Date(y, m - 1, d, 16, 0, 0); 
-                    const isPastFriday16 = Date.now() >= friday16.getTime();
-
-                    if (isPastFriday16) {
-                        return `${parseInt(weekDays[0].split('-')[2], 10)}~${parseInt(weekDays[4].split('-')[2], 10)}日`;
-                    } else {
-                        const mParts = weekDays[0].split('-');
-                        const currentMonday = new Date(mParts[0], mParts[1] - 1, mParts[2]);
-                        const prevMonday = new Date(currentMonday.getTime() - 7 * 24 * 60 * 60 * 1000);
-                        const prevFriday = new Date(currentMonday.getTime() - 3 * 24 * 60 * 60 * 1000);
-                        return `${prevMonday.getDate()}~${prevFriday.getDate()}日`;
-                    }
-                });
-
-                const selectWeek = (mondayStr) => { selectedMonday.value = mondayStr; showDropdown.value = false; };
-
-                const sortedData = computed(() => {
-                    if (!selectedMonday.value) return [];
-                    const weekDays = getWeekDays(selectedMonday.value); 
-                    if(weekDays.length < 5) return [];
-                    const fridayDate = weekDays[4]; 
-                    
-                    const fParts = fridayDate.split('-');
-                    if(fParts.length < 3) return [];
-                    const [y, m, d] = fParts;
-                    const friday16 = new Date(y, m - 1, d, 16, 0, 0);
-                    const now = new Date();
-                    const isPastFriday16 = now.getTime() >= friday16.getTime();
-                    
-                    const etfMap = {};
-                    
-                    allData.value.forEach(item => {
-                        if(!item.date) return;
-                        const idx = weekDays.indexOf(item.date);
-                        if (idx !== -1) {
-                            if (!etfMap[item.etf_code]) {
-                                etfMap[item.etf_code] = { etf_code: item.etf_code, etf_name: item.etf_name, days: [null, null, null, null, null], week_status: null };
-                            }
-                            etfMap[item.etf_code].days[idx] = item;
-                            
-                            if (isPastFriday16 && item.week_status && item.week_status !== '-' && item.week_status !== '--') {
-                                etfMap[item.etf_code].week_status = item.week_status;
-                            }
-                        }
-                    });
-                    
-                    if (!isPastFriday16) {
-                        const parts = weekDays[0].split('-');
-                        const curMon = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-                        const prevMon = new Date(curMon.getTime() - 7 * 24 * 60 * 60 * 1000);
-                        const prevMondayStr = `${prevMon.getFullYear()}-${String(prevMon.getMonth() + 1).padStart(2, '0')}-${String(prevMon.getDate()).padStart(2, '0')}`;
-                        
-                        const prevWeekDates = getWeekDays(prevMondayStr);
-                        const lastWeekStatusMap = {};
-                        
-                        allData.value.forEach(item => {
-                            if (!item.date) return;
-                            if (prevWeekDates.includes(item.date) && item.week_status && item.week_status !== '-' && item.week_status !== '--') {
-                                lastWeekStatusMap[item.etf_code] = item.week_status;
-                            }
-                        });
-                        
-                        for (const code in lastWeekStatusMap) {
-                            if (!etfMap[code]) {
-                                const etfItem = allData.value.find(i => i.etf_code === code);
-                                etfMap[code] = { etf_code: code, etf_name: etfItem ? etfItem.etf_name : code, days: [null, null, null, null, null], week_status: null };
-                            }
-                            etfMap[code].week_status = lastWeekStatusMap[code];
-                        }
-                    }
-
-                    let validItems = Object.values(etfMap).filter(item => {
-                        const hasDay = item.days.some(d => d && d.day_status && d.day_status !== '-' && d.day_status !== '--');
-                        const hasWeek = item.week_status && item.week_status !== '-' && item.week_status !== '--';
-                        return hasDay || hasWeek || chartsMap.value.hasOwnProperty(item.etf_code);
-                    });
-                    
-                    if (searchQuery.value) {
-                        const q = searchQuery.value.toLowerCase().trim();
-                        validItems = validItems.filter(item => item.etf_name.toLowerCase().includes(q) || item.etf_code.toLowerCase().includes(q));
-                    }
-
-                    const currentDayOfWeek = now.getDay(); 
-                    const currentHour = now.getHours();
-                    let forceWeeklySort = false;
-                    
-                    if (currentDayOfWeek === 6 && currentHour >= 10) forceWeeklySort = true;
-                    if (currentDayOfWeek === 0) forceWeeklySort = true;
-                    if (currentDayOfWeek === 1 && currentHour < 16) forceWeeklySort = true;
-
-                    validItems.sort((a, b) => {
-                        if (sortColumn.value) {
-                            if (sortColumn.value === 'etf_name') {
-                                const cmp = a.etf_name.localeCompare(b.etf_name, 'zh-CN');
-                                return sortOrder.value === 'asc' ? cmp : -cmp;
-                            } else if (sortColumn.value.startsWith('d')) {
-                                const idx = parseInt(sortColumn.value.substring(1), 10);
-                                const valA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
-                                const valB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
-                                if (valA === -9999 && valB !== -9999) return 1;
-                                if (valB === -9999 && valA !== -9999) return -1;
-                                return sortOrder.value === 'desc' ? valB - valA : valA - valB;
-                            } else if (sortColumn.value === 'week_status') {
-                                const valA = getStatusVal(a.week_status);
-                                const valB = getStatusVal(b.week_status);
-                                if (valA === -9999 && valB !== -9999) return 1;
-                                if (valB === -9999 && valA !== -9999) return -1;
-                                return sortOrder.value === 'desc' ? valB - valA : valA - valB;
-                            }
-                        } else {
-                            if (forceWeeklySort) {
-                                const wkA = getStatusVal(a.week_status);
-                                const wkB = getStatusVal(b.week_status);
-                                const absA = wkA === -9999 ? -9999 : Math.abs(wkA);
-                                const absB = wkB === -9999 ? -9999 : Math.abs(wkB);
-                                if (absA > -9999 || absB > -9999) {
-                                    if (absA > -9999 && absB > -9999) return absB - absA;
-                                    if (absA > -9999) return -1;
-                                    if (absB > -9999) return 1;
-                                }
-                            }
-
-                            let latestValidDayIndex = 4;
-                            while (latestValidDayIndex >= 0) {
-                                let hasAnyData = validItems.some(item => item.days[latestValidDayIndex] && item.days[latestValidDayIndex].day_status && item.days[latestValidDayIndex].day_status !== '-' && item.days[latestValidDayIndex].day_status !== '--');
-                                if (hasAnyData) break;
-                                latestValidDayIndex--;
-                            }
-                            
-                            if (latestValidDayIndex >= 0) {
-                                const getValAbs = (item, idx) => {
-                                    const d = item.days[idx];
-                                    if (d && d.day_status) {
-                                        const val = getStatusVal(d.day_status);
-                                        return val === -9999 ? -9999 : Math.abs(val);
-                                    }
-                                    return -9999;
-                                };
-                                const valA = getValAbs(a, latestValidDayIndex);
-                                const valB = getValAbs(b, latestValidDayIndex);
-                                if (valA > -9999 && valB > -9999) return valB - valA;
-                                if (valA > -9999) return -1;
-                                if (valB > -9999) return 1;
-                            }
-                            const fallbackWkA = Math.abs(getStatusVal(a.week_status));
-                            const fallbackWkB = Math.abs(getStatusVal(b.week_status));
-                            return fallbackWkB - fallbackWkA;
-                        }
-                    });
-                    
-                    return validItems;
-                });
-
-                const toggleRow = (item) => { expandedRowKey.value = expandedRowKey.value === item.etf_code ? null : item.etf_code; };
-
-                const getPastWeeks = (etf_code) => {
-                    if (!selectedMonday.value) return [];
-                    const pastData = allData.value.filter(item => item.etf_code === etf_code && (item.day_status || item.week_status));
-                    const weekMap = {};
-                    pastData.forEach(item => {
-                        if(!item.date) return;
-                        const wDays = getWeekDays(item.date);
-                        if(wDays.length === 0) return;
-                        const monday = wDays[0];
-                        if (monday === selectedMonday.value) return; 
-
-                        if (!weekMap[monday]) {
-                            const m = parseInt(monday.split('-')[1], 10);
-                            weekMap[monday] = {
-                                monday: monday, weekLabel: `${m}月${getWeekNumberInMonth(monday)}`, fridayDate: wDays[4], days: [null, null, null, null, null], week_status: null
-                            };
-                        }
-                        const idx = wDays.indexOf(item.date);
-                        if(idx !== -1) weekMap[monday].days[idx] = item;
-                        if (item.week_status && item.week_status !== '-' && item.week_status !== '--') weekMap[monday].week_status = item.week_status;
-                    });
-                    const weekList = Object.values(weekMap);
-                    return weekList.sort((a, b) => b.monday.localeCompare(a.monday));
-                };
-
-                const fetchPlans = async () => {
-                    try {
-                        const data = await fetch(`${API_BASE}/api/plans`);
-                        const res = await data.json();
-                        if (res.success && res.data && res.data.length > 0) vipPlans.value = res.data;
-                    } catch(e) {}
-                };
-
-                const fetchChartsMap = async () => {
-                    try {
-                        const data = await apiFetch('/api/etfs');
-                        chartsMap.value = data.charts || {};
-                        if(isLoggedIn.value) isVip.value = data.is_vip; 
-                    } catch(e) {}
-                };
-
-                const fetchData = async () => {
-                    loading.value = true;
-                    try {
-                        const [res1] = await Promise.all([
-                            fetch(atob('aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=')).catch(()=>null),
-                            fetchChartsMap()
-                        ]);
-                        if (res1 && res1.ok) {
-                            const data = await res1.json();
-                            if(Array.isArray(data)) {
-                                allData.value = data;
-                                if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
-                                    // 默认选中最新的一周
-                                    selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
-                                    // 提取最新周的前3名，并将其锁定为免费开放的 ETF
-                                    freeEtfCodes.value = sortedData.value.slice(0, 3).map(item => item.etf_code);
-                                }
-                            }
-                        }
-                    } catch (e) { console.error(e); } 
-                    finally { loading.value = false; }
-                };
-
-                let currentViewer = null;
-                const openChart = (etfCode, type, index, isHistorical = false) => {
-                    if (isLoggedIn.value && isVip.value) {
-                        showViewer(etfCode, type);
-                        return;
-                    }
-
-                    // 钉死逻辑：只要是在最新周期前三名的名单里，无论历史周期或任何设备，都允许查看
-                    if (freeEtfCodes.value.includes(etfCode)) {
-                        showViewer(etfCode, type);
-                        return;
-                    }
-                    
-                    if (confirm('此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三免费对全网开放，新注册送 1 天体验权限！')) {
-                        if (!isLoggedIn.value) openAuth('login');
-                        else navigate('#/plan');
-                    }
-                };
-
-                const showViewer = (etfCode, type) => {
-                    const imgUrl = chartsMap.value[etfCode] || `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${etfCode}_${type}.png`;
-                    const image = new Image(); image.src = imgUrl.split('?')[0]; 
-                    if (currentViewer) { currentViewer.destroy(); }
-                    currentViewer = new Viewer(image, { hidden: () => { currentViewer.destroy(); currentViewer = null; }, navbar: false, title: false, button: true, backdrop: true });
-                    currentViewer.show();
-                }
-
-                const getColorClass = (status) => {
-                    if (!status || status === '-' || status === '--') return 'text-slate-300';
-                    return status.includes('+') ? 'text-red-500' : 'text-emerald-500';
-                };
-
-                const selectedOrder = ref(null);
-                const orderList = ref([]);
-                const vipPlans = ref([
-                    { id: 'trial', name: '首充体验', price: 1.88, days: 2, tag: '新人破冰' },
-                    { id: 'week', name: '体验周卡', price: 8.80, days: 7, tag: '特惠' },
-                    { id: 'month', name: '包月畅享', price: 18.80, days: 30, tag: '推荐' },
-                    { id: 'season', name: '季度实惠', price: 48.80, days: 90 }
-                ]);
-                
-                const fetchOrders = async () => {
-                    if(!isLoggedIn.value) return;
-                    try { const res = await apiFetch('/api/user/orders'); orderList.value = res.data || []; } catch(e) {}
-                };
-                
-                const viewOrder = (order) => { selectedOrder.value = order; };
-                const getPlanName = (planId) => { const p = vipPlans.value.find(x => x.id === planId); return p ? p.name : planId; };
-                const formatStatus = (s) => { return s === 'approved' ? '已完成' : (s === 'pending' ? '审核中' : '已取消'); };
-
-                const topUpForm = reactive({ planId: 'month', amount: 18.8, txId: '' });
-                const orderLoading = ref(false); const orderMessage = ref('');
-                
-                const selectTopUpPlan = (plan) => { topUpForm.planId = plan.id; topUpForm.amount = plan.price; };
-                const submitOrder = async () => {
-                    if (!isLoggedIn.value) { openAuth('login'); return; }
-                    
-                    if (!/^\d{6}$/.test(topUpForm.txId)) { alert('请填写准确的6位数字凭证'); return; }
-                    
-                    if (orderList.value.some(o => o.status === 'pending')) {
-                        alert('您有一笔尚未审核的订单，请勿重复提交！如需加急请提交工单。');
-                        return;
-                    }
-
-                    orderLoading.value = true; orderMessage.value = '';
-                    try {
-                        await apiFetch('/api/orders', { method: 'POST', body: JSON.stringify({ plan_id: topUpForm.planId, amount: topUpForm.amount, tx_id_last6: topUpForm.txId }) });
-                        orderMessage.value = '✅ 提交成功！系统正在核实单号...';
-                        topUpForm.txId = '';
-                        setTimeout(() => { navigate('#/order'); fetchOrders(); }, 1500); 
-                    } catch(err) { orderMessage.value = `❌ ${err.message}`; } 
-                    finally { orderLoading.value = false; }
-                };
-
-                const pwdForm = reactive({ old: '', new: '', confirm: '' });
-                const pwdLoading = ref(false);
-                const submitPasswordChange = async () => {
-                    if (!pwdForm.old || !pwdForm.new || pwdForm.new !== pwdForm.confirm) { alert('请正确填写密码且两次输入需一致！'); return; }
-                    pwdLoading.value = true;
-                    try {
-                        await apiFetch('/api/password', { method: 'POST', body: JSON.stringify({ old_password: pwdForm.old, new_password: pwdForm.new }) });
-                        alert('密码修改成功！请重新登录。');
-                        logout(false);
-                    } catch(err) { alert(err.message); } 
-                    finally { pwdLoading.value = false; pwdForm.old = ''; pwdForm.new = ''; pwdForm.confirm = ''; }
-                };
-
-                const ticketModalVisible = ref(false);
-                const ticketForm = reactive({ subject: '', level: 'medium', message: '' });
-                const ticketsList = ref([]);
-                const ticketLoading = ref(false);
-                
-                // 【核心容错修复】：防御缓存损坏导致的彻底白屏
-                let hiddenTickets = [];
-                try {
-                    const stored = localStorage.getItem('hidden_tickets');
-                    if(stored) hiddenTickets = JSON.parse(stored);
-                } catch(e) {
-                    try { localStorage.removeItem('hidden_tickets'); } catch(e){}
-                    hiddenTickets = [];
-                }
-
-                const fetchTickets = async () => {
-                    if(!isLoggedIn.value) return;
-                    try {
-                        const res = await apiFetch('/api/tickets');
-                        ticketsList.value = (res.data || []).filter(t => !hiddenTickets.includes(t.id)).map(t => ({...t, expanded: false}));
-                    } catch(e) {}
-                };
-
-                const openTicketModal = () => { if (!isLoggedIn.value) { openAuth('login'); return; } ticketModalVisible.value = true; };
-
-                const submitTicket = async () => {
-                    if (!ticketForm.subject || !ticketForm.message) { alert('主题和消息不能为空！'); return; }
-                    ticketLoading.value = true;
-                    try {
-                        await apiFetch('/api/tickets', { method: 'POST', body: JSON.stringify({ subject: ticketForm.subject, level: ticketForm.level, message: ticketForm.message }) });
-                        ticketModalVisible.value = false;
-                        ticketForm.subject = ''; ticketForm.level = 'medium'; ticketForm.message = '';
-                        alert('工单已成功提交！');
-                        fetchTickets(); 
-                    } catch(err) { alert(err.message); } 
-                    finally { ticketLoading.value = false; }
-                };
-
-                const deleteTicket = (id) => {
-                    if(!confirm('确定删除该工单记录吗？')) return;
-                    hiddenTickets.push(id);
-                    try { localStorage.setItem('hidden_tickets', JSON.stringify(hiddenTickets)); } catch(e){}
-                    ticketsList.value = ticketsList.value.filter(t => t.id !== id);
-                };
-
-                const clearFinishedTickets = () => {
-                    if(!confirm('确定清理所有已回复的工单吗？')) return;
-                    const finished = ticketsList.value.filter(t => t.status === 'replied');
-                    finished.forEach(t => hiddenTickets.push(t.id));
-                    try { localStorage.setItem('hidden_tickets', JSON.stringify(hiddenTickets)); } catch(e){}
-                    ticketsList.value = ticketsList.value.filter(t => t.status !== 'replied');
-                };
-
-                watch(currentRoute, (newRoute) => {
-                    selectedOrder.value = null; 
-                    searchQuery.value = ''; 
-                    if (newRoute === '#/order') fetchOrders();
-                    if (newRoute === '#/ticket') fetchTickets();
-                });
-
-                onMounted(() => {
-                    checkLoginState(); 
-                    fetchPlans(); 
-                    fetchData(); 
-                    if (isLoggedIn.value) fetchOrders();
-                });
-
-                return {
-                    currentRoute, menuOpen, userMenuOpen, pageTitle, navigate, closeDropdowns,
-                    isLoggedIn, isVip, username, balance, vipDaysLeft, referralCode, logout,
-                    authModalVisible, authMode, authForm, authLoading, openAuth, closeAuth, submitAuth,
-                    loading, sortedData, showDropdown, searchQuery, availablePeriods, currentPeriodLabel, selectWeek, selectedMonday, sortColumn, sortOrder, handleSort, currentWeekHeaders, weekStatusHeader,
-                    expandedRowKey, toggleRow, getPastWeeks,
-                    vipPlans, topUpForm, selectTopUpPlan, orderLoading, orderMessage, submitOrder,
-                    openChart, getColorClass,
-                    selectedOrder, orderList, viewOrder, getPlanName, formatStatus, formatDateExact,
-                    pwdForm, pwdLoading, submitPasswordChange,
-                    ticketModalVisible, ticketForm, ticketsList, ticketLoading, submitTicket, openTicketModal, deleteTicket, clearFinishedTickets,
-                    freeEtfCodes // 暴露出来给模板使用，进行状态锁定
-                };
-            }
-        }).mount('#app');
-    </script>
+    <script src="chat.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
