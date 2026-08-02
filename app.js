@@ -1092,6 +1092,7 @@ createApp({
             getMobileStatusClass,
             formatMobileWeekLabel,
             getDayTooltip,
+            getWeekDays,
             getWeekTooltip,
             getMobileDayDate,
             getMobileWeekDate,
