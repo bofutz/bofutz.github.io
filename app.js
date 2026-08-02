@@ -1,13 +1,5 @@
 /**
  * 波幅探长 - 主业务逻辑脚本 (app.js)
- * 已修复：
- * 1. 日期解析函数严重错误
- * 2. weekDays 数组被当字符串使用的多处逻辑错误
- * 3. 文件末尾残留的 EOF / 垃圾字符导致语法错误
- * 4. 社交弹窗相关变量已正确暴露
- * 5. 日线图标跟随最新有数据列、周线始终有图标
- * 6. 未登录前三免费看图（双重保险：index < 3 或 freeEtfCodes）
- * 7. 数据不再前置日期，改为悬停提示（PC）/ 小字显示（手机）
  */
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
 
