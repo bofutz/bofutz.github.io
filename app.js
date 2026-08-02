@@ -458,24 +458,51 @@ createApp({
             showDropdown.value = false;
         };
 
-        // 当前周「最新有数据的日线列」索引
+        // 当前周「日线图表 icon」应该显示的列索引（所有行统一同一列）
+        // 规则：
+        // 1. 优先取当前周里最新有数据的那一天（有数据就按数据）
+        // 2. 如果整周都没有数据，则按北京时间17点规则：
+        //    - 周一~周五：17点后显示当天列，17点前显示前一交易日
+        //    - 周六/周日：固定显示周五列
         const latestDailyColIndex = computed(() => {
             if (!selectedMonday.value) return -1;
             const weekDays = getWeekDays(selectedMonday.value);
             if (weekDays.length < 5) return -1;
 
+            // 1. 先找当前周最新有数据的列（从周五往前扫）——有数据就按数据
             for (let i = 4; i >= 0; i--) {
                 const hasAny = allData.value.some(
                     item => item.date === weekDays[i] && item.day_status && item.day_status !== '-' && item.day_status !== '--'
                 );
                 if (hasAny) return i;
             }
-            return 4;
-        });
 
-        const isLatestDailyColumn = (idx, item) => {
-            return idx === latestDailyColIndex.value;
-        };
+            // 2. 整周都没数据 → 按北京时间17点规则
+            const now = new Date();
+            // 转成北京时间（UTC+8）
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const beijing = new Date(utc + (8 * 60 * 60000));
+    
+            let day = beijing.getDay(); // 0=周日, 1=周一 ... 6=周六
+            const hour = beijing.getHours();
+
+            // 周末固定周五
+            if (day === 0 || day === 6) {
+                return 4; // 周五
+            }
+
+            // 周一~周五：day 1→index0, 2→1, ..., 5→4
+            let col = day - 1;
+
+            // 17点前，显示前一交易日
+            if (hour < 17) {
+                col = col - 1;
+                // 周一17点前：仍显示周一列（上周五属于上一周）
+                if (col < 0) col = 0;
+            }
+
+            return col;
+        });
 
         // 手机端：保留 +/- 符号，只去掉 %
         const formatMobileStatus = (status) => {
