@@ -202,10 +202,6 @@
                                                                     {{ week.week_status }}
                                                                 </span>
                                                                 <span v-else>-</span>
-                                                                <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" 
-                                                                   class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[11px]" 
-                                                                   :title="getWeekTooltip(week.monday)"
-                                                                   @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
                                                             </div>
                                                         </td>
                                                     </tr>
