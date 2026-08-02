@@ -324,7 +324,7 @@ createApp({
             let firstDayOfWeek = firstDay.getDay();
             if (firstDayOfWeek === 0) firstDayOfWeek = 7;
             const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
-            return `第${weekNum}周`;
+            return `${weekNum}周`;
         };
 
         const uniqueDatesSet = computed(() => {
