@@ -191,9 +191,7 @@
                                                 
                                                 <template v-if="expandedRowKey === item.etf_code">
                                                     <tr v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50/80 border-b border-dashed border-slate-100" @click.stop>
-                                                        <td class="p-3 text-left sticky left-0 bg-slate-50/80 z-10 etf-name-column shadow-[1px_0_0_0_#f1f5f9]">
-                                                            <div class="text-xs text-slate-500 font-medium pl-1">{{ week.monday.substring(5) }} 周</div>
-                                                        </td>
+                                                        <td class="p-3 text-left sticky left-0 bg-slate-50/80 z-10 etf-name-column shadow-[1px_0_0_0_#f1f5f9]"></td>
                                                         <td v-for="idx in 5" :key="idx" class="p-3 text-xs" :class="getColorClass(week.days[idx-1]?.day_status)">
                                                             <span v-if="week.days[idx-1]?.day_status && week.days[idx-1].day_status !== '-' && week.days[idx-1].day_status !== '--'"
                                                                   :title="getDayTooltip(week.days[idx-1].date)">
