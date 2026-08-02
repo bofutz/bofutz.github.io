@@ -262,21 +262,22 @@
                                         </div>
                                     </div>
 
-                                    <!-- 展开历史周（已删除7M4W，颜色正确，字体放大纯黑，由近到远） -->
+                                    <!-- 展开历史周：只保留顶部周几，日期在上数据在下 -->
                                     <div v-if="expandedRowKey === item.etf_code" class="border-t border-slate-100 bg-white">
-                                        <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="px-2.5 py-2.5 border-b border-slate-50 last:border-0">
+                                        <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="px-2.5 py-2 border-b border-slate-50 last:border-0">
                                             <div class="grid grid-cols-6 gap-0 text-center">
-                                                <div v-for="idx in 5" :key="idx" class="flex flex-col items-center">
-                                                    <span class="text-[11px] text-black font-medium leading-none">周{{ ['一','二','三','四','五'][idx-1] }}</span>
+                                                <div v-for="idx in 5" :key="idx" class="flex flex-col items-center justify-center py-0.5">
+                                                    <span v-if="week.days[idx-1]?.date" class="text-[10px] text-black leading-none">
+                                                        {{ getMobileDayDate(week.days[idx-1].date) }}
+                                                    </span>
                                                     <span class="text-[13px] font-bold leading-none mt-0.5 tracking-tight" :class="getMobileStatusClass(week.days[idx-1]?.day_status)">
                                                         {{ formatMobileStatus(week.days[idx-1]?.day_status) }}
                                                     </span>
-                                                    <span v-if="week.days[idx-1]?.date" class="text-[10px] text-black leading-none mt-0.5">
-                                                        {{ getMobileDayDate(week.days[idx-1].date) }}
-                                                    </span>
                                                 </div>
-                                                <div class="flex flex-col items-center">
-                                                    <span class="text-[11px] text-black font-bold leading-none">周线</span>
+                                                <div class="flex flex-col items-center justify-center py-0.5">
+                                                    <span class="text-[10px] text-black leading-none">
+                                                        {{ getMobileWeekDate(week.monday) }}
+                                                    </span>
                                                     <div class="flex items-center gap-0.5 mt-0.5">
                                                         <span class="text-[13px] font-bold leading-none tracking-tight" :class="getMobileStatusClass(week.week_status)">
                                                             {{ formatMobileStatus(week.week_status) }}
@@ -285,9 +286,6 @@
                                                            class="fa-regular fa-image text-slate-400 hover:text-blue-500 transition cursor-pointer text-[10px]" 
                                                            @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
                                                     </div>
-                                                    <span class="text-[10px] text-black leading-none mt-0.5">
-                                                        {{ getMobileWeekDate(week.monday) }}
-                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
