@@ -231,11 +231,14 @@
                                         <i class="fa-solid text-[11px] text-slate-400 transition-transform duration-200 shrink-0 ml-2" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
                                     </div>
 
-                                    <!-- 当前周数据 -->
+                                    <!-- 当前周数据：周几在最上，日期在上，数据在下 -->
                                     <div class="px-1.5 py-1.5 grid grid-cols-6 gap-0 text-center">
                                         <div v-for="idx in 5" :key="idx" class="flex flex-col items-center justify-center py-1">
                                             <span class="text-[11px] text-black font-medium leading-none mb-0.5">周{{ ['一','二','三','四','五'][idx-1] }}</span>
-                                            <div class="flex items-center gap-0.5">
+                                            <span v-if="item.days[idx-1]?.date" class="text-[10px] text-black leading-none">
+                                                {{ getMobileDayDate(item.days[idx-1].date) }}
+                                            </span>
+                                            <div class="flex items-center gap-0.5 mt-0.5">
                                                 <span class="text-[13px] font-bold leading-none tracking-tight" :class="getMobileStatusClass(item.days[idx-1]?.day_status)">
                                                     {{ formatMobileStatus(item.days[idx-1]?.day_status) }}
                                                 </span>
@@ -243,22 +246,19 @@
                                                    class="fa-regular fa-image text-slate-400 hover:text-blue-500 transition cursor-pointer text-[10px]" 
                                                    @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                             </div>
-                                            <span v-if="item.days[idx-1]?.date" class="text-[10px] text-black leading-none mt-0.5">
-                                                {{ getMobileDayDate(item.days[idx-1].date) }}
-                                            </span>
                                         </div>
                                         <div class="flex flex-col items-center justify-center py-1 bg-[#4da6a0]/10 rounded-md">
                                             <span class="text-[11px] text-black font-bold leading-none mb-0.5">周线</span>
-                                            <div class="flex items-center gap-0.5">
+                                            <span class="text-[10px] text-black leading-none">
+                                                {{ getMobileWeekDate(selectedMonday) }}
+                                            </span>
+                                            <div class="flex items-center gap-0.5 mt-0.5">
                                                 <span class="text-[13px] font-bold leading-none tracking-tight" :class="getMobileStatusClass(item.week_status)">
                                                     {{ formatMobileStatus(item.week_status) }}
                                                 </span>
                                                 <i class="fa-regular fa-image text-slate-400 hover:text-blue-500 transition cursor-pointer text-[10px]" 
                                                    @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
                                             </div>
-                                            <span class="text-[10px] text-black leading-none mt-0.5">
-                                                {{ getMobileWeekDate(selectedMonday) }}
-                                            </span>
                                         </div>
                                     </div>
 
