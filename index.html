@@ -158,10 +158,11 @@
                                                     <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
                                                         <div class="flex items-center justify-center gap-1">
                                                             <span v-if="item.days[idx-1]?.day_status && item.days[idx-1].day_status !== '-' && item.days[idx-1].day_status !== '--'">
-                                                                ({{ currentWeekHeaders[idx-1] }}日){{ item.days[idx-1].day_status }}
+                                                                ({{ currentWeekHeaders[idx-1] || '-' }}日){{ item.days[idx-1].day_status }}
                                                             </span>
                                                             <span v-else>-</span>
-                                                            <i v-if="(idx-1) === getLatestDailyIndex()" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
+                                                            <!-- 基于全局最新有数据的一天强制对齐显示日线图表图标 -->
+                                                            <i v-if="(idx-1) === latestDailyIndex" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                                         </div>
                                                     </td>
                                                     <td class="p-3">
@@ -170,6 +171,7 @@
                                                                 ({{ currentWeekShortName }}){{ item.week_status }}
                                                             </span>
                                                             <span v-else>-</span>
+                                                            <!-- 周线图表恒定出现 -->
                                                             <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
                                                         </div>
                                                     </td>
@@ -205,7 +207,7 @@
                                 </div>
                             </div>
                             
-                            <!-- 移动端列表 -->
+                            <!-- 移动端列表：高对比度白底黑字、大号字体，隐藏符号 -->
                             <div class="sm:hidden space-y-3">
                                 <div v-for="(item, index) in sortedData" :key="item.etf_code" class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                                     <div class="p-4 flex items-center justify-between bg-white border-b border-slate-100" @click="toggleRow(item)">
@@ -229,13 +231,15 @@
                                                 <div class="text-sm font-bold" :class="getColorClass(item.days[idx-1]?.day_status)">
                                                     {{ formatMobileNumber(item.days[idx-1]?.day_status) }}
                                                 </div>
-                                                <i v-if="(idx-1) === getLatestDailyIndex()" class="fa-regular fa-image text-slate-400 hover:theme-text mt-1.5 text-[14px]" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
+                                                <!-- 全局强制对齐图表Icon -->
+                                                <i v-if="(idx-1) === latestDailyIndex" class="fa-regular fa-image text-slate-400 hover:theme-text mt-1.5 text-[14px]" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                             </div>
                                             <div class="flex flex-col items-center">
                                                 <span class="text-[11px] text-black font-bold mb-1">周线</span>
                                                 <div class="text-sm font-bold" :class="getColorClass(item.week_status)">
                                                     {{ formatMobileNumber(item.week_status) }}
                                                 </div>
+                                                <!-- 周线恒定渲染图标 -->
                                                 <i class="fa-regular fa-image text-slate-400 hover:theme-text mt-1.5 text-[14px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
                                             </div>
                                         </div>
@@ -359,7 +363,7 @@
                         </div>
                     </div>
 
-                    <!-- ====== 页面 3: 购买套餐 (V免签完全自动化模式) ====== -->
+                    <!-- ====== 页面 3: 购买套餐 ====== -->
 <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
         <div>
@@ -395,7 +399,7 @@
         </div>
     </div>
 
-    <!-- 支付展示区域 (V免签完全自动化模式) -->
+    <!-- 支付展示区域 -->
     <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 max-w-2xl mx-auto border border-slate-100">
         <div class="text-center mb-6">
             <div class="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 px-3 py-1 rounded-full mb-3 border border-amber-200">
