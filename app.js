@@ -765,26 +765,17 @@ createApp({
 
         // ========== 关键修复：未登录前三免费看图（双重保险） ==========
         const openChart = (etfCode, type, index, isHistorical = false) => {
-            // VIP 直接放行
             if (isLoggedIn.value && isVip.value) {
                 showViewer(etfCode, type);
                 return;
             }
-
-            // 双重保险：index < 3 或 freeEtfCodes 包含
             const isTopThree = (typeof index === 'number' && index >= 0 && index < 3);
             const isInFreeList = freeEtfCodes.value.includes(etfCode);
-
             if (isTopThree || isInFreeList) {
                 showViewer(etfCode, type);
                 return;
             }
-
-            if (
-                confirm(
-                    '此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三免费对全网开放，新注册送 1 天体验权限！'
-                )
-            ) {
+            if (confirm('此为VIP付费专属监控图表，请登录/注册。 \n\n🎉 当前最新排名前三免费对全网开放，新注册送 1 天体验权限！')) {
                 if (!isLoggedIn.value) openAuth('login');
                 else navigate('#/plan');
             }
