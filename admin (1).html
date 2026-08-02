@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>波幅探长 · 管理后台</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        [v-cloak] { display: none !important; }
+        body { background-color: #f4f6f8; -webkit-tap-highlight-color: transparent; }
+        .theme-bg { background-color: #4da6a0; }
+        .theme-text { color: #4da6a0; }
+        .theme-border { border-color: #4da6a0; }
+        .theme-ring { --tw-ring-color: rgba(77, 166, 160, 0.3); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .nav-item { transition: all 0.2s; color: #64748b; font-size: 14px; cursor: pointer; }
+        .nav-item i { width: 24px; text-align: center; margin-right: 8px; color: #94a3b8; font-size: 16px; }
+        .nav-item:hover:not(.active) { color: #4da6a0; }
+        .nav-item:hover:not(.active) i { color: #4da6a0; }
+        .nav-item.active { background-color: #e2e8f0; color: #334155; border-left: 3px solid #4da6a0; padding-left: 21px; font-weight: 500; }
+        .nav-item.active i { color: #4da6a0; }
+        .modal-overlay { background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); }
+        .stat-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
+        .toast-enter { animation: toastIn 0.25s ease; }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        .badge-pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: #4da6a0; box-shadow: 0 0 0 3px rgba(77,166,160,0.15); }
+    </style>
+</head>
+<body class="text-slate-700 font-sans h-screen overflow-hidden select-none">
+
+<div id="admin-app" v-cloak class="h-full flex flex-col">
+
+    <!-- ================= 鉴权登录页 ================= -->
+    <div v-if="!isAuthenticated" class="fixed inset-0 z-50 bg-[#f4f6f8] flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-slate-200 text-center">
+            <div class="w-16 h-16 theme-bg rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                <i class="fa-solid fa-shield-halved text-3xl text-white"></i>
+            </div>
+            <h2 class="text-xl font-bold text-slate-800 mb-1">管理后台安全验证</h2>
+            <p class="text-xs text-slate-400 mb-6">波幅探长 · Admin Console</p>
+            <input v-model="adminSecret" @keyup.enter="login" type="password" placeholder="请输入 Admin-Secret"
+                   class="w-full bg-slate-50 border border-slate-200 text-slate-700 px-4 py-3 rounded-lg mb-4 text-center tracking-widest font-mono text-sm">
+            <button @click="login" :disabled="loading"
+                    class="w-full theme-bg text-white font-medium py-2.5 rounded-lg transition hover:opacity-90 disabled:opacity-50 flex justify-center items-center shadow-sm">
+                <i v-if="loading" class="fa-solid fa-spinner animate-spin mr-2"></i> 登 录
+            </button>
+            <p v-if="errorMsg" class="text-red-500 text-xs mt-3">{{ errorMsg }}</p>
+        </div>
+    </div>
+
+    <!-- ================= 后台主体 ================= -->
+    <template v-else>
+        <!-- 顶部导航 -->
+        <header class="bg-white border-b border-slate-200 h-14 sm:h-16 shrink-0 flex items-center justify-between px-4 sm:px-6 z-20">
+            <div class="flex items-center gap-3">
+                <button @click="sidebarOpen = !sidebarOpen" class="sm:hidden text-slate-500 hover:text-slate-700 p-1.5">
+                    <i class="fa-solid fa-bars text-lg"></i>
+                </button>
+                <img src="logo.png" alt="Logo" class="w-7 h-7 rounded-lg object-cover border border-slate-100" onerror="this.style.display='none'">
+                <h1 class="text-base sm:text-lg font-bold text-slate-800 tracking-wide flex items-center">
+                    波幅探长
+                    <span class="text-[10px] sm:text-xs text-slate-400 font-normal ml-2 bg-slate-100 px-2 py-0.5 rounded">管理后台</span>
+                </h1>
+            </div>
+            <div class="flex items-center gap-3 sm:gap-4">
+                <button @click="refreshAll" :disabled="loading" class="text-slate-400 hover:theme-text transition text-sm hidden sm:inline-flex items-center gap-1.5" title="刷新全部数据">
+                    <i class="fa-solid fa-rotate-right" :class="{'animate-spin': loading}"></i>
+                    <span class="text-xs">刷新</span>
+                </button>
+                <div class="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    已鉴权
+                </div>
+                <button @click="logout" class="text-sm text-slate-500 hover:text-red-500 transition-colors">
+                    <i class="fa-solid fa-power-off mr-1"></i><span class="hidden sm:inline">安全退出</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden relative">
+            <!-- 移动端遮罩 -->
+            <div v-if="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 bg-black/40 z-30 sm:hidden"></div>
+
+            <!-- 左侧侧边栏 -->
+            <aside class="fixed sm:static inset-y-0 left-0 w-56 bg-white border-r border-slate-200 flex flex-col py-4 z-40 shadow-lg sm:shadow-sm shrink-0 transition-transform duration-300"
+                   :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'">
+                <nav class="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
+                    <div @click="switchTab('dashboard')" class="nav-item flex items-center px-6 py-3" :class="{'active': currentTab === 'dashboard'}">
+                        <i class="fa-solid fa-chart-pie"></i> 数据概览
+                    </div>
+                    <div @click="switchTab('users')" class="nav-item flex items-center px-6 py-3" :class="{'active': currentTab === 'users'}">
+                        <i class="fa-solid fa-users"></i> 用户管理
+                        <span v-if="users.length" class="ml-auto text-[10px] text-slate-400 font-mono">{{ users.length }}</span>
+                    </div>
+                    <div @click="switchTab('orders')" class="nav-item flex items-center px-6 py-3" :class="{'active': currentTab === 'orders'}">
+                        <i class="fa-solid fa-file-invoice-dollar"></i> 订单审核
+                        <span v-if="pendingOrdersCount > 0" class="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold badge-pulse">{{ pendingOrdersCount }}</span>
+                    </div>
+                    <div @click="switchTab('plans')" class="nav-item flex items-center px-6 py-3" :class="{'active': currentTab === 'plans'}">
+                        <i class="fa-solid fa-tags"></i> 套餐管理
+                    </div>
+                    <div @click="switchTab('tickets')" class="nav-item flex items-center px-6 py-3" :class="{'active': currentTab === 'tickets'}">
+                        <i class="fa-solid fa-headset"></i> 答疑工单
+                        <span v-if="pendingTicketsCount > 0" class="ml-auto bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold badge-pulse">{{ pendingTicketsCount }}</span>
+                    </div>
+                    <div @click="switchTab('referrals')" class="nav-item flex items-center px-6 py-3" :class="{'active': currentTab === 'referrals'}">
+                        <i class="fa-solid fa-share-nodes"></i> 邀请关系
+                    </div>
+                </nav>
+                <div class="px-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400 text-center space-y-1">
+                    <div>对应前端：数据看板 / 个人中心</div>
+                    <div>购买套餐 / 在线客服 / 邀请奖励</div>
+                    <div class="text-slate-300">API: vip.hahagw.eu.org</div>
+                </div>
+            </aside>
+
+            <!-- 右侧内容区 -->
+            <main class="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 relative bg-slate-50/50">
+                <!-- 全局 Loading 遮罩（轻量） -->
+                <div v-if="loading && !isInitialLoad" class="absolute top-3 right-4 z-10 flex items-center gap-2 bg-white/90 border border-slate-200 shadow-sm rounded-full px-3 py-1.5 text-xs text-slate-500">
+                    <i class="fa-solid fa-circle-notch animate-spin theme-text"></i> 同步中…
+                </div>
+
+                <div v-if="isInitialLoad && loading" class="h-full flex flex-col items-center justify-center text-slate-400">
+                    <i class="fa-solid fa-circle-notch animate-spin text-3xl mb-3 theme-text"></i>
+                    <p class="text-sm">读取云端数据中...</p>
+                </div>
+
+                <div v-else class="max-w-7xl mx-auto">
+
+                    <!-- ================= 面板 0：数据概览 ================= -->
+                    <div v-show="currentTab === 'dashboard'" class="space-y-5">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-800">运营数据概览</h2>
+                                <p class="text-xs text-slate-400 mt-0.5">映射首页：数据看板 · 会员体系 · 订单支付 · 邀请奖励 · 客服工单</p>
+                            </div>
+                            <button @click="refreshAll" class="text-sm bg-white border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-lg text-slate-600 shadow-sm transition">
+                                <i class="fa-solid fa-rotate-right mr-1"></i> 刷新全部
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                            <div class="stat-card bg-white rounded-xl border border-slate-100 shadow-sm p-4 sm:p-5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-400">注册用户</span>
+                                    <i class="fa-solid fa-users text-slate-300"></i>
+                                </div>
+                                <div class="text-2xl font-bold text-slate-800">{{ users.length }}</div>
+                                <div class="text-[11px] text-slate-400 mt-1">VIP 活跃 {{ vipUserCount }} 人</div>
+                            </div>
+                            <div class="stat-card bg-white rounded-xl border border-slate-100 shadow-sm p-4 sm:p-5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-400">待审订单</span>
+                                    <i class="fa-solid fa-clock text-orange-300"></i>
+                                </div>
+                                <div class="text-2xl font-bold" :class="pendingOrdersCount > 0 ? 'text-orange-500' : 'text-slate-800'">{{ pendingOrdersCount }}</div>
+                                <div class="text-[11px] text-slate-400 mt-1">累计订单 {{ orders.length }} 笔</div>
+                            </div>
+                            <div class="stat-card bg-white rounded-xl border border-slate-100 shadow-sm p-4 sm:p-5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-400">已通过营收</span>
+                                    <i class="fa-solid fa-yen-sign text-emerald-300"></i>
+                                </div>
+                                <div class="text-2xl font-bold text-emerald-600">¥{{ approvedRevenue.toFixed(2) }}</div>
+                                <div class="text-[11px] text-slate-400 mt-1">已通过 {{ approvedOrderCount }} 笔</div>
+                            </div>
+                            <div class="stat-card bg-white rounded-xl border border-slate-100 shadow-sm p-4 sm:p-5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-400">待回复工单</span>
+                                    <i class="fa-solid fa-headset text-orange-300"></i>
+                                </div>
+                                <div class="text-2xl font-bold" :class="pendingTicketsCount > 0 ? 'text-orange-500' : 'text-slate-800'">{{ pendingTicketsCount }}</div>
+                                <div class="text-[11px] text-slate-400 mt-1">工单总计 {{ tickets.length }}</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <!-- 套餐销售分布 -->
+                            <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                                <h3 class="font-medium text-slate-700 mb-4 flex items-center gap-2">
+                                    <i class="fa-solid fa-chart-bar theme-text"></i> 套餐销量（已通过）
+                                </h3>
+                                <div v-if="planSalesStats.length === 0" class="text-center text-slate-400 text-sm py-8">暂无已通过订单</div>
+                                <div v-else class="space-y-3">
+                                    <div v-for="s in planSalesStats" :key="s.id" class="flex items-center gap-3">
+                                        <div class="w-24 text-xs text-slate-600 truncate">{{ s.name }}</div>
+                                        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <div class="h-full theme-bg rounded-full transition-all" :style="{ width: (s.count / maxPlanSales * 100) + '%' }"></div>
+                                        </div>
+                                        <div class="text-xs font-mono text-slate-500 w-16 text-right">{{ s.count }} 单</div>
+                                        <div class="text-xs font-mono text-emerald-600 w-20 text-right">¥{{ s.revenue.toFixed(0) }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 快捷入口 & 业务映射说明 -->
+                            <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                                <h3 class="font-medium text-slate-700 mb-4 flex items-center gap-2">
+                                    <i class="fa-solid fa-link theme-text"></i> 首页功能映射
+                                </h3>
+                                <ul class="space-y-2.5 text-sm text-slate-600">
+                                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-xs"></i><span><b>数据看板</b>：前端读取 etf 数据 + 图表；后台管理用户 VIP 权限控制图表解锁</span></li>
+                                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-xs"></i><span><b>登录/注册</b>：邮箱验证码 + Turnstile；新注册送 1 天 VIP；推荐码双方各 +3 天</span></li>
+                                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-xs"></i><span><b>个人中心</b>：VIP 天数、订单列表、邀请码、改密 → 本后台用户/订单/邀请</span></li>
+                                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-xs"></i><span><b>购买套餐</b>：浮动金额 V 免签；本后台订单审核发放天数</span></li>
+                                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-xs"></i><span><b>在线客服</b>：前端聊天 + 工单；本后台「答疑工单」处理</span></li>
+                                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-xs"></i><span><b>前三免费</b>：前端按排序自动标记前 3 只 ETF 免费看图</span></li>
+                                </ul>
+                                <div class="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
+                                    <button @click="switchTab('orders')" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg hover:opacity-90">去审订单</button>
+                                    <button @click="switchTab('tickets')" class="text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:opacity-90">去回工单</button>
+                                    <button @click="switchTab('users')" class="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200">用户列表</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 最近待处理 -->
+                        <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div class="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center">
+                                <span class="font-medium text-slate-700 text-sm">最近待审核订单</span>
+                                <button @click="switchTab('orders')" class="text-xs theme-text hover:underline">全部订单 →</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 text-slate-500 text-xs">
+                                        <tr>
+                                            <th class="py-3 px-5 font-medium">时间</th>
+                                            <th class="py-3 px-5 font-medium">用户</th>
+                                            <th class="py-3 px-5 font-medium">套餐</th>
+                                            <th class="py-3 px-5 font-medium">金额</th>
+                                            <th class="py-3 px-5 font-medium text-orange-500">凭证后6位</th>
+                                            <th class="py-3 px-5 font-medium text-right">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50">
+                                        <tr v-for="order in recentPendingOrders" :key="order.id" class="hover:bg-slate-50">
+                                            <td class="py-3 px-5 text-xs text-slate-400">{{ formatDate(order.created_at) }}</td>
+                                            <td class="py-3 px-5 font-medium text-slate-700">{{ order.username }}</td>
+                                            <td class="py-3 px-5"><span class="bg-slate-100 px-2 py-0.5 rounded text-xs">{{ getPlanName(order.plan_id) }}</span></td>
+                                            <td class="py-3 px-5 font-bold">¥{{ (order.amount || 0).toFixed(2) }}</td>
+                                            <td class="py-3 px-5 font-mono font-bold text-orange-500 tracking-widest">{{ order.tx_id_last6 }}</td>
+                                            <td class="py-3 px-5 text-right space-x-2">
+                                                <button @click="approveOrder(order)" class="theme-bg text-white text-xs px-3 py-1 rounded-lg">通过</button>
+                                                <button @click="rejectOrder(order)" class="bg-slate-100 text-slate-500 text-xs px-3 py-1 rounded-lg hover:bg-red-50 hover:text-red-500">驳回</button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="recentPendingOrders.length === 0">
+                                            <td colspan="6" class="py-10 text-center text-slate-400 text-sm">暂无待审核订单 🎉</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================= 面板 1：用户管理 ================= -->
+                    <div v-show="currentTab === 'users'" class="space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-800">用户管理中心</h2>
+                                <p class="text-xs text-slate-400 mt-0.5">对应前端：登录注册 · 个人中心 VIP · 邀请码 · 修改密码</p>
+                            </div>
+                            <div class="flex gap-2 w-full sm:w-auto flex-wrap">
+                                <input v-model="userSearchQuery" type="text" placeholder="搜索邮箱 / 邀请码 / IP..."
+                                       class="px-3.5 py-2 border border-slate-200 rounded-lg text-sm bg-white flex-1 sm:w-56 shadow-sm">
+                                <select v-model="userVipFilter" class="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white shadow-sm">
+                                    <option value="all">全部用户</option>
+                                    <option value="vip">仅 VIP</option>
+                                    <option value="free">仅免费</option>
+                                    <option value="dupip">重复 IP</option>
+                                </select>
+                                <button @click="fetchUsers" class="text-sm bg-white border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-lg text-slate-600 shadow-sm transition">
+                                    <i class="fa-solid fa-rotate-right mr-1"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-100 shadow-sm rounded-xl overflow-hidden">
+                            <div class="overflow-x-auto custom-scrollbar">
+                                <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                        <tr>
+                                            <th class="py-3.5 px-5 font-medium cursor-pointer hover:bg-slate-100" @click="toggleUserSort('id')">ID / 注册时间 <i class="fa-solid fa-sort text-[10px] opacity-40"></i></th>
+                                            <th class="py-3.5 px-5 font-medium">注册邮箱</th>
+                                            <th class="py-3.5 px-5 font-medium">注册 IP</th>
+                                            <th class="py-3.5 px-5 font-medium cursor-pointer hover:bg-slate-100" @click="toggleUserSort('vip')">VIP天数 <i class="fa-solid fa-sort text-[10px] opacity-40"></i></th>
+                                            <th class="py-3.5 px-5 font-medium">专属邀请码</th>
+                                            <th class="py-3.5 px-5 font-medium text-right">管理操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50">
+                                        <tr v-for="u in filteredUsers" :key="u.id" class="hover:bg-slate-50 transition-colors">
+                                            <td class="py-3.5 px-5 text-xs text-slate-400">
+                                                ID:{{ u.id }}<br>{{ formatDate(u.created_at) }}
+                                            </td>
+                                            <td class="py-3.5 px-5">
+                                                <div class="font-bold text-slate-700">{{ u.username }}</div>
+                                                <div v-if="u.referred_by || u.ref_by" class="text-[10px] text-slate-400 mt-0.5">邀请人: {{ u.referred_by || u.ref_by }}</div>
+                                            </td>
+                                            <td class="py-3.5 px-5 font-mono text-xs text-slate-500">
+                                                {{ u.ip || u.register_ip || '未知' }}
+                                                <span v-if="isDuplicateIP(u.ip || u.register_ip)" class="ml-1 text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">多账号</span>
+                                            </td>
+                                            <td class="py-3.5 px-5">
+                                                <span :class="u.vip_days_left > 0 ? 'text-emerald-500 font-bold' : 'text-slate-400'">{{ u.vip_days_left ?? 0 }} 天</span>
+                                            </td>
+                                            <td class="py-3.5 px-5 font-mono text-xs text-slate-600 font-bold tracking-wider">{{ u.referral_code || '-' }}</td>
+                                            <td class="py-3.5 px-5 text-right space-x-1.5">
+                                                <button @click="openUserDetail(u)" class="text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-100 px-2.5 py-1.5 rounded-lg transition font-medium" title="详情">
+                                                    <i class="fa-solid fa-eye"></i>
+                                                </button>
+                                                <button @click="openChargeModal(u)" class="text-xs bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 px-2.5 py-1.5 rounded-lg transition font-medium">充天数</button>
+                                                <button @click="deleteUser(u)" class="text-xs bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 px-2.5 py-1.5 rounded-lg transition font-medium">删除</button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="filteredUsers.length === 0">
+                                            <td colspan="6" class="py-12 text-center text-slate-400">暂无符合条件的用户记录</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="px-5 py-2.5 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 flex justify-between">
+                                <span>显示 {{ filteredUsers.length }} / {{ users.length }} 人</span>
+                                <span>VIP {{ vipUserCount }} · 免费 {{ users.length - vipUserCount }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================= 面板 2：订单审核 ================= -->
+                    <div v-show="currentTab === 'orders'" class="space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-800">支付订单审核</h2>
+                                <p class="text-xs text-slate-400 mt-0.5">对应前端：购买套餐 · 浮动金额 V 免签 · 手动补填单号后 6 位</p>
+                            </div>
+                            <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                                <div class="flex bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm text-xs">
+                                    <button @click="orderStatusFilter = 'all'" class="px-3 py-2 transition" :class="orderStatusFilter === 'all' ? 'theme-bg text-white' : 'text-slate-600 hover:bg-slate-50'">全部</button>
+                                    <button @click="orderStatusFilter = 'pending'" class="px-3 py-2 transition border-l border-slate-100" :class="orderStatusFilter === 'pending' ? 'bg-orange-500 text-white' : 'text-slate-600 hover:bg-slate-50'">
+                                        待审 <span v-if="pendingOrdersCount" class="font-bold">({{ pendingOrdersCount }})</span>
+                                    </button>
+                                    <button @click="orderStatusFilter = 'approved'" class="px-3 py-2 transition border-l border-slate-100" :class="orderStatusFilter === 'approved' ? 'bg-emerald-500 text-white' : 'text-slate-600 hover:bg-slate-50'">已通过</button>
+                                    <button @click="orderStatusFilter = 'cancelled'" class="px-3 py-2 transition border-l border-slate-100" :class="orderStatusFilter === 'cancelled' ? 'bg-slate-500 text-white' : 'text-slate-600 hover:bg-slate-50'">已驳回</button>
+                                </div>
+                                <input v-model="orderSearchQuery" type="text" placeholder="邮箱 / 单号后6位..."
+                                       class="px-3.5 py-2 border border-slate-200 rounded-lg text-sm bg-white flex-1 sm:w-48 shadow-sm">
+                                <button @click="fetchOrders" class="text-sm bg-white border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-lg text-slate-600 shadow-sm transition">
+                                    <i class="fa-solid fa-rotate-right mr-1"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-100 shadow-sm rounded-xl overflow-hidden">
+                            <div class="overflow-x-auto custom-scrollbar">
+                                <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                        <tr>
+                                            <th class="py-3.5 px-5 font-medium">时间</th>
+                                            <th class="py-3.5 px-5 font-medium">用户</th>
+                                            <th class="py-3.5 px-5 font-medium">套餐 / 天数</th>
+                                            <th class="py-3.5 px-5 font-medium">应收金额</th>
+                                            <th class="py-3.5 px-5 font-medium text-orange-500">凭证后6位</th>
+                                            <th class="py-3.5 px-5 font-medium">状态</th>
+                                            <th class="py-3.5 px-5 font-medium text-right">审核操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50">
+                                        <tr v-for="order in filteredOrders" :key="order.id" class="hover:bg-slate-50 transition-colors">
+                                            <td class="py-3.5 px-5 text-xs text-slate-400">{{ formatDate(order.created_at) }}</td>
+                                            <td class="py-3.5 px-5 font-bold text-slate-700">{{ order.username }}</td>
+                                            <td class="py-3.5 px-5">
+                                                <span class="bg-slate-100 px-2.5 py-1 rounded-lg text-xs text-slate-600 font-medium">{{ getPlanName(order.plan_id) }}</span>
+                                                <span class="text-[10px] text-slate-400 ml-1">+{{ getPlanDays(order.plan_id) }}天</span>
+                                            </td>
+                                            <td class="py-3.5 px-5 font-bold text-slate-800">¥{{ (order.amount || 0).toFixed(2) }}</td>
+                                            <td class="py-3.5 px-5 font-mono font-bold text-orange-500 tracking-widest">{{ order.tx_id_last6 || '-' }}</td>
+                                            <td class="py-3.5 px-5">
+                                                <span v-if="order.status === 'pending'" class="text-xs bg-orange-100 text-orange-600 px-2.5 py-1 rounded-full font-medium">待审核</span>
+                                                <span v-else-if="order.status === 'approved'" class="text-xs bg-emerald-100 text-emerald-600 px-2.5 py-1 rounded-full font-medium">已通过</span>
+                                                <span v-else class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium">已驳回</span>
+                                            </td>
+                                            <td class="py-3.5 px-5 text-right space-x-2">
+                                                <template v-if="order.status === 'pending'">
+                                                    <button @click="approveOrder(order)" class="theme-bg hover:opacity-90 text-white text-xs font-medium px-3.5 py-1.5 rounded-lg shadow-sm transition">确认通过</button>
+                                                    <button @click="rejectOrder(order)" class="bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-500 text-xs font-medium px-3.5 py-1.5 rounded-lg transition">驳回</button>
+                                                </template>
+                                                <span v-else class="text-slate-300 text-xs">-</span>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="filteredOrders.length === 0">
+                                            <td colspan="7" class="py-12 text-center text-slate-400">暂无相关订单记录</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="px-5 py-2.5 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 flex justify-between">
+                                <span>显示 {{ filteredOrders.length }} 笔</span>
+                                <span>已通过营收 ¥{{ approvedRevenue.toFixed(2) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================= 面板 3：套餐管理 ================= -->
+                    <div v-show="currentTab === 'plans'" class="space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-800">VIP 套餐动态管理</h2>
+                                <p class="text-xs text-slate-400 mt-0.5">对应前端：购买套餐页实时读取 · 浮动金额基于 price 生成</p>
+                            </div>
+                            <button @click="openPlanModal()" class="text-sm theme-bg hover:opacity-90 px-4 py-2 rounded-lg text-white font-medium shadow-sm transition">
+                                <i class="fa-solid fa-plus mr-1"></i> 新增套餐
+                            </button>
+                        </div>
+
+                        <div class="bg-white border border-slate-100 shadow-sm rounded-xl overflow-hidden">
+                            <div class="overflow-x-auto custom-scrollbar">
+                                <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                        <tr>
+                                            <th class="py-3.5 px-5 font-medium">标识 ID</th>
+                                            <th class="py-3.5 px-5 font-medium">套餐名称</th>
+                                            <th class="py-3.5 px-5 font-medium">价格</th>
+                                            <th class="py-3.5 px-5 font-medium">发货天数</th>
+                                            <th class="py-3.5 px-5 font-medium">角标签</th>
+                                            <th class="py-3.5 px-5 font-medium">排序</th>
+                                            <th class="py-3.5 px-5 font-medium text-right">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50">
+                                        <tr v-for="p in sortedPlans" :key="p.id" class="hover:bg-slate-50 transition-colors">
+                                            <td class="py-3.5 px-5 font-mono text-slate-400">{{ p.id }}</td>
+                                            <td class="py-3.5 px-5 font-bold text-slate-700">{{ p.name }}</td>
+                                            <td class="py-3.5 px-5 font-bold text-slate-800">¥{{ (p.price || 0).toFixed(2) }}</td>
+                                            <td class="py-3.5 px-5 text-emerald-600 font-bold">+{{ p.days }} 天</td>
+                                            <td class="py-3.5 px-5">
+                                                <span v-if="p.tag" class="bg-orange-100 text-orange-600 px-2 py-0.5 rounded text-xs font-medium">{{ p.tag }}</span>
+                                                <span v-else class="text-slate-300">-</span>
+                                            </td>
+                                            <td class="py-3.5 px-5 font-mono text-slate-500">{{ p.sort_order ?? 0 }}</td>
+                                            <td class="py-3.5 px-5 text-right space-x-3">
+                                                <button @click="openPlanModal(p)" class="text-slate-400 hover:theme-text transition" title="编辑"><i class="fa-solid fa-pen-to-square"></i></button>
+                                                <button @click="deletePlan(p)" class="text-slate-400 hover:text-red-500 transition" title="删除"><i class="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="plans.length === 0">
+                                            <td colspan="7" class="py-12 text-center text-slate-400">暂无套餐数据，请新增</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 leading-relaxed">
+                            <i class="fa-solid fa-circle-info mr-1"></i>
+                            前端默认兜底套餐：首充体验 ¥1.88/2天、体验周卡 ¥8.80/7天、包月畅享 ¥18.80/30天、季度实惠 ¥48.80/90天。
+                            支付时会在 base price 上加 0.01~0.05 元浮动作为校验金额，审核时以订单 amount 为准，发货天数取本页配置的 days。
+                        </div>
+                    </div>
+
+                    <!-- ================= 面板 4：答疑工单 ================= -->
+                    <div v-show="currentTab === 'tickets'" class="space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-800">答疑工单处理</h2>
+                                <p class="text-xs text-slate-400 mt-0.5">对应前端：在线客服聊天 · 充值异常工单 · 使用说明中的客服入口</p>
+                            </div>
+                            <div class="flex gap-2 flex-wrap">
+                                <div class="flex bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm text-xs">
+                                    <button @click="ticketStatusFilter = 'all'" class="px-3 py-2" :class="ticketStatusFilter === 'all' ? 'theme-bg text-white' : 'text-slate-600 hover:bg-slate-50'">全部</button>
+                                    <button @click="ticketStatusFilter = 'pending'" class="px-3 py-2 border-l border-slate-100" :class="ticketStatusFilter === 'pending' ? 'bg-orange-500 text-white' : 'text-slate-600 hover:bg-slate-50'">待回复</button>
+                                    <button @click="ticketStatusFilter = 'replied'" class="px-3 py-2 border-l border-slate-100" :class="ticketStatusFilter === 'replied' ? 'bg-slate-500 text-white' : 'text-slate-600 hover:bg-slate-50'">已回复</button>
+                                </div>
+                                <button v-if="tickets.some(t => t.status === 'replied')" @click="clearTickets"
+                                        class="text-sm bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 px-3 py-2 rounded-lg shadow-sm transition">
+                                    <i class="fa-solid fa-trash-can mr-1"></i> 清理已回复
+                                </button>
+                                <button @click="fetchTickets" class="text-sm bg-white border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-lg text-slate-600 shadow-sm transition">
+                                    <i class="fa-solid fa-rotate-right mr-1"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-100 shadow-sm rounded-xl overflow-hidden">
+                            <div class="overflow-x-auto custom-scrollbar">
+                                <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                        <tr>
+                                            <th class="py-3.5 px-5 font-medium w-40">提交时间</th>
+                                            <th class="py-3.5 px-5 font-medium w-36">提问用户</th>
+                                            <th class="py-3.5 px-5 font-medium w-20">等级</th>
+                                            <th class="py-3.5 px-5 font-medium">主题概览</th>
+                                            <th class="py-3.5 px-5 font-medium w-24">状态</th>
+                                            <th class="py-3.5 px-5 font-medium text-right w-36">管理操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50">
+                                        <tr v-for="ticket in filteredTickets" :key="ticket.id" class="hover:bg-slate-50 transition-colors">
+                                            <td class="py-3.5 px-5 text-xs text-slate-400">{{ formatDate(ticket.created_at) }}</td>
+                                            <td class="py-3.5 px-5 font-bold text-slate-700">{{ ticket.username }}</td>
+                                            <td class="py-3.5 px-5">
+                                                <span class="text-xs font-bold uppercase"
+                                                      :class="{'text-red-500': ticket.level === 'high', 'text-orange-500': ticket.level === 'medium', 'text-slate-400': !ticket.level || ticket.level === 'low'}">
+                                                    {{ ticket.level || 'low' }}
+                                                </span>
+                                            </td>
+                                            <td class="py-3.5 px-5">
+                                                <div class="font-medium text-slate-700 truncate max-w-[280px]">{{ ticket.subject }}</div>
+                                            </td>
+                                            <td class="py-3.5 px-5">
+                                                <span v-if="ticket.status === 'pending'" class="text-xs bg-orange-100 text-orange-600 px-2.5 py-1 rounded-full font-medium">待回复</span>
+                                                <span v-else class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium">已回复</span>
+                                            </td>
+                                            <td class="py-3.5 px-5 text-right space-x-2">
+                                                <button v-if="ticket.status === 'pending'" @click="openReplyModal(ticket)"
+                                                        class="bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100 text-xs font-medium px-3 py-1.5 rounded-lg transition">解答</button>
+                                                <button v-else @click="openReplyModal(ticket)"
+                                                        class="bg-slate-50 text-slate-500 hover:bg-slate-100 text-xs font-medium px-3 py-1.5 rounded-lg transition">查看</button>
+                                                <button @click="deleteTicket(ticket.id)" class="text-slate-300 hover:text-red-500 transition px-1.5"><i class="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="filteredTickets.length === 0">
+                                            <td colspan="6" class="py-12 text-center text-slate-400">暂无工单记录</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================= 面板 5：邀请关系 ================= -->
+                    <div v-show="currentTab === 'referrals'" class="space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-800">邀请关系与奖励</h2>
+                                <p class="text-xs text-slate-400 mt-0.5">对应前端：个人中心专属邀请码 · 邀请与被邀请双方各送 3 天 VIP</p>
+                            </div>
+                            <button @click="fetchUsers" class="text-sm bg-white border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-lg text-slate-600 shadow-sm transition">
+                                <i class="fa-solid fa-rotate-right mr-1"></i> 刷新
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                                <div class="text-xs text-slate-400 mb-1">持有邀请码用户</div>
+                                <div class="text-2xl font-bold text-slate-800">{{ usersWithRefCode }}</div>
+                            </div>
+                            <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                                <div class="text-xs text-slate-400 mb-1">规则说明</div>
+                                <div class="text-sm font-medium theme-text">双方各 +3 天 VIP</div>
+                            </div>
+                            <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                                <div class="text-xs text-slate-400 mb-1">新注册赠送</div>
+                                <div class="text-sm font-medium text-emerald-600">1 天免费 VIP 体验</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-100 shadow-sm rounded-xl overflow-hidden">
+                            <div class="overflow-x-auto custom-scrollbar">
+                                <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+                                    <thead class="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                        <tr>
+                                            <th class="py-3.5 px-5 font-medium">用户邮箱</th>
+                                            <th class="py-3.5 px-5 font-medium">专属邀请码</th>
+                                            <th class="py-3.5 px-5 font-medium">VIP 天数</th>
+                                            <th class="py-3.5 px-5 font-medium">注册时间</th>
+                                            <th class="py-3.5 px-5 font-medium">注册 IP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50">
+                                        <tr v-for="u in referralUsers" :key="u.id" class="hover:bg-slate-50">
+                                            <td class="py-3.5 px-5 font-bold text-slate-700">{{ u.username }}</td>
+                                            <td class="py-3.5 px-5 font-mono text-sm font-bold tracking-widest theme-text">{{ u.referral_code }}</td>
+                                            <td class="py-3.5 px-5" :class="u.vip_days_left > 0 ? 'text-emerald-500 font-bold' : 'text-slate-400'">{{ u.vip_days_left ?? 0 }} 天</td>
+                                            <td class="py-3.5 px-5 text-xs text-slate-400">{{ formatDate(u.created_at) }}</td>
+                                            <td class="py-3.5 px-5 font-mono text-xs text-slate-500">{{ u.ip || u.register_ip || '-' }}</td>
+                                        </tr>
+                                        <tr v-if="referralUsers.length === 0">
+                                            <td colspan="5" class="py-12 text-center text-slate-400">暂无邀请码数据</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+
+        <!-- ========== Toast ========== -->
+        <div class="fixed top-4 right-4 z-[200] space-y-2 pointer-events-none">
+            <div v-for="t in toasts" :key="t.id"
+                 class="toast-enter pointer-events-auto px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium border flex items-center gap-2 min-w-[200px] max-w-sm"
+                 :class="t.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (t.type === 'error' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-slate-700 border-slate-200')">
+                <i :class="t.type === 'success' ? 'fa-solid fa-circle-check' : (t.type === 'error' ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-info')"></i>
+                <span class="flex-1">{{ t.msg }}</span>
+            </div>
+        </div>
+
+        <!-- ========== 充天数弹窗 ========== -->
+        <div v-if="chargeModalVisible" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay" @click.self="chargeModalVisible = false">
+            <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-medium text-slate-700"><i class="fa-solid fa-gift theme-text mr-2"></i> 手动充值 VIP 天数</h3>
+                    <button @click="chargeModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="bg-slate-50 rounded-lg p-3 text-sm">
+                        <div class="text-xs text-slate-400 mb-0.5">目标用户</div>
+                        <div class="font-bold text-slate-700">{{ chargeTarget?.username }}</div>
+                        <div class="text-xs text-slate-400 mt-1">当前剩余：{{ chargeTarget?.vip_days_left ?? 0 }} 天</div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">增加天数（可为负扣减）</label>
+                        <input v-model.number="chargeDays" type="number" class="w-full border border-slate-200 px-3.5 py-2.5 rounded-lg text-sm" placeholder="例如 7">
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button v-for="d in [1, 3, 7, 30, 90]" :key="d" @click="chargeDays = d"
+                                class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 hover:theme-border hover:theme-text transition">+{{ d }}</button>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+                    <button @click="chargeModalVisible = false" class="px-5 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-200 transition">取消</button>
+                    <button @click="submitCharge" :disabled="chargeLoading" class="px-5 py-2 rounded-lg text-sm text-white font-medium theme-bg hover:opacity-90 shadow-sm transition disabled:opacity-50">
+                        {{ chargeLoading ? '提交中…' : '确认充值' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 用户详情弹窗 ========== -->
+        <div v-if="userDetailVisible" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay" @click.self="userDetailVisible = false">
+            <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-medium text-slate-700"><i class="fa-solid fa-user theme-text mr-2"></i> 用户详情</h3>
+                    <button @click="userDetailVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-3 text-sm" v-if="userDetail">
+                    <div class="flex justify-between"><span class="text-slate-400">ID</span><span class="font-mono">{{ userDetail.id }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">邮箱</span><span class="font-bold">{{ userDetail.username }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">VIP 剩余</span><span :class="userDetail.vip_days_left > 0 ? 'text-emerald-500 font-bold' : 'text-slate-400'">{{ userDetail.vip_days_left ?? 0 }} 天</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">邀请码</span><span class="font-mono font-bold tracking-wider">{{ userDetail.referral_code || '-' }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">注册 IP</span><span class="font-mono text-xs">{{ userDetail.ip || userDetail.register_ip || '未知' }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">注册时间</span><span class="text-xs">{{ formatDate(userDetail.created_at) }}</span></div>
+                    <div class="pt-3 border-t border-slate-100">
+                        <div class="text-xs text-slate-400 mb-2">该用户相关订单</div>
+                        <div v-if="userOrders.length === 0" class="text-xs text-slate-400">无订单</div>
+                        <div v-else class="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+                            <div v-for="o in userOrders" :key="o.id" class="flex justify-between text-xs bg-slate-50 rounded px-2.5 py-1.5">
+                                <span>{{ getPlanName(o.plan_id) }} · ¥{{ (o.amount||0).toFixed(2) }}</span>
+                                <span :class="o.status === 'approved' ? 'text-emerald-500' : (o.status === 'pending' ? 'text-orange-500' : 'text-slate-400')">{{ formatOrderStatus(o.status) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-slate-50 flex justify-end gap-2 border-t border-slate-100">
+                    <button @click="openChargeModal(userDetail); userDetailVisible = false" class="px-4 py-2 rounded-lg text-sm theme-bg text-white">充天数</button>
+                    <button @click="userDetailVisible = false" class="px-4 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-200">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 回复工单弹窗 ========== -->
+        <div v-if="replyModalVisible" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
+            <div class="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                    <h3 class="font-medium text-slate-700">
+                        <i class="fa-solid fa-headset text-orange-500 mr-2"></i>
+                        {{ currentTicket.status === 'pending' ? '解答用户工单' : '工单处理详情' }}
+                    </h3>
+                    <button @click="replyModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-5 overflow-y-auto custom-scrollbar">
+                    <div>
+                        <div class="text-xs text-slate-400 mb-1 flex justify-between">
+                            <span>提问用户：{{ currentTicket.username }}</span>
+                            <span>{{ formatDate(currentTicket.created_at) }}</span>
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-600">
+                            <p class="font-bold text-slate-700 mb-2">{{ currentTicket.subject }}</p>
+                            <p class="whitespace-pre-wrap">{{ currentTicket.message }}</p>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-2">官方回复内容：</label>
+                        <textarea v-model="replyMessage" :readonly="currentTicket.status !== 'pending'" rows="4"
+                                  :placeholder="currentTicket.status === 'pending' ? '请输入详细解答，提交后用户将在前端看到…' : '无回复内容记录'"
+                                  class="w-full border border-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm custom-scrollbar bg-white"></textarea>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
+                    <button @click="replyModalVisible = false" class="px-5 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-200 transition">关闭</button>
+                    <button v-if="currentTicket.status === 'pending'" @click="submitReply" :disabled="replyLoading"
+                            class="px-5 py-2 rounded-lg text-sm text-white font-medium bg-orange-500 hover:bg-orange-600 shadow-sm transition disabled:opacity-50">
+                        {{ replyLoading ? '提交中…' : '提交回复并结单' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 套餐编辑弹窗 ========== -->
+        <div v-if="planModalVisible" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
+            <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl flex flex-col overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-medium text-slate-700">
+                        <i class="fa-solid fa-tags theme-text mr-2"></i>
+                        {{ planForm.isEdit ? '编辑套餐' : '新增套餐' }}
+                    </h3>
+                    <button @click="planModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">唯一标识 ID（如 month）</label>
+                        <input v-model="planForm.id" :disabled="planForm.isEdit" type="text"
+                               class="w-full border border-slate-200 px-3.5 py-2 rounded-lg text-sm disabled:bg-slate-50 disabled:text-slate-400">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">套餐显示名称</label>
+                        <input v-model="planForm.name" type="text" class="w-full border border-slate-200 px-3.5 py-2 rounded-lg text-sm text-slate-700">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">价格（元）</label>
+                            <input v-model.number="planForm.price" type="number" step="0.01" class="w-full border border-slate-200 px-3.5 py-2 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">发货天数</label>
+                            <input v-model.number="planForm.days" type="number" class="w-full border border-slate-200 px-3.5 py-2 rounded-lg text-sm">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">角标标签（选填）</label>
+                        <input v-model="planForm.tag" type="text" placeholder="如：最推荐" class="w-full border border-slate-200 px-3.5 py-2 rounded-lg text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">展示排序（越小越靠前）</label>
+                        <input v-model.number="planForm.sort_order" type="number" class="w-full border border-slate-200 px-3.5 py-2 rounded-lg text-sm">
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+                    <button @click="planModalVisible = false" class="px-5 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-200 transition">取消</button>
+                    <button @click="submitPlan" :disabled="planLoading" class="px-5 py-2 rounded-lg text-sm text-white font-medium theme-bg hover:opacity-90 shadow-sm transition disabled:opacity-50">
+                        {{ planLoading ? '保存中…' : '保存配置' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+
+<script>
+const { createApp, ref, computed, reactive, onMounted, onUnmounted } = Vue;
+const API_BASE = "https://vip.hahagw.eu.org";
+
+createApp({
+    setup() {
+        const adminSecret = ref(localStorage.getItem('admin_secret') || '');
+        const isAuthenticated = ref(false);
+        const currentTab = ref('dashboard');
+        const loading = ref(false);
+        const isInitialLoad = ref(true);
+        const errorMsg = ref('');
+        const sidebarOpen = ref(false);
+
+        const orders = ref([]);
+        const users = ref([]);
+        const tickets = ref([]);
+        const plans = ref([]);
+
+        const userSearchQuery = ref('');
+        const userVipFilter = ref('all');
+        const userSortKey = ref('id');
+        const userSortAsc = ref(false);
+        const orderSearchQuery = ref('');
+        const orderStatusFilter = ref('pending');
+        const ticketStatusFilter = ref('all');
+
+        const replyModalVisible = ref(false);
+        const currentTicket = ref(null);
+        const replyMessage = ref('');
+        const replyLoading = ref(false);
+
+        const planModalVisible = ref(false);
+        const planLoading = ref(false);
+        const planForm = reactive({ id: '', name: '', price: 0, days: 0, tag: '', sort_order: 0, isEdit: false });
+
+        const chargeModalVisible = ref(false);
+        const chargeTarget = ref(null);
+        const chargeDays = ref(7);
+        const chargeLoading = ref(false);
+
+        const userDetailVisible = ref(false);
+        const userDetail = ref(null);
+
+        const toasts = ref([]);
+        let toastId = 0;
+        const showToast = (msg, type = 'info', duration = 2800) => {
+            const id = ++toastId;
+            toasts.value.push({ id, msg, type });
+            setTimeout(() => {
+                toasts.value = toasts.value.filter(t => t.id !== id);
+            }, duration);
+        };
+
+        // ---- 统计计算 ----
+        const pendingOrdersCount = computed(() => orders.value.filter(o => o.status === 'pending').length);
+        const pendingTicketsCount = computed(() => tickets.value.filter(t => t.status === 'pending').length);
+        const vipUserCount = computed(() => users.value.filter(u => (u.vip_days_left || 0) > 0).length);
+        const approvedOrderCount = computed(() => orders.value.filter(o => o.status === 'approved').length);
+        const approvedRevenue = computed(() =>
+            orders.value.filter(o => o.status === 'approved').reduce((s, o) => s + (Number(o.amount) || 0), 0)
+        );
+        const usersWithRefCode = computed(() => users.value.filter(u => u.referral_code).length);
+        const referralUsers = computed(() =>
+            users.value.filter(u => u.referral_code).sort((a, b) => (b.vip_days_left || 0) - (a.vip_days_left || 0))
+        );
+        const recentPendingOrders = computed(() =>
+            orders.value.filter(o => o.status === 'pending').slice(0, 8)
+        );
+
+        const planSalesStats = computed(() => {
+            const map = {};
+            plans.value.forEach(p => { map[p.id] = { id: p.id, name: p.name, count: 0, revenue: 0 }; });
+            orders.value.filter(o => o.status === 'approved').forEach(o => {
+                if (!map[o.plan_id]) map[o.plan_id] = { id: o.plan_id, name: o.plan_id, count: 0, revenue: 0 };
+                map[o.plan_id].count++;
+                map[o.plan_id].revenue += Number(o.amount) || 0;
+            });
+            return Object.values(map).filter(s => s.count > 0).sort((a, b) => b.count - a.count);
+        });
+        const maxPlanSales = computed(() => Math.max(1, ...planSalesStats.value.map(s => s.count)));
+
+        const sortedPlans = computed(() =>
+            [...plans.value].sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99))
+        );
+
+        const isDuplicateIP = (ip) => {
+            if (!ip) return false;
+            return users.value.filter(u => (u.ip || u.register_ip) === ip).length > 1;
+        };
+
+        const filteredUsers = computed(() => {
+            let list = [...users.value];
+            if (userVipFilter.value === 'vip') list = list.filter(u => (u.vip_days_left || 0) > 0);
+            else if (userVipFilter.value === 'free') list = list.filter(u => !(u.vip_days_left > 0));
+            else if (userVipFilter.value === 'dupip') list = list.filter(u => isDuplicateIP(u.ip || u.register_ip));
+
+            if (userSearchQuery.value) {
+                const q = userSearchQuery.value.toLowerCase().trim();
+                list = list.filter(u =>
+                    (u.username && u.username.toLowerCase().includes(q)) ||
+                    (u.referral_code && u.referral_code.toLowerCase().includes(q)) ||
+                    (u.ip && u.ip.includes(q)) ||
+                    (u.register_ip && u.register_ip.includes(q)) ||
+                    String(u.id).includes(q)
+                );
+            }
+
+            list.sort((a, b) => {
+                let cmp = 0;
+                if (userSortKey.value === 'vip') cmp = (a.vip_days_left || 0) - (b.vip_days_left || 0);
+                else cmp = (a.id || 0) - (b.id || 0);
+                return userSortAsc.value ? cmp : -cmp;
+            });
+            return list;
+        });
+
+        const filteredOrders = computed(() => {
+            let list = orders.value;
+            if (orderStatusFilter.value !== 'all') {
+                list = list.filter(o => o.status === orderStatusFilter.value);
+            }
+            if (orderSearchQuery.value) {
+                const q = orderSearchQuery.value.toLowerCase().trim();
+                list = list.filter(o =>
+                    (o.username && o.username.toLowerCase().includes(q)) ||
+                    (o.tx_id_last6 && o.tx_id_last6.toLowerCase().includes(q)) ||
+                    (o.plan_id && o.plan_id.toLowerCase().includes(q))
+                );
+            }
+            return list;
+        });
+
+        const filteredTickets = computed(() => {
+            let list = tickets.value;
+            if (ticketStatusFilter.value !== 'all') {
+                list = list.filter(t => t.status === ticketStatusFilter.value);
+            }
+            return list;
+        });
+
+        const userOrders = computed(() => {
+            if (!userDetail.value) return [];
+            return orders.value.filter(o =>
+                o.user_id === userDetail.value.id || o.username === userDetail.value.username
+            );
+        });
+
+        const getPlanName = (planId) => {
+            const p = plans.value.find(x => x.id === planId);
+            return p ? p.name : (planId || '-');
+        };
+        const getPlanDays = (planId) => {
+            const p = plans.value.find(x => x.id === planId);
+            return p ? p.days : 30;
+        };
+        const formatOrderStatus = (s) => s === 'approved' ? '已通过' : s === 'pending' ? '待审核' : '已驳回';
+
+        const fetchAdmin = async (endpoint, options = {}) => {
+            const res = await fetch(`${API_BASE}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Admin-Secret': adminSecret.value,
+                    ...options.headers
+                }
+            });
+            if (res.status === 401) {
+                isAuthenticated.value = false;
+                localStorage.removeItem('admin_secret');
+                throw new Error('鉴权失败，密码错误或已过期');
+            }
+            if (!res.ok) {
+                let msg = `HTTP ${res.status}`;
+                try { const j = await res.json(); if (j.error) msg = j.error; } catch (_) {}
+                throw new Error(msg);
+            }
+            return await res.json();
+        };
+
+        const login = async () => {
+            if (!adminSecret.value) return;
+            loading.value = true;
+            errorMsg.value = '';
+            try {
+                await fetchAdmin('/api/admin/plans');
+                isAuthenticated.value = true;
+                localStorage.setItem('admin_secret', adminSecret.value);
+                await refreshAll();
+            } catch (err) {
+                errorMsg.value = err.message;
+            } finally {
+                loading.value = false;
+                isInitialLoad.value = false;
+            }
+        };
+
+        const logout = () => {
+            isAuthenticated.value = false;
+            adminSecret.value = '';
+            localStorage.removeItem('admin_secret');
+        };
+
+        const switchTab = (tab) => {
+            currentTab.value = tab;
+            sidebarOpen.value = false;
+            if (tab === 'users') fetchUsers();
+            else if (tab === 'orders') fetchOrders();
+            else if (tab === 'plans') fetchPlans();
+            else if (tab === 'tickets') fetchTickets();
+            else if (tab === 'referrals') fetchUsers();
+            else if (tab === 'dashboard') refreshAll(false);
+        };
+
+        const refreshAll = async (showSpinner = true) => {
+            if (showSpinner) loading.value = true;
+            try {
+                await Promise.all([fetchUsers(false), fetchOrders(false), fetchPlans(false), fetchTickets(false)]);
+            } finally {
+                loading.value = false;
+                isInitialLoad.value = false;
+            }
+        };
+
+        // --- 用户 ---
+        const fetchUsers = async (spin = true) => {
+            if (spin) loading.value = true;
+            try {
+                const data = await fetchAdmin('/api/admin/users');
+                if (data.success) users.value = data.data || [];
+            } catch (e) {
+                showToast(e.message || '拉取用户失败', 'error');
+            }
+            if (spin) loading.value = false;
+        };
+
+        const toggleUserSort = (key) => {
+            if (userSortKey.value === key) userSortAsc.value = !userSortAsc.value;
+            else { userSortKey.value = key; userSortAsc.value = false; }
+        };
+
+        const openChargeModal = (user) => {
+            chargeTarget.value = user;
+            chargeDays.value = 7;
+            chargeModalVisible.value = true;
+        };
+
+        const submitCharge = async () => {
+            if (!chargeTarget.value || chargeDays.value === 0 || chargeDays.value === null) {
+                showToast('请输入有效天数', 'error');
+                return;
+            }
+            chargeLoading.value = true;
+            try {
+                const data = await fetchAdmin('/api/admin/users/charge', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        user_id: chargeTarget.value.id,
+                        add_days: parseInt(chargeDays.value, 10)
+                    })
+                });
+                if (data.success) {
+                    showToast(`已为 ${chargeTarget.value.username} 调整 ${chargeDays.value} 天`, 'success');
+                    chargeModalVisible.value = false;
+                    fetchUsers(false);
+                } else {
+                    showToast(data.error || '操作失败', 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '操作失败', 'error');
+            } finally {
+                chargeLoading.value = false;
+            }
+        };
+
+        const deleteUser = async (user) => {
+            if (!confirm(`【警告】确定永久删除用户 ${user.username} 吗？\n相关订单与数据可能无法恢复！`)) return;
+            try {
+                const data = await fetchAdmin('/api/admin/users', {
+                    method: 'DELETE',
+                    body: JSON.stringify({ user_id: user.id })
+                });
+                if (data.success) {
+                    showToast('用户已删除', 'success');
+                    fetchUsers(false);
+                } else {
+                    showToast(data.error || '删除失败', 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '删除失败', 'error');
+            }
+        };
+
+        const openUserDetail = (u) => {
+            userDetail.value = u;
+            userDetailVisible.value = true;
+        };
+
+        // --- 订单 ---
+        const fetchOrders = async (spin = true) => {
+            if (spin) loading.value = true;
+            try {
+                const data = await fetchAdmin('/api/admin/orders');
+                if (data.success) orders.value = data.data || [];
+            } catch (e) {
+                showToast(e.message || '拉取订单失败', 'error');
+            }
+            if (spin) loading.value = false;
+        };
+
+        const approveOrder = async (order) => {
+            const days = getPlanDays(order.plan_id);
+            if (!confirm(`确认通过并发放 VIP？\n用户：${order.username}\n套餐：${getPlanName(order.plan_id)}（+${days} 天）\n金额：¥${(order.amount || 0).toFixed(2)}\n凭证：${order.tx_id_last6}`)) return;
+            try {
+                const data = await fetchAdmin('/api/admin/orders/approve', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        order_id: order.id,
+                        user_id: order.user_id,
+                        add_days: days
+                    })
+                });
+                if (data.success) {
+                    showToast('审核通过，VIP 已发放', 'success');
+                    fetchOrders(false);
+                    fetchUsers(false);
+                } else {
+                    showToast(data.error || '操作失败', 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '操作失败', 'error');
+            }
+        };
+
+        const rejectOrder = async (order) => {
+            if (!confirm(`确认驳回订单？\n用户：${order.username} · 凭证 ${order.tx_id_last6}`)) return;
+            try {
+                const data = await fetchAdmin('/api/admin/orders/reject', {
+                    method: 'POST',
+                    body: JSON.stringify({ order_id: order.id })
+                });
+                if (data.success) {
+                    showToast('订单已驳回', 'success');
+                    fetchOrders(false);
+                } else {
+                    showToast(data.error || '操作失败', 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '操作失败', 'error');
+            }
+        };
+
+        // --- 工单 ---
+        const fetchTickets = async (spin = true) => {
+            if (spin) loading.value = true;
+            try {
+                const data = await fetchAdmin('/api/admin/tickets');
+                if (data.success) tickets.value = data.data || [];
+            } catch (e) {
+                showToast(e.message || '拉取工单失败', 'error');
+            }
+            if (spin) loading.value = false;
+        };
+
+        const openReplyModal = (ticket) => {
+            currentTicket.value = ticket;
+            replyMessage.value = ticket.admin_reply || '';
+            replyModalVisible.value = true;
+        };
+
+        const submitReply = async () => {
+            if (!replyMessage.value.trim()) {
+                showToast('回复内容不能为空', 'error');
+                return;
+            }
+            replyLoading.value = true;
+            try {
+                const data = await fetchAdmin('/api/admin/tickets/reply', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ticket_id: currentTicket.value.id,
+                        reply_message: replyMessage.value
+                    })
+                });
+                if (data.success) {
+                    showToast('回复已提交并结单', 'success');
+                    replyModalVisible.value = false;
+                    fetchTickets(false);
+                } else {
+                    showToast(data.error || '提交失败', 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '提交失败', 'error');
+            } finally {
+                replyLoading.value = false;
+            }
+        };
+
+        const deleteTicket = async (id) => {
+            if (!confirm('确定永久删除该工单记录吗？')) return;
+            try {
+                await fetchAdmin('/api/admin/tickets', {
+                    method: 'DELETE',
+                    body: JSON.stringify({ ticket_id: id })
+                });
+                showToast('工单已删除', 'success');
+                fetchTickets(false);
+            } catch (e) {
+                showToast(e.message || '删除失败', 'error');
+            }
+        };
+
+        const clearTickets = async () => {
+            if (!confirm('【清理确认】将删除所有「已回复」状态工单，不可恢复！')) return;
+            try {
+                await fetchAdmin('/api/admin/tickets/clear', { method: 'POST' });
+                showToast('已清理已回复工单', 'success');
+                fetchTickets(false);
+            } catch (e) {
+                showToast(e.message || '清理失败', 'error');
+            }
+        };
+
+        // --- 套餐 ---
+        const fetchPlans = async (spin = true) => {
+            if (spin) loading.value = true;
+            try {
+                const data = await fetchAdmin('/api/admin/plans');
+                if (data.success) plans.value = data.data || [];
+            } catch (e) {
+                showToast(e.message || '拉取套餐失败', 'error');
+            }
+            if (spin) loading.value = false;
+        };
+
+        const openPlanModal = (p = null) => {
+            if (p) {
+                Object.assign(planForm, {
+                    id: p.id,
+                    name: p.name,
+                    price: p.price,
+                    days: p.days,
+                    tag: p.tag || '',
+                    sort_order: p.sort_order ?? 0,
+                    isEdit: true
+                });
+            } else {
+                Object.assign(planForm, {
+                    id: '',
+                    name: '',
+                    price: 0,
+                    days: 0,
+                    tag: '',
+                    sort_order: plans.value.length + 1,
+                    isEdit: false
+                });
+            }
+            planModalVisible.value = true;
+        };
+
+        const submitPlan = async () => {
+            if (!planForm.id || !planForm.name || !planForm.days) {
+                showToast('ID、名称和天数必须填写', 'error');
+                return;
+            }
+            planLoading.value = true;
+            try {
+                const data = await fetchAdmin('/api/admin/plans', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        id: planForm.id,
+                        name: planForm.name,
+                        price: Number(planForm.price),
+                        days: Number(planForm.days),
+                        tag: planForm.tag,
+                        sort_order: Number(planForm.sort_order)
+                    })
+                });
+                if (data.success) {
+                    showToast('套餐已保存', 'success');
+                    planModalVisible.value = false;
+                    fetchPlans(false);
+                } else {
+                    showToast(data.error || '保存失败', 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '保存失败', 'error');
+            } finally {
+                planLoading.value = false;
+            }
+        };
+
+        const deletePlan = async (p) => {
+            if (!confirm(`确定删除套餐 [${p.name}] 吗？\n前端将不再展示该套餐。`)) return;
+            try {
+                const data = await fetchAdmin('/api/admin/plans', {
+                    method: 'DELETE',
+                    body: JSON.stringify({ id: p.id })
+                });
+                if (data.success) {
+                    showToast('套餐已删除', 'success');
+                    fetchPlans(false);
+                } else {
+                    showToast(data.error || '删除失败', 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '删除失败', 'error');
+            }
+        };
+
+        const formatDate = (isoString) => {
+            if (!isoString) return '-';
+            const d = typeof isoString === 'number' ? new Date(isoString) : new Date(isoString);
+            if (isNaN(d.getTime())) return '-';
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+
+        // 定时刷新待审数量（后台静默）
+        let pollTimer = null;
+        onMounted(() => {
+            if (adminSecret.value) login();
+            pollTimer = setInterval(() => {
+                if (isAuthenticated.value) {
+                    fetchOrders(false);
+                    fetchTickets(false);
+                }
+            }, 60000);
+        });
+        onUnmounted(() => {
+            if (pollTimer) clearInterval(pollTimer);
+        });
+
+        return {
+            adminSecret, isAuthenticated, currentTab, loading, isInitialLoad, errorMsg, sidebarOpen,
+            login, logout, switchTab, refreshAll,
+            orders, users, tickets, plans,
+            pendingOrdersCount, pendingTicketsCount, vipUserCount, approvedOrderCount, approvedRevenue,
+            usersWithRefCode, referralUsers, recentPendingOrders, planSalesStats, maxPlanSales, sortedPlans,
+            userSearchQuery, userVipFilter, orderSearchQuery, orderStatusFilter, ticketStatusFilter,
+            filteredUsers, filteredOrders, filteredTickets, isDuplicateIP, toggleUserSort,
+            fetchUsers, fetchOrders, fetchPlans, fetchTickets,
+            openChargeModal, chargeModalVisible, chargeTarget, chargeDays, chargeLoading, submitCharge,
+            deleteUser, openUserDetail, userDetailVisible, userDetail, userOrders,
+            approveOrder, rejectOrder, getPlanName, getPlanDays, formatOrderStatus,
+            openReplyModal, replyModalVisible, currentTicket, replyMessage, replyLoading, submitReply,
+            deleteTicket, clearTickets,
+            planModalVisible, planForm, planLoading, openPlanModal, submitPlan, deletePlan,
+            formatDate, toasts, showToast
+        };
+    }
+}).mount('#admin-app');
+</script>
+</body>
+</html>
