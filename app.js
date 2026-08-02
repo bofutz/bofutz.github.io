@@ -4,7 +4,7 @@
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
 
 const API_BASE = "https://vip.hahagw.eu.org";
-const MAIL_API_BASE = "https://mail.hahagw2016.workers.dev";
+const MAIL_API_BASE = "https://mail.hahagw.eu.org";
 const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
 // 日期解析工具函数（严格过滤异常数据）
