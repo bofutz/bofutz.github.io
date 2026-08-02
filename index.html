@@ -130,11 +130,11 @@
                                                     标的名称 <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'etf_name'}"></i>
                                                 </th>
                                                 <th v-for="idx in 5" :key="idx" class="py-3 px-2 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('d'+(idx-1))">
-                                                    周{{ ['一','二','三','四','五'][idx-1] }}({{ currentWeekHeaders[idx-1] || '-' }}日) 
+                                                    周{{ ['一','二','三','四','五'][idx-1] }} 
                                                     <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'd'+(idx-1)}"></i>
                                                 </th>
                                                 <th class="py-3 px-4 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('week_status')">
-                                                    周线 <span v-if="weekStatusHeader" class="text-[10px] font-normal">({{ weekStatusHeader }})</span> 
+                                                    周线 
                                                     <i class="fa-solid fa-sort ml-1 opacity-50" :class="{'theme-text opacity-100': sortColumn === 'week_status'}"></i>
                                                 </th>
                                             </tr>
@@ -147,22 +147,30 @@
                                                         <div class="flex items-center justify-between">
                                                             <div class="flex flex-col">
                                                                 <div class="font-bold text-slate-800 flex items-center group-hover:theme-text transition-colors">
-                                                                    <i class="fa-regular fa-image text-[11px] text-slate-300 hover:text-blue-500 transition mr-1.5 py-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                                                     {{ item.etf_name }}
                                                                     <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded ml-1 font-normal leading-none h-max">免费</span>
                                                                 </div>
-                                                                <div class="text-[11px] text-slate-400 font-mono ml-4">{{ item.etf_code }}</div>
+                                                                <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                                                             </div>
                                                             <i class="fa-solid text-[10px] text-slate-300 transition-transform duration-200 ml-1" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
                                                         </div>
                                                     </td>
                                                     <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
-                                                        {{ item.days[idx-1]?.day_status || '-' }}
+                                                        <div class="flex items-center justify-center gap-1">
+                                                            <span v-if="item.days[idx-1]?.day_status && item.days[idx-1].day_status !== '-' && item.days[idx-1].day_status !== '--'">
+                                                                ({{ currentWeekHeaders[idx-1] }}日){{ item.days[idx-1].day_status }}
+                                                            </span>
+                                                            <span v-else>-</span>
+                                                            <i v-if="(idx-1) === getLatestDailyIndex()" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
+                                                        </div>
                                                     </td>
                                                     <td class="p-3">
                                                         <div class="flex items-center justify-center gap-1 font-medium" :class="getColorClass(item.week_status)">
-                                                            {{ item.week_status || '-' }}
-                                                            <i v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
+                                                            <span v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'">
+                                                                ({{ currentWeekShortName }}){{ item.week_status }}
+                                                            </span>
+                                                            <span v-else>-</span>
+                                                            <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -170,15 +178,23 @@
                                                 <template v-if="expandedRowKey === item.etf_code">
                                                     <tr v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50/80 border-b border-dashed border-slate-100" @click.stop>
                                                         <td class="p-3 text-left sticky left-0 bg-slate-50/80 z-10 etf-name-column shadow-[1px_0_0_0_#f1f5f9]">
-                                                            <div class="text-xs text-slate-400 font-medium pl-4">{{ week.monday.substring(5) }} 周</div>
+                                                            <div class="text-xs text-slate-400 font-medium pl-4">{{ getMobileWeekLabel(week.monday) }}</div>
                                                         </td>
                                                         <td v-for="idx in 5" :key="idx" class="p-3 text-xs opacity-70" :class="getColorClass(week.days[idx-1]?.day_status)">
-                                                            {{ week.days[idx-1]?.day_status || '-' }}
+                                                            <div class="flex items-center justify-center gap-1">
+                                                                <span v-if="week.days[idx-1]?.day_status && week.days[idx-1].day_status !== '-' && week.days[idx-1].day_status !== '--'">
+                                                                    ({{ getPastWeekDay(week.monday, idx-1) }}日){{ week.days[idx-1].day_status }}
+                                                                </span>
+                                                                <span v-else>-</span>
+                                                            </div>
                                                         </td>
                                                         <td class="p-3 text-xs opacity-70">
                                                             <div class="flex items-center justify-center gap-1" :class="getColorClass(week.week_status)">
-                                                                {{ week.week_status || '-' }}
-                                                                <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[11px]" @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
+                                                                <span v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'">
+                                                                    ({{ getPastWeekShortName(week.monday) }}){{ week.week_status }}
+                                                                </span>
+                                                                <span v-else>-</span>
+                                                                <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[11px]" @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -188,39 +204,62 @@
                                     </table>
                                 </div>
                             </div>
+                            
                             <!-- 移动端列表 -->
                             <div class="sm:hidden space-y-3">
-                                <div v-for="(item, index) in sortedData" :key="item.etf_code" class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden">
-                                    <div class="p-3 flex items-center justify-between bg-slate-50/50 border-b border-slate-100" @click="toggleRow(item)">
+                                <div v-for="(item, index) in sortedData" :key="item.etf_code" class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                                    <div class="p-4 flex items-center justify-between bg-white border-b border-slate-100" @click="toggleRow(item)">
                                         <div class="flex items-center gap-2">
-                                            <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition p-1" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                             <div>
-                                                <div class="text-sm font-bold text-slate-800">{{ item.etf_name }}</div>
-                                                <div class="text-[10px] text-slate-400 font-mono">{{ item.etf_code }}</div>
+                                                <div class="text-base font-bold text-black">{{ item.etf_name }}</div>
+                                                <div class="text-[11px] text-slate-500 font-mono">{{ item.etf_code }}</div>
                                             </div>
-                                            <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded">免费</span>
+                                            <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">免费</span>
                                         </div>
-                                        <i class="fa-solid text-[10px] text-slate-300 transition-transform duration-200" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
+                                        <i class="fa-solid text-sm text-slate-400 transition-transform duration-200" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
                                     </div>
-                                    <div class="p-3 grid grid-cols-3 gap-2 text-center">
-                                        <div v-for="idx in 5" :key="idx" class="flex flex-col gap-1 py-1.5 rounded bg-slate-50/30">
-                                            <span class="text-[10px] text-slate-400">周{{ ['一','二','三','四','五'][idx-1] }}</span>
-                                            <span class="text-xs font-bold" :class="getColorClass(item.days[idx-1]?.day_status)">{{ item.days[idx-1]?.day_status || '-' }}</span>
+                                    
+                                    <div class="p-3 bg-white">
+                                        <div class="flex items-center mb-3">
+                                            <span class="text-sm font-bold text-black bg-slate-100 px-2 py-0.5 rounded">{{ currentMobileWeekLabel }}</span>
                                         </div>
-                                        <div class="flex flex-col gap-1 py-1.5 rounded bg-[#4da6a0]/5 border border-[#4da6a0]/10">
-                                            <span class="text-[10px] theme-text font-bold">周线</span>
-                                            <div class="flex items-center justify-center gap-1 text-xs font-bold" :class="getColorClass(item.week_status)">
-                                                {{ item.week_status || '-' }}
-                                                <i v-if="item.week_status && item.week_status !== '-' && item.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[10px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
+                                        <div class="grid grid-cols-6 gap-1 text-center items-start">
+                                            <div v-for="idx in 5" :key="idx" class="flex flex-col items-center">
+                                                <span class="text-[11px] text-slate-500 mb-1 font-medium">周{{ ['一','二','三','四','五'][idx-1] }}</span>
+                                                <div class="text-sm font-bold" :class="getColorClass(item.days[idx-1]?.day_status)">
+                                                    {{ formatMobileNumber(item.days[idx-1]?.day_status) }}
+                                                </div>
+                                                <i v-if="(idx-1) === getLatestDailyIndex()" class="fa-regular fa-image text-slate-400 hover:theme-text mt-1.5 text-[14px]" @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
+                                            </div>
+                                            <div class="flex flex-col items-center">
+                                                <span class="text-[11px] text-black font-bold mb-1">周线</span>
+                                                <div class="text-sm font-bold" :class="getColorClass(item.week_status)">
+                                                    {{ formatMobileNumber(item.week_status) }}
+                                                </div>
+                                                <i class="fa-regular fa-image text-slate-400 hover:theme-text mt-1.5 text-[14px]" @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-if="expandedRowKey === item.etf_code" class="border-t border-slate-50 bg-slate-50/30 px-3 py-2">
-                                        <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="flex items-center justify-between py-2 border-b border-dashed border-slate-200 last:border-0">
-                                            <span class="text-[10px] text-slate-400">{{ week.monday.substring(5) }} 周线</span>
-                                            <div class="flex items-center gap-2 text-xs font-medium" :class="getColorClass(week.week_status)">
-                                                {{ week.week_status || '-' }}
-                                                <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[10px]" @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
+
+                                    <div v-if="expandedRowKey === item.etf_code" class="border-t border-slate-100 bg-white">
+                                        <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="p-3 border-b border-slate-100 last:border-0">
+                                            <div class="flex items-center mb-3">
+                                                <span class="text-sm font-bold text-black bg-slate-100 px-2 py-0.5 rounded">{{ getMobileWeekLabel(week.monday) }}</span>
+                                            </div>
+                                            <div class="grid grid-cols-6 gap-1 text-center items-start">
+                                                <div v-for="idx in 5" :key="idx" class="flex flex-col items-center">
+                                                    <span class="text-[11px] text-slate-500 mb-1 font-medium">周{{ ['一','二','三','四','五'][idx-1] }}</span>
+                                                    <div class="text-sm font-bold" :class="getColorClass(week.days[idx-1]?.day_status)">
+                                                        {{ formatMobileNumber(week.days[idx-1]?.day_status) }}
+                                                    </div>
+                                                </div>
+                                                <div class="flex flex-col items-center">
+                                                    <span class="text-[11px] text-black font-bold mb-1">周线</span>
+                                                    <div class="text-sm font-bold" :class="getColorClass(week.week_status)">
+                                                        {{ formatMobileNumber(week.week_status) }}
+                                                    </div>
+                                                    <i class="fa-regular fa-image text-slate-400 hover:theme-text mt-1.5 text-[14px]" @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
