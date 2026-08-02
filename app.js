@@ -290,8 +290,9 @@ createApp({
         };
 
         const getStatusVal = (str) => {
-            if (!str || typeof str !== 'string' || str === '-' || str === '--') return -9999;
-            const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
+            if (!str || str === '-' || str === '--') return -9999;
+            // 确保转为纯字符串以免解析抛错
+            const match = String(str).match(/[-+]?[0-9]*\.?[0-9]+/);
             return match ? parseFloat(match[0]) : -9999;
         };
 
@@ -382,19 +383,18 @@ createApp({
             return days.map(d => parseDay(d));
         });
 
-        // 供表格读取周线日期描述 (例如 第4周)
+        // 表格显示的周线格式 (例：第4周)
         const currentWeekShortName = computed(() => {
             if (!selectedMonday.value) return '周线';
             return getWeekNumberInMonth(selectedMonday.value);
         });
 
-        // 移动端专用大字号过滤，移除 +, -, %
+        // 移动端安全地过滤去符号 (避免数字报错)
         const formatMobileNumber = (val) => {
             if (!val || val === '-' || val === '--') return '-';
-            return val.replace(/[+\-%]/g, '').trim();
+            return String(val).replace(/[+\-%]/g, '').trim();
         };
 
-        // 移动端生成形如 "7M5W" 的标签
         const generateMobileWeekLabel = (mondayStr) => {
             if (!mondayStr) return '';
             const m = parseMonth(mondayStr);
@@ -450,7 +450,10 @@ createApp({
                     }
                     etfMap[item.etf_code].days[idx] = item;
                     
-                    // 基于实际存在闭合数据的逻辑扫描
+                    // 基于实际存在闭合日线/周线数据的逻辑判定
+                    if (item.day_status && item.day_status !== '-' && item.day_status !== '--') {
+                        hasCurrentWeekData = true; 
+                    }
                     if (item.week_status && item.week_status !== '-' && item.week_status !== '--') {
                         etfMap[item.etf_code].week_status = item.week_status;
                         hasCurrentWeekData = true; 
@@ -458,7 +461,6 @@ createApp({
                 }
             });
 
-            // 如果当前周没有任何已闭合的周线数据，读取上周周线兜底
             if (!hasCurrentWeekData) {
                 const my = parseYear(weekDays[0]);
                 const mm = parseMonth(weekDays[0]);
@@ -577,8 +579,9 @@ createApp({
             return validItems;
         });
 
-        // 统一图标列：扫描全局闭合 K 线的最大可用日
-        const getLatestDailyIndex = () => {
+        // 【将原先的函数改为计算属性，防止死锁卡顿】
+        // 自动计算本周真正已闭合的最高 K 线天数
+        const latestDailyIndex = computed(() => {
             if (!selectedMonday.value || sortedData.value.length === 0) return 0;
             let maxIdx = 0;
             for (const item of sortedData.value) {
@@ -591,7 +594,7 @@ createApp({
                 if (maxIdx === 4) break; 
             }
             return maxIdx;
-        };
+        });
 
         const toggleRow = (item) => {
             expandedRowKey.value = expandedRowKey.value === item.etf_code ? null : item.etf_code;
@@ -755,7 +758,7 @@ createApp({
 
         const getColorClass = (status) => {
             if (!status || status === '-' || status === '--') return 'text-slate-300';
-            return status.includes('+') ? 'text-red-500' : 'text-emerald-500';
+            return String(status).includes('+') ? 'text-red-500' : 'text-emerald-500';
         };
 
         const selectedOrder = ref(null);
@@ -965,7 +968,7 @@ createApp({
             expandedRowKey,
             toggleRow,
             getPastWeeks,
-            getLatestDailyIndex,
+            latestDailyIndex,
             formatMobileNumber,
             currentMobileWeekLabel,
             getMobileWeekLabel,
