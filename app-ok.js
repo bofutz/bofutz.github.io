@@ -291,7 +291,6 @@ createApp({
 
         const getStatusVal = (str) => {
             if (!str || str === '-' || str === '--') return -9999;
-            // 确保转为纯字符串以免解析抛错
             const match = String(str).match(/[-+]?[0-9]*\.?[0-9]+/);
             return match ? parseFloat(match[0]) : -9999;
         };
@@ -324,7 +323,7 @@ createApp({
             let firstDayOfWeek = firstDay.getDay();
             if (firstDayOfWeek === 0) firstDayOfWeek = 7;
             const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
-            return `${weekNum}周`;
+            return `第${weekNum}周`;
         };
 
         const uniqueDatesSet = computed(() => {
@@ -376,6 +375,28 @@ createApp({
             return '';
         });
 
+        // 桌面端 Hover 悬浮显示月-日 (如 07-29)
+        const getHoverDailyDate = (mondayStr, idx) => {
+            if (!mondayStr) return '';
+            const days = getWeekDays(mondayStr);
+            if (!days[idx]) return '';
+            const m = parseMonth(days[idx]);
+            const d = parseDay(days[idx]);
+            return `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        };
+
+        // 桌面端 Hover 悬浮显示月-周 (如 07-5w)
+        const getHoverWeeklyDate = (mondayStr) => {
+            if (!mondayStr) return '';
+            const m = parseMonth(mondayStr);
+            const y = parseYear(mondayStr);
+            const d = parseDay(mondayStr);
+            const firstDay = new Date(y, m - 1, 1);
+            let firstDayOfWeek = firstDay.getDay() || 7;
+            const weekNum = Math.ceil((d + (firstDayOfWeek - 1)) / 7);
+            return `${String(m).padStart(2, '0')}-${weekNum}w`;
+        };
+
         const currentWeekHeaders = computed(() => {
             if (!selectedMonday.value) return [];
             const days = getWeekDays(selectedMonday.value);
@@ -383,13 +404,11 @@ createApp({
             return days.map(d => parseDay(d));
         });
 
-        // 表格显示的周线格式 (例：第4周)
         const currentWeekShortName = computed(() => {
             if (!selectedMonday.value) return '周线';
             return getWeekNumberInMonth(selectedMonday.value);
         });
 
-        // 移动端安全地过滤去符号 (避免数字报错)
         const formatMobileNumber = (val) => {
             if (!val || val === '-' || val === '--') return '-';
             return String(val).replace(/[+\-%]/g, '').trim();
@@ -450,7 +469,6 @@ createApp({
                     }
                     etfMap[item.etf_code].days[idx] = item;
                     
-                    // 基于实际存在闭合日线/周线数据的逻辑判定
                     if (item.day_status && item.day_status !== '-' && item.day_status !== '--') {
                         hasCurrentWeekData = true; 
                     }
@@ -579,8 +597,6 @@ createApp({
             return validItems;
         });
 
-        // 【将原先的函数改为计算属性，防止死锁卡顿】
-        // 自动计算本周真正已闭合的最高 K 线天数
         const latestDailyIndex = computed(() => {
             if (!selectedMonday.value || sortedData.value.length === 0) return 0;
             let maxIdx = 0;
@@ -669,7 +685,6 @@ createApp({
                         ) {
                             selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
                             
-                            // Top 3 免费解冻机制
                             freeEtfCodes.value = sortedData.value
                                 .slice(0, 3)
                                 .map(item => item.etf_code);
@@ -684,13 +699,16 @@ createApp({
         };
 
         let currentViewer = null;
+        
         const openChart = (etfCode, type, index, isHistorical = false) => {
             if (isLoggedIn.value && isVip.value) {
                 showViewer(etfCode, type);
                 return;
             }
 
-            if (freeEtfCodes.value.includes(etfCode)) {
+            // 修复 Bug：双重物理拦截。
+            // 只要你是当前周列表里的前三行 (index < 3)，直接无条件放行，同时兼顾免签数组！
+            if ((!isHistorical && index < 3) || freeEtfCodes.value.includes(etfCode)) {
                 showViewer(etfCode, type);
                 return;
             }
@@ -969,6 +987,8 @@ createApp({
             toggleRow,
             getPastWeeks,
             latestDailyIndex,
+            getHoverDailyDate,
+            getHoverWeeklyDate,
             formatMobileNumber,
             currentMobileWeekLabel,
             getMobileWeekLabel,
