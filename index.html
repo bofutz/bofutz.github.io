@@ -172,6 +172,7 @@
                                                             <span v-else>-</span>
                                                             <i v-if="isLatestDailyColumn(idx-1, item)" 
                                                                class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" 
+                                                               :title="getDayTooltip(getWeekDays(selectedMonday)[idx-1])"
                                                                @click.stop="openChart(item.etf_code, 'daily', index, false)"></i>
                                                         </div>
                                                     </td>
@@ -184,6 +185,7 @@
                                                             </span>
                                                             <span v-else>-</span>
                                                             <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[12px]" 
+                                                               :title="getWeekTooltip(selectedMonday)"
                                                                @click.stop="openChart(item.etf_code, 'weekly', index, false)"></i>
                                                         </div>
                                                     </td>
@@ -208,6 +210,7 @@
                                                                 <span v-else>-</span>
                                                                 <i v-if="week.week_status && week.week_status !== '-' && week.week_status !== '--'" 
                                                                    class="fa-regular fa-image text-slate-300 hover:text-blue-500 transition cursor-pointer text-[11px]" 
+                                                                   :title="getWeekTooltip(week.monday)"
                                                                    @click.stop="openChart(item.etf_code, 'weekly', index, true, week.monday)"></i>
                                                             </div>
                                                         </td>
