@@ -71,7 +71,7 @@
             <span v-if="pendingOrdersCount" class="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold badge-pulse">{{pendingOrdersCount}}</span>
           </div>
           <div @click="switchTab('plans')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='plans'}"><i class="fa-solid fa-tags"></i>套餐管理</div>
-          <div @click="switchTab('shared')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='shared'}"><i class="fa-solid fa-list"></i>共用监控</div>
+          <div @click="switchTab('shared')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='shared'}"><i class="fa-solid fa-list"></i>通用监控</div>
           <div @click="switchTab('custom')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='custom'}"><i class="fa-solid fa-user-tag"></i>定制监控</div>
           <div @click="switchTab('promos')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='promos'}"><i class="fa-solid fa-percent"></i>优惠码</div>
           <div @click="switchTab('settings')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='settings'}"><i class="fa-solid fa-gear"></i>系统设置</div>
@@ -277,10 +277,10 @@
             </div>
           </div>
 
-          <!-- 共用监控 -->
+          <!-- 通用监控 -->
           <div v-show="currentTab==='shared'" class="space-y-4">
             <div class="flex flex-col sm:flex-row justify-between gap-3">
-              <div><h2 class="text-xl font-bold">共用监控列表</h2><p class="text-xs text-slate-400">需购买「通用监控」VIP 才可查看全部图表</p></div>
+              <div><h2 class="text-xl font-bold">通用监控列表</h2><p class="text-xs text-slate-400">需购买「通用监控」VIP 才可查看全部图表</p></div>
               <div class="flex gap-2">
                 <button @click="openSharedModal()" class="theme-bg text-white text-sm px-4 py-2 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>添加</button>
                 <button @click="showBatchImport=true" class="bg-white border text-sm px-4 py-2 rounded-lg">批量导入</button>
