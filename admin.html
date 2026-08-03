@@ -120,7 +120,7 @@
               <div class="flex flex-wrap gap-2">
                 <button @click="switchTab('orders')" class="text-xs theme-bg text-white px-3 py-2 rounded-lg">审核订单 <span v-if="stats.orders_pending" class="bg-white/20 px-1.5 rounded">{{stats.orders_pending}}</span></button>
                 <button @click="switchTab('tickets')" class="text-xs bg-orange-50 text-orange-600 border border-orange-100 px-3 py-2 rounded-lg">处理工单</button>
-                <button @click="switchTab('shared')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">编辑共用列表</button>
+                <button @click="switchTab('shared')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">编辑通用列表</button>
                 <button @click="switchTab('plans')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">套餐（通用/定制）</button>
                 <button @click="switchTab('settings')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">赠送天数 / 收款码</button>
                 <button @click="switchTab('promos')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">优惠码</button>
@@ -305,7 +305,7 @@
                       <button @click="deleteShared(w)" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-trash"></i></button>
                     </td>
                   </tr>
-                  <tr v-if="!sharedList.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无共用标的</td></tr>
+                  <tr v-if="!sharedList.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无通用标的</td></tr>
                 </tbody>
               </table>
             </div>
@@ -553,10 +553,10 @@
       </div>
     </div>
 
-    <!-- 共用标的 -->
+    <!-- 通用标的 -->
     <div v-if="sharedModalVisible" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
       <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
-        <div class="px-6 py-4 border-b bg-slate-50 font-medium">{{sharedForm.id?'编辑标的':'添加共用标的'}}</div>
+        <div class="px-6 py-4 border-b bg-slate-50 font-medium">{{sharedForm.id?'编辑标的':'添加通用标的'}}</div>
         <div class="p-6 space-y-3">
           <input v-model="sharedForm.etf_code" placeholder="代码" class="w-full border px-3 py-2 rounded-lg text-sm font-mono">
           <input v-model="sharedForm.etf_name" placeholder="名称" class="w-full border px-3 py-2 rounded-lg text-sm">
@@ -573,7 +573,7 @@
 
     <div v-if="showBatchImport" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
       <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-        <div class="px-6 py-4 border-b bg-slate-50 font-medium">批量导入共用列表</div>
+        <div class="px-6 py-4 border-b bg-slate-50 font-medium">批量导入通用列表</div>
         <div class="p-6 space-y-3">
           <p class="text-xs text-slate-500">每行：代码,名称</p>
           <textarea v-model="batchImportText" rows="8" class="w-full border px-3 py-2 rounded-lg text-sm font-mono" placeholder="159919,沪深300ETF"></textarea>
