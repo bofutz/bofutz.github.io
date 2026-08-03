@@ -603,7 +603,7 @@ createApp({
       // 仅允许「最新周锁定 TOP N」中的代码，与当前行 index / 排序无关
       const isInFreeList = freeEtfCodes.value.includes(etfCode);
       if (isInFreeList) { showViewer(etfCode, type); return; }
-      if (confirm("此为「通用监控」VIP 专属图表。\n仅「最新数据」振幅前 " + freeTopN.value + " 只可免费查看（与历史周、排序无关）。\n\n是否去开通通用 VIP？")) {
+      if (confirm("此为「通用监控」VIP专属图表。\n是否去开通通用VIP？")) {
         if (!isLoggedIn.value) openAuth("login");
         else { planTab.value = "shared"; navigate("#/plan"); }
       }
