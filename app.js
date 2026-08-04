@@ -1,7 +1,7 @@
 /**
- * 波幅探长 app.js v2.1
- * 通用/定制独立 · 公开设置 · 答疑 · 支付宝/微信码(图/链) · 按只计费 · 邀请记录
- * 日线图标按「该周最新有数据日」定位 · 支付注册不强制邮箱 · 定制去重 · 无在线聊天
+ * 波幅探长 app.js v2.2
+ * 通用/定制独立 · 定制套餐总价(含N只) · 日线icon按图表真实日期落列
+ * 仅通用VIP→通用列表；仅定制→自己的定制+Top3 · 支付注册不强制邮箱 · 无在线聊天
  */
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
 
@@ -21,7 +21,6 @@ const parseMonth = (s) => (isValidDate(s) ? parseInt(s.trim().split(/[-/]/)[1], 
 const parseDay = (s) => (isValidDate(s) ? parseInt(s.trim().split(/[-/]/)[2], 10) : 0);
 const isEmail = (s) => typeof s === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
-/** 判断 URL 是否像图片 */
 const isImageUrl = (url) => {
   if (!url || typeof url !== "string") return false;
   const u = url.trim().toLowerCase();
@@ -30,10 +29,14 @@ const isImageUrl = (url) => {
   return false;
 };
 
-/** 链接转二维码图片（公开 API） */
 const linkToQrSrc = (url) => {
   if (!url) return "";
   return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(url.trim())}`;
+};
+
+const pureCode = (code) => {
+  const m = String(code || "").match(/\d{6}/);
+  return m ? m[0] : String(code || "").trim();
 };
 
 createApp({
@@ -390,32 +393,28 @@ createApp({
     const selectWeek = (mondayStr) => { selectedMonday.value = mondayStr; showDropdown.value = false; };
 
     /**
-     * 日线图表对应列：该周内「最新有 day_status 数据」的那一天。
-     * 例如数据更新到 8/3（周一），则日线 icon 只出现在周一列。
+     * 图表「截止日期」= 全站最新有 day_status 的交易日（如 2026-08-03）
+     * 仅当当前选中周包含该日时，日线 icon 出现在对应列；历史周不显示日线 icon
      */
-    const latestDailyColIndex = computed(() => {
-      if (!selectedMonday.value) return -1;
-      const weekDays = getWeekDays(selectedMonday.value);
-      if (weekDays.length < 5) return -1;
-      for (let i = 4; i >= 0; i--) {
-        if (allData.value.some((item) => item.date === weekDays[i] && item.day_status && item.day_status !== "-" && item.day_status !== "--")) {
-          return i;
-        }
+    const chartAsOfDate = computed(() => {
+      let best = "";
+      for (const item of allData.value) {
+        if (!item.date || !isValidDate(item.date)) continue;
+        if (!item.day_status || item.day_status === "-" || item.day_status === "--") continue;
+        if (item.date > best) best = item.date;
       }
-      // 无数据时按北京时间粗略推断
-      const now = new Date();
-      const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-      const beijing = new Date(utc + 8 * 60 * 60000);
-      const day = beijing.getDay(), hour = beijing.getHours();
-      if (day === 0 || day === 6) return 4;
-      let col = day - 1;
-      if (hour < 17) { col = col - 1; if (col < 0) col = 0; }
-      return col;
+      return best;
     });
 
-    const isDailyChartColumn = (idx) => idx === latestDailyColIndex.value;
+    const latestDailyColIndex = computed(() => {
+      if (!selectedMonday.value || !chartAsOfDate.value) return -1;
+      const weekDays = getWeekDays(selectedMonday.value);
+      if (weekDays.length < 5) return -1;
+      return weekDays.indexOf(chartAsOfDate.value); // 不在本周则 -1
+    });
 
-    /** 列对应日期文案，供 icon title 使用 */
+    const isDailyChartColumn = (idx) => idx === latestDailyColIndex.value && latestDailyColIndex.value >= 0;
+
     const getColumnDateLabel = (idx) => {
       if (!selectedMonday.value) return "";
       const weekDays = getWeekDays(selectedMonday.value);
@@ -486,7 +485,35 @@ createApp({
         return hasDay || hasWeek || (chartsMap.value && chartsMap.value.hasOwnProperty(item.etf_code));
       });
 
-      if (sharedWatchlist.value.length > 0) {
+      // VIP 类型过滤
+      // - 通用 VIP：通用监控列表
+      // - 仅定制（无通用 VIP）：自己的定制代码 + 免费 TopN
+      // - 游客 / 无权益：通用列表（图表仍受 freeTopN 限制）
+      if (isLoggedIn.value && isVip.value) {
+        if (sharedWatchlist.value.length > 0) {
+          const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
+          const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
+          if (filtered.length > 0) validItems = filtered;
+        }
+      } else if (isLoggedIn.value && !isVip.value) {
+        const activeCustom = (customWatchlist.value || []).filter(
+          (w) => w.status === "active" || w.status === "pending"
+        );
+        if (activeCustom.length > 0) {
+          const customCodes = new Set(
+            activeCustom.map((w) => pureCode(w.etf_code)).filter(Boolean)
+          );
+          const freeSet = new Set(freeEtfCodes.value);
+          validItems = validItems.filter((i) => {
+            const pure = pureCode(i.etf_code);
+            return customCodes.has(pure) || customCodes.has(i.etf_code) || freeSet.has(i.etf_code);
+          });
+        } else if (sharedWatchlist.value.length > 0) {
+          const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
+          const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
+          if (filtered.length > 0) validItems = filtered;
+        }
+      } else if (sharedWatchlist.value.length > 0) {
         const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
         const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
         if (filtered.length > 0) validItems = filtered;
@@ -574,7 +601,7 @@ createApp({
       } catch (_) {}
     };
 
-    // ---------- 定制（个人中心） ----------
+    // ---------- 定制 ----------
     const customWatchlist = ref([]);
     const customLoading = ref(false);
     const customEditorVisible = ref(false);
@@ -584,10 +611,9 @@ createApp({
     const customMaxSymbols = computed(() => Math.max(1, parseInt(publicSettings.value.custom_max_symbols, 10) || 3));
 
     const customSymbolCount = computed(() =>
-      customDraftItems.value.filter((r) => String(r.etf_code || "").trim()).length || 1
+      customDraftItems.value.filter((r) => String(r.etf_code || "").trim()).length || 0
     );
 
-    /** 定制标的自动去重：按 6 位代码去重，并提示 */
     const dedupeCustomDraft = () => {
       const seen = new Set();
       const next = [];
@@ -598,8 +624,7 @@ createApp({
           next.push(row);
           continue;
         }
-        const m = raw.match(/\d{6}/);
-        const key = m ? m[0] : raw.toUpperCase();
+        const key = pureCode(raw) || raw.toUpperCase();
         if (seen.has(key)) {
           removed++;
           continue;
@@ -608,22 +633,21 @@ createApp({
         next.push({ ...row, etf_code: raw });
       }
       if (next.length === 0) next.push({ etf_code: "", etf_name: "" });
-      // 超上限截断
       const max = customMaxSymbols.value;
-      if (next.filter((r) => String(r.etf_code || "").trim()).length > max) {
+      const filled = next.filter((r) => String(r.etf_code || "").trim());
+      if (filled.length > max) {
         const kept = [];
         const keys = new Set();
         for (const r of next) {
           const raw = String(r.etf_code || "").trim();
           if (!raw) { kept.push(r); continue; }
-          const m = raw.match(/\d{6}/);
-          const key = m ? m[0] : raw.toUpperCase();
+          const key = pureCode(raw) || raw.toUpperCase();
           if (keys.size >= max) { removed++; continue; }
           keys.add(key);
           kept.push(r);
         }
         customDraftItems.value = kept.length ? kept : [{ etf_code: "", etf_name: "" }];
-        customDedupeTip.value = `已自动去重/截断，定制最多 ${max} 只`;
+        customDedupeTip.value = `已自动去重/截断，定制套餐最多 ${max} 只`;
       } else {
         customDraftItems.value = next;
         customDedupeTip.value = removed > 0 ? `已自动去除 ${removed} 个重复代码` : "";
@@ -661,7 +685,7 @@ createApp({
         .filter((r) => r.etf_code);
       if (!items.length) { alert("请至少填写一只代码"); return; }
       if (items.length > customMaxSymbols.value) {
-        alert(`定制标的最多 ${customMaxSymbols.value} 只`);
+        alert(`定制套餐最多 ${customMaxSymbols.value} 只`);
         return;
       }
       sessionStorage.setItem("pending_custom_items", JSON.stringify(items));
@@ -687,14 +711,21 @@ createApp({
       }
     };
 
-    // ---------- 图表（仅通用 VIP 或前 N） ----------
+    // ---------- 图表 ----------
     let currentViewer = null;
     const freeTopN = computed(() => parseInt(publicSettings.value.free_top_n_charts, 10) || 3);
 
-    const openChart = (etfCode, type, index) => {
+    const openChart = (etfCode, type) => {
       if (isLoggedIn.value && isVip.value) { showViewer(etfCode, type); return; }
+      // 定制用户也可看自己定制标的的图 + TopN
       const isInFreeList = freeEtfCodes.value.includes(etfCode);
-      if (isInFreeList) { showViewer(etfCode, type); return; }
+      const isMyCustom = (customWatchlist.value || []).some(
+        (w) => (w.status === "active" || w.status === "pending") && pureCode(w.etf_code) === pureCode(etfCode)
+      );
+      if (isInFreeList || (isLoggedIn.value && isMyCustom)) {
+        showViewer(etfCode, type);
+        return;
+      }
       if (confirm("此为「通用监控」VIP专属图表。\n是否去开通通用VIP？")) {
         if (!isLoggedIn.value) openAuth("login");
         else { planTab.value = "shared"; navigate("#/plan"); }
@@ -763,7 +794,6 @@ createApp({
 
     const displayPayAmount = computed(() => topUpForm.floatingAmount);
 
-    /** 收款码：图片 URL 直接用；否则把链接转成二维码 */
     const currentPayQrSrc = computed(() => {
       const raw = payChannel.value === "wechat"
         ? (publicSettings.value.wechat_qr_url || "")
@@ -779,10 +809,9 @@ createApp({
       return (Number(basePrice) + randCents).toFixed(2);
     };
 
+    // 定制 = 套餐总价（含最多 N 只），不按只数乘
     const recalcCustomPrice = () => {
-      const qty = planTab.value === "custom" ? Math.max(1, customSymbolCount.value) : 1;
-      const unit = Number(topUpForm.unitPrice) || 0;
-      const base = unit * qty;
+      const base = Number(topUpForm.unitPrice) || 0;
       topUpForm.amount = base;
       topUpForm.originalAmount = base;
       if (!promoValid.value) {
@@ -797,8 +826,7 @@ createApp({
       promoValid.value = false;
       promoMessage.value = "";
       promoInput.value = "";
-      const qty = topUpForm.orderType === "custom_watchlist" ? Math.max(1, customSymbolCount.value) : 1;
-      const base = Number(plan.price) * qty;
+      const base = Number(plan.price);
       topUpForm.amount = base;
       topUpForm.originalAmount = base;
       topUpForm.floatingAmount = generateFloatingAmount(base);
@@ -823,14 +851,17 @@ createApp({
       if (!topUpForm.planId) { alert("请先选择套餐"); return; }
       promoChecking.value = true;
       try {
-        const qty = planTab.value === "custom" ? Math.max(1, customSymbolCount.value) : 1;
         const res = await fetch(`${API_BASE}/api/promo/check`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(localStorage.getItem("etf_token") ? { Authorization: `Bearer ${localStorage.getItem("etf_token")}` } : {}),
           },
-          body: JSON.stringify({ plan_id: topUpForm.planId, promo_code: promoInput.value.trim(), quantity: qty }),
+          body: JSON.stringify({
+            plan_id: topUpForm.planId,
+            promo_code: promoInput.value.trim(),
+            quantity: 1, // 套餐总价
+          }),
         });
         const data = await res.json();
         if (data.success) {
@@ -977,7 +1008,6 @@ createApp({
     const submitOrder = async () => {
       if (!/^\d{6}$/.test(topUpForm.txId)) { alert("请填写6位数字凭证"); return; }
 
-      // 支付注册：不强制邮箱，账号随意
       if (!isLoggedIn.value) {
         if (!payRegister.username || !payRegister.password) {
           alert("未登录请填写注册账号和密码，或先登录");
@@ -1013,7 +1043,7 @@ createApp({
           return;
         }
         if (customItems.length > customMaxSymbols.value) {
-          alert(`定制标的最多 ${customMaxSymbols.value} 只，当前 ${customItems.length} 只`);
+          alert(`定制套餐最多 ${customMaxSymbols.value} 只，当前 ${customItems.length} 只`);
           return;
         }
       }
@@ -1108,9 +1138,10 @@ createApp({
       }
     });
 
-    /**
-     * 免费 TopN：与「最新一周 + 默认排序」完全一致，并锁定代码。
-     */
+    watch(isLoggedIn, (v) => {
+      if (v) fetchCustomWatchlist();
+    });
+
     const computeLockedFreeTop = () => {
       const n = freeTopN.value;
       const rows = allData.value || [];
@@ -1267,10 +1298,11 @@ createApp({
       sendEmailCode, sendCodeLoading, countdown,
       loading, sortedData, showDropdown, searchQuery, availablePeriods, currentPeriodLabel, selectWeek, selectedMonday,
       sortColumn, sortOrder, handleSort, expandedRowKey, toggleRow, getPastWeeks,
-      openChart, getColorClass, isDailyChartColumn, getColumnDateLabel, formatMobileStatus, getMobileStatusClass,
+      openChart, getColorClass, isDailyChartColumn, getColumnDateLabel, chartAsOfDate,
+      formatMobileStatus, getMobileStatusClass,
       getDayTooltip, getWeekTooltip, getMobileDayDate, getMobileWeekDate, freeEtfCodes,
       sharedWatchlist, customWatchlist, customLoading, customEditorVisible, customDraftItems, customSymbolCount,
-      customDedupeTip, dedupeCustomDraft, openCustomEditor, confirmCustomAndPay, removeCustomItem, formatDateShort,
+      customMaxSymbols, customDedupeTip, dedupeCustomDraft, openCustomEditor, confirmCustomAndPay, removeCustomItem, formatDateShort,
       vipPlans, planTab, displayPlans, topUpForm, selectTopUpPlan, orderLoading, orderMessage, submitOrder, showManualInput,
       promoInput, promoChecking, promoValid, promoMessage, applyPromo, displayPayAmount, payRegister,
       payChannel, currentPayQrSrc, recalcCustomPrice,
