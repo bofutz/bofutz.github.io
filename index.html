@@ -33,6 +33,24 @@
         .mobile-status-neutral { color: #94a3b8 !important; }
         .chart-icon { transition: color .15s; }
         .chart-icon:hover { color: #3b82f6 !important; }
+        /* 社交 hover 二维码 */
+        .social-item { position: relative; }
+        .social-qr-pop {
+            display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+            background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 50; width: 132px;
+        }
+        .social-qr-pop::after {
+            content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+            border: 6px solid transparent; border-top-color: #fff;
+        }
+        .social-item:hover .social-qr-pop { display: block; }
+        .social-qr-pop img { width: 112px; height: 112px; object-fit: contain; border-radius: 6px; }
+        /* 手机卡片 */
+        .m-card { background: #fff; border-radius: 14px; border: 1px solid #eef2f6; box-shadow: 0 1px 3px rgba(15,23,42,.04); overflow: hidden; }
+        .m-day-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; }
+        .m-day-cell { padding: 8px 2px; text-align: center; border-right: 1px solid #f1f5f9; }
+        .m-day-cell:last-child { border-right: none; background: rgba(77,166,160,.08); }
     </style>
 </head>
 <body class="text-slate-700 font-sans h-screen overflow-hidden flex">
@@ -41,20 +59,20 @@
 
     <div class="flex-1 flex flex-col h-full overflow-hidden relative">
 
-        <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
-            <div class="flex items-center gap-3">
+        <header class="h-14 sm:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-6 z-10 shrink-0">
+            <div class="flex items-center gap-2 sm:gap-3">
                 <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2"><i class="fa-solid fa-bars text-xl"></i></button>
                 <a @click.prevent="navigate('#/')" href="#/" class="flex items-center gap-2 cursor-pointer hover:opacity-85">
-                    <img src="logo.png" alt="Logo" class="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-100" onerror="this.style.display='none'">
-                    <span class="text-lg font-bold theme-text tracking-wide hidden sm:block">波幅探长</span>
+                    <img src="logo.png" alt="Logo" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover shadow-sm border border-slate-100" onerror="this.style.display='none'">
+                    <span class="text-base sm:text-lg font-bold theme-text tracking-wide hidden sm:block">波幅探长</span>
                 </a>
                 <span class="text-sm font-semibold text-slate-500 border-l border-slate-200 pl-3 hidden sm:block">{{ pageTitle }}</span>
                 <span class="text-sm font-semibold text-slate-700 sm:hidden">{{ pageTitle }}</span>
             </div>
-            <div class="flex items-center gap-3 sm:gap-5">
+            <div class="flex items-center gap-2 sm:gap-5">
                 <div v-if="!isLoggedIn" class="flex gap-2">
-                    <button @click="openAuth('login')" class="text-sm font-medium text-slate-600 hover:theme-text">登录</button>
-                    <button @click="openAuth('register')" class="text-sm font-medium theme-bg text-white px-3 py-1.5 sm:px-4 rounded hover:opacity-90 shadow-sm">注册</button>
+                    <button @click="openAuth('login')" class="text-sm font-medium text-slate-600 hover:theme-text px-1">登录</button>
+                    <button @click="openAuth('register')" class="text-sm font-medium theme-bg text-white px-3 py-1.5 rounded-lg hover:opacity-90 shadow-sm">注册</button>
                 </div>
                 <div v-else class="relative">
                     <div @click.stop="userMenuOpen = !userMenuOpen" class="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded select-none">
@@ -62,7 +80,7 @@
                         <span class="text-sm font-medium text-slate-600 hidden sm:inline">{{ username }}</span>
                         <i class="fa-solid fa-chevron-down text-[10px] text-slate-400" :class="{'rotate-180': userMenuOpen}"></i>
                     </div>
-                    <div v-if="userMenuOpen" @click.stop class="absolute right-0 mt-2 w-36 bg-white rounded shadow-lg border border-slate-100 z-50 overflow-hidden">
+                    <div v-if="userMenuOpen" @click.stop class="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-slate-100 z-50 overflow-hidden">
                         <div @click="navigate('#/profile'); userMenuOpen=false" class="px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 cursor-pointer flex items-center border-b border-slate-50"><i class="fa-regular fa-user mr-2 text-slate-400"></i>个人中心</div>
                         <div @click="logout(); userMenuOpen=false" class="px-4 py-3 text-sm text-red-500 hover:bg-red-50 cursor-pointer flex items-center"><i class="fa-solid fa-right-from-bracket mr-2"></i>退出登录</div>
                     </div>
@@ -73,22 +91,22 @@
         <main class="flex-1 overflow-auto custom-scrollbar p-3 sm:p-6 relative flex flex-col justify-between">
             <div class="flex-1">
 
-                <!-- 数据看板：仅通用 -->
-                <div v-show="currentRoute === '#/'" class="max-w-7xl mx-auto space-y-4">
+                <!-- 数据看板 -->
+                <div v-show="currentRoute === '#/'" class="max-w-7xl mx-auto space-y-3 sm:space-y-4">
 
-                    <div class="flex flex-col sm:flex-row gap-3">
-                        <div class="flex-1 bg-white rounded shadow-sm border border-slate-100 relative">
-                            <button @click.stop="showDropdown = !showDropdown" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50">
+                    <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                        <div class="flex-1 bg-white rounded-xl shadow-sm border border-slate-100 relative">
+                            <button @click.stop="showDropdown = !showDropdown" class="w-full flex items-center justify-between px-3 sm:px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 rounded-xl">
                                 <span><i class="fa-regular fa-calendar mr-2 text-slate-400"></i>{{ currentPeriodLabel || '历史数据加载中...' }}</span>
                                 <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
                             </button>
-                            <div v-if="showDropdown" @click.stop class="absolute left-0 mt-1 bg-white border border-slate-200 rounded shadow-lg z-50 p-4 w-full sm:w-80">
+                            <div v-if="showDropdown" @click.stop class="absolute left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 p-4 w-full sm:w-80">
                                 <div class="max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
                                     <div v-for="month in availablePeriods" :key="month.monthKey" class="mb-3 last:mb-0">
                                         <div class="text-xs font-bold text-slate-400 mb-2 border-b pb-1">{{ month.monthLabel }}</div>
                                         <div class="flex flex-wrap gap-2">
                                             <button v-for="week in month.weeks" :key="week.monday" @click="selectWeek(week.monday)"
-                                                class="px-2 py-1 text-xs rounded border transition-all"
+                                                class="px-2.5 py-1 text-xs rounded-lg border transition-all"
                                                 :class="selectedMonday === week.monday ? 'theme-bg text-white border-transparent' : 'bg-slate-50 text-slate-600 border-slate-200'">
                                                 {{ week.weekLabel }}
                                             </button>
@@ -97,7 +115,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="bg-white rounded shadow-sm border border-slate-100 flex items-center sm:w-64">
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center sm:w-64">
                             <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3"></i>
                             <input v-model="searchQuery" type="search" autocomplete="new-password" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
                         </div>
@@ -109,7 +127,7 @@
                     </div>
                     <div v-else>
                         <!-- 桌面表格 -->
-                        <div class="hidden sm:block bg-white rounded shadow-sm border border-slate-100 overflow-hidden">
+                        <div class="hidden sm:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                             <div class="overflow-x-auto custom-scrollbar">
                                 <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
                                     <thead class="bg-slate-50 border-b border-slate-100 sticky top-0 z-30">
@@ -139,11 +157,10 @@
                                                     <div class="flex items-center justify-center gap-1">
                                                         <span v-if="item.days[idx-1]?.day_status && item.days[idx-1].day_status !== '-' && item.days[idx-1].day_status !== '--'" :title="getDayTooltip(item.days[idx-1].date)">{{ item.days[idx-1].day_status }}</span>
                                                         <span v-else>-</span>
-                                                        <!-- 日线图标：仅放在「该周最新有数据日」对应列，hover 显示日期 -->
                                                         <i v-if="isDailyChartColumn(idx-1)"
                                                            class="fa-regular fa-image text-slate-300 chart-icon cursor-pointer text-[12px]"
                                                            :title="'日线图表 · ' + getColumnDateLabel(idx-1)"
-                                                           @click.stop="openChart(item.etf_code, 'daily', index)"></i>
+                                                           @click.stop="openChart(item.etf_code, 'daily')"></i>
                                                     </div>
                                                 </td>
                                                 <td class="p-3">
@@ -152,7 +169,7 @@
                                                         <span v-else>-</span>
                                                         <i class="fa-regular fa-image text-slate-300 chart-icon cursor-pointer text-[12px]"
                                                            :title="'周线图表 · ' + getWeekTooltip(selectedMonday)"
-                                                           @click.stop="openChart(item.etf_code, 'weekly', index)"></i>
+                                                           @click.stop="openChart(item.etf_code, 'weekly')"></i>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -174,50 +191,55 @@
                                 </table>
                             </div>
                         </div>
-                        <!-- 移动端卡片 -->
-                        <div class="sm:hidden space-y-1.5">
-                            <div v-for="(item, index) in sortedData" :key="item.etf_code" class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden">
-                                <div class="px-3 py-2 flex items-center justify-between border-b border-slate-50" @click="toggleRow(item)">
-                                    <div class="flex items-center gap-1.5 min-w-0 flex-1">
-                                        <span class="text-[15px] font-bold text-black font-mono shrink-0">{{ item.etf_code }}</span>
-                                        <span class="text-[14px] font-medium text-slate-800 truncate">{{ item.etf_name }}</span>
-                                        <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0">免费</span>
+
+                        <!-- 手机卡片（优化版） -->
+                        <div class="sm:hidden space-y-2.5">
+                            <div v-for="item in sortedData" :key="item.etf_code" class="m-card">
+                                <div class="px-3.5 py-2.5 flex items-center justify-between" @click="toggleRow(item)">
+                                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="text-[15px] font-bold text-slate-800 font-mono">{{ item.etf_code }}</span>
+                                                <span v-if="freeEtfCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full shrink-0">免费</span>
+                                            </div>
+                                            <div class="text-[13px] text-slate-500 truncate mt-0.5">{{ item.etf_name }}</div>
+                                        </div>
                                     </div>
-                                    <i class="fa-solid text-[11px] text-slate-400 shrink-0 ml-2" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
+                                    <i class="fa-solid text-xs text-slate-300 shrink-0 ml-2" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
                                 </div>
-                                <div class="px-1.5 py-1.5 grid grid-cols-6 gap-0 text-center">
-                                    <div v-for="idx in 5" :key="idx" class="flex flex-col items-center justify-center py-1">
-                                        <span class="text-[11px] text-black font-medium leading-none mb-0.5">周{{ ['一','二','三','四','五'][idx-1] }}</span>
-                                        <span v-if="item.days[idx-1]?.date" class="text-[10px] text-black leading-none">{{ getMobileDayDate(item.days[idx-1].date) }}</span>
-                                        <div class="flex items-center gap-0.5 mt-0.5">
+                                <div class="m-day-grid border-t border-slate-50">
+                                    <div v-for="idx in 5" :key="idx" class="m-day-cell">
+                                        <div class="text-[10px] text-slate-400 font-medium">周{{ ['一','二','三','四','五'][idx-1] }}</div>
+                                        <div v-if="item.days[idx-1]?.date" class="text-[9px] text-slate-300 mt-0.5">{{ getMobileDayDate(item.days[idx-1].date) }}</div>
+                                        <div class="flex items-center justify-center gap-0.5 mt-1">
                                             <span class="text-[13px] font-bold leading-none" :class="getMobileStatusClass(item.days[idx-1]?.day_status)">{{ formatMobileStatus(item.days[idx-1]?.day_status) }}</span>
                                             <i v-if="isDailyChartColumn(idx-1)"
                                                class="fa-regular fa-image text-slate-400 text-[10px] chart-icon"
                                                :title="'日线 · ' + getColumnDateLabel(idx-1)"
-                                               @click.stop="openChart(item.etf_code, 'daily', index)"></i>
+                                               @click.stop="openChart(item.etf_code, 'daily')"></i>
                                         </div>
                                     </div>
-                                    <div class="flex flex-col items-center justify-center py-1 bg-[#4da6a0]/10 rounded-md">
-                                        <span class="text-[11px] text-black font-bold leading-none mb-0.5">周线</span>
-                                        <span class="text-[10px] text-black leading-none">{{ getMobileWeekDate(selectedMonday) }}</span>
-                                        <div class="flex items-center gap-0.5 mt-0.5">
+                                    <div class="m-day-cell">
+                                        <div class="text-[10px] text-slate-500 font-bold">周线</div>
+                                        <div class="text-[9px] text-slate-400 mt-0.5">{{ getMobileWeekDate(selectedMonday) }}</div>
+                                        <div class="flex items-center justify-center gap-0.5 mt-1">
                                             <span class="text-[13px] font-bold leading-none" :class="getMobileStatusClass(item.week_status)">{{ formatMobileStatus(item.week_status) }}</span>
                                             <i class="fa-regular fa-image text-slate-400 text-[10px] chart-icon"
                                                :title="'周线 · ' + getWeekTooltip(selectedMonday)"
-                                               @click.stop="openChart(item.etf_code, 'weekly', index)"></i>
+                                               @click.stop="openChart(item.etf_code, 'weekly')"></i>
                                         </div>
                                     </div>
                                 </div>
-                                <div v-if="expandedRowKey === item.etf_code" class="border-t border-slate-100 bg-white">
-                                    <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="px-2.5 py-2 border-b border-slate-50 last:border-0">
-                                        <div class="grid grid-cols-6 gap-0 text-center">
-                                            <div v-for="idx in 5" :key="idx" class="flex flex-col items-center py-0.5">
-                                                <span v-if="week.days[idx-1]?.date" class="text-[10px] text-black">{{ getMobileDayDate(week.days[idx-1].date) }}</span>
-                                                <span class="text-[13px] font-bold mt-0.5" :class="getMobileStatusClass(week.days[idx-1]?.day_status)">{{ formatMobileStatus(week.days[idx-1]?.day_status) }}</span>
+                                <div v-if="expandedRowKey === item.etf_code" class="border-t border-slate-100 bg-slate-50/60">
+                                    <div v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="px-2 py-2 border-b border-slate-100/80 last:border-0">
+                                        <div class="m-day-grid">
+                                            <div v-for="idx in 5" :key="idx" class="text-center py-1">
+                                                <div v-if="week.days[idx-1]?.date" class="text-[9px] text-slate-400">{{ getMobileDayDate(week.days[idx-1].date) }}</div>
+                                                <div class="text-[12px] font-bold mt-0.5" :class="getMobileStatusClass(week.days[idx-1]?.day_status)">{{ formatMobileStatus(week.days[idx-1]?.day_status) }}</div>
                                             </div>
-                                            <div class="flex flex-col items-center py-0.5">
-                                                <span class="text-[10px] text-black">{{ getMobileWeekDate(week.monday) }}</span>
-                                                <span class="text-[13px] font-bold mt-0.5" :class="getMobileStatusClass(week.week_status)">{{ formatMobileStatus(week.week_status) }}</span>
+                                            <div class="text-center py-1 bg-[#4da6a0]/10 rounded-md">
+                                                <div class="text-[9px] text-slate-400">{{ getMobileWeekDate(week.monday) }}</div>
+                                                <div class="text-[12px] font-bold mt-0.5" :class="getMobileStatusClass(week.week_status)">{{ formatMobileStatus(week.week_status) }}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -228,31 +250,30 @@
                 </div>
 
                 <!-- 个人中心 -->
-                <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-6">
+                <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-5">
                     <div v-if="!isLoggedIn" class="bg-white rounded-xl border p-10 text-center">
                         <p class="text-slate-500 mb-4">请先登录查看个人中心</p>
                         <button @click="openAuth('login')" class="theme-bg text-white px-6 py-2 rounded-lg text-sm">去登录</button>
                     </div>
                     <template v-else>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                            <div class="flex items-center justify-between mb-2">
+                        <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
+                            <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <div class="text-sm text-slate-500 mb-1">通用监控 VIP</div>
                                     <div class="flex items-center gap-2 flex-wrap">
-                                        <span class="text-2xl font-bold" :class="isVip ? 'theme-text' : 'text-slate-400'">{{ isVip ? '已开通' : '未开通' }}</span>
+                                        <span class="text-xl sm:text-2xl font-bold" :class="isVip ? 'theme-text' : 'text-slate-400'">{{ isVip ? '已开通' : '未开通' }}</span>
                                         <span v-if="isVip" class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded border border-emerald-100">剩余 {{ vipDaysLeft }} 天</span>
                                     </div>
                                 </div>
-                                <button @click="navigate('#/plan'); planTab='shared'" class="theme-bg text-white px-6 py-2.5 rounded-lg text-sm font-medium shadow-sm">{{ isVip ? '续费通用' : '开通通用' }}</button>
+                                <button @click="navigate('#/plan'); planTab='shared'" class="theme-bg text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg text-sm font-medium shadow-sm shrink-0">{{ isVip ? '续费通用' : '开通通用' }}</button>
                             </div>
                         </div>
 
-                        <!-- 定制监控 -->
                         <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div>
                                     <div class="font-medium text-slate-700">我的定制监控</div>
-                                    <p class="text-[11px] text-slate-400 mt-0.5">与通用独立计费 · 按只累加 · 不解锁通用图表 · 最多 {{ publicSettings.custom_max_symbols || 3 }} 只</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">套餐总价含最多 {{ publicSettings.custom_max_symbols || 3 }} 只 · 与通用独立 · 不解锁通用图表</p>
                                 </div>
                                 <button @click="openCustomEditor" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg self-start"><i class="fa-solid fa-plus mr-1"></i>添加标的</button>
                             </div>
@@ -275,9 +296,8 @@
                             </div>
                         </div>
 
-                        <!-- 订单 -->
                         <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-100 font-medium text-slate-700">我的订单</div>
+                            <div class="px-5 sm:px-6 py-4 border-b border-slate-100 font-medium text-slate-700">我的订单</div>
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left text-sm whitespace-nowrap">
                                     <thead class="bg-slate-50 text-slate-500 border-b"><tr>
@@ -302,10 +322,9 @@
                             </div>
                         </div>
 
-                        <!-- 邀请 -->
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
+                        <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
                             <div class="font-medium text-slate-700">专属邀请码及奖励</div>
-                            <div class="bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div>
                                     <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
                                     <span class="font-mono text-2xl font-bold text-slate-700 tracking-widest">{{ referralCode || '-' }}</span>
@@ -336,13 +355,13 @@
                             </div>
                         </div>
 
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                        <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
                             <h3 class="font-medium text-slate-700 mb-4">修改密码</h3>
-                            <div class="space-y-4 max-w-md">
-                                <input v-model="pwdForm.old" type="password" placeholder="旧密码" class="w-full px-4 py-2 border border-slate-200 rounded text-sm">
-                                <input v-model="pwdForm.new" type="password" placeholder="新密码" class="w-full px-4 py-2 border border-slate-200 rounded text-sm">
-                                <input v-model="pwdForm.confirm" type="password" placeholder="确认新密码" class="w-full px-4 py-2 border border-slate-200 rounded text-sm">
-                                <button @click="submitPasswordChange" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2 rounded text-sm disabled:opacity-50">{{ pwdLoading ? '保存中...' : '保 存' }}</button>
+                            <div class="space-y-3 max-w-md">
+                                <input v-model="pwdForm.old" type="password" placeholder="旧密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm">
+                                <input v-model="pwdForm.new" type="password" placeholder="新密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm">
+                                <input v-model="pwdForm.confirm" type="password" placeholder="确认新密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm">
+                                <button @click="submitPasswordChange" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2 rounded-lg text-sm disabled:opacity-50">{{ pwdLoading ? '保存中...' : '保 存' }}</button>
                             </div>
                         </div>
                     </template>
@@ -388,11 +407,11 @@
                 <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
                     <div class="mb-4">
                         <h2 class="text-xl font-medium text-slate-800">选择套餐</h2>
-                        <p class="text-xs text-slate-400 mt-1">通用监控与定制监控独立计费 · 支持优惠码 · 游客可支付并同步注册（账号可随意填写）</p>
+                        <p class="text-xs text-slate-400 mt-1">通用与定制独立计费 · 定制为套餐总价（含最多 {{ publicSettings.custom_max_symbols || 3 }} 只）· 游客可支付并同步注册</p>
                     </div>
                     <div class="flex gap-2 mb-6 text-sm">
                         <button @click="planTab='shared'" class="px-4 py-2 rounded-lg border" :class="planTab==='shared'?'theme-bg text-white border-transparent':'bg-white'">通用监控</button>
-                        <button @click="planTab='custom'" class="px-4 py-2 rounded-lg border" :class="planTab==='custom'?'theme-bg text-white border-transparent':'bg-white'">定制监控（按只）</button>
+                        <button @click="planTab='custom'" class="px-4 py-2 rounded-lg border" :class="planTab==='custom'?'theme-bg text-white border-transparent':'bg-white'">定制监控</button>
                     </div>
 
                     <div v-if="displayPlans.length === 0" class="text-center py-12 text-slate-400">加载套餐中...</div>
@@ -401,17 +420,15 @@
                             class="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col cursor-pointer transition-all border-2 relative"
                             :class="topUpForm.planId === plan.id ? 'theme-border ring-2 ring-[#4da6a0]/20' : 'border-transparent hover:border-slate-200'">
                             <div v-if="plan.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2.5 py-0.5 rounded-bl">{{ plan.tag }}</div>
-                            <div class="p-6 border-b border-slate-50 bg-slate-50/50">
+                            <div class="p-5 sm:p-6 border-b border-slate-50 bg-slate-50/50">
                                 <div class="text-slate-500 text-sm mb-3">{{ plan.name }}</div>
-                                <div class="flex items-end mb-1"><span class="text-3xl font-light text-slate-800">¥ {{ plan.price }}</span>
-                                    <span v-if="planTab==='custom'" class="text-xs text-slate-400 ml-1">/ 只</span>
-                                </div>
-                                <div class="text-slate-400 text-xs">有效期 {{ plan.days }} 个自然日</div>
+                                <div class="flex items-end mb-1"><span class="text-3xl font-light text-slate-800">¥ {{ plan.price }}</span></div>
+                                <div class="text-slate-400 text-xs">有效期 {{ plan.days }} 个自然日<span v-if="planTab==='custom'"> · 含最多 {{ publicSettings.custom_max_symbols || 3 }} 只</span></div>
                             </div>
                             <div class="p-5 flex-1">
                                 <ul class="text-xs text-slate-600 space-y-2 mb-4">
                                     <li v-if="planTab==='shared'"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 解锁通用看板全部图表</li>
-                                    <li v-if="planTab==='custom'"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 单只定制 · 多只费用累加 · 最多 {{ publicSettings.custom_max_symbols || 3 }} 只</li>
+                                    <li v-if="planTab==='custom'"><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 套餐总价 · 最多 {{ publicSettings.custom_max_symbols || 3 }} 只标的</li>
                                     <li><i class="fa-solid fa-circle-check text-[#4da6a0] mr-2"></i> 支持优惠码</li>
                                 </ul>
                                 <div class="w-full text-center py-2 rounded text-xs font-medium" :class="topUpForm.planId === plan.id ? 'theme-bg text-white' : 'bg-slate-100 text-slate-600'">
@@ -421,20 +438,19 @@
                         </div>
                     </div>
 
-                    <!-- 定制：填写标的 -->
                     <div v-if="planTab==='custom'" class="bg-white rounded-xl border p-5 mb-6 max-w-2xl mx-auto space-y-3">
-                        <div class="text-sm font-medium">定制标的（费用 = 单价 × 只数，最多 {{ publicSettings.custom_max_symbols || 3 }} 只）</div>
+                        <div class="text-sm font-medium">定制标的（套餐总价，最多 {{ publicSettings.custom_max_symbols || 3 }} 只）</div>
                         <div v-for="(row, i) in customDraftItems" :key="i" class="flex gap-2 items-center">
                             <input v-model="row.etf_code" @blur="dedupeCustomDraft" placeholder="代码" class="w-28 px-2 py-2 border rounded-lg text-sm font-mono">
                             <input v-model="row.etf_name" placeholder="名称" class="flex-1 px-2 py-2 border rounded-lg text-sm">
                             <button v-if="customDraftItems.length>1" @click="customDraftItems.splice(i,1); dedupeCustomDraft()" class="text-slate-300 hover:text-red-500 px-1"><i class="fa-solid fa-xmark"></i></button>
                         </div>
                         <button v-if="customDraftItems.length < (Number(publicSettings.custom_max_symbols)||3)" @click="customDraftItems.push({etf_code:'',etf_name:''})" class="text-xs theme-text">+ 再加一只</button>
-                        <p class="text-xs text-slate-500">当前 {{ customSymbolCount }} 只 · 基准合计 ¥{{ (Number(topUpForm.amount)||0).toFixed(2) }}</p>
+                        <p class="text-xs text-slate-500">已填 {{ customSymbolCount }} 只 · 应付套餐价 ¥{{ (Number(topUpForm.amount)||0).toFixed(2) }}</p>
                         <p v-if="customDedupeTip" class="text-xs text-amber-600"><i class="fa-solid fa-circle-info mr-1"></i>{{ customDedupeTip }}</p>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 max-w-2xl mx-auto border border-slate-100 space-y-5">
+                    <div class="bg-white rounded-xl shadow-sm p-5 sm:p-8 max-w-2xl mx-auto border border-slate-100 space-y-5">
                         <div class="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
                             <label class="text-xs font-medium text-slate-600 mb-2 block">优惠码（选填）</label>
                             <div class="flex gap-2">
@@ -470,7 +486,7 @@
                         <div class="flex flex-col items-center">
                             <div class="w-52 h-52 bg-slate-50 rounded-xl p-3 border-2 border-dashed border-slate-200 mb-3 flex items-center justify-center">
                                 <img v-if="currentPayQrSrc" :src="currentPayQrSrc" class="w-full h-full object-contain rounded-lg" alt="收款码">
-                                <span v-else class="text-xs text-slate-400 text-center px-4">请在后台系统设置中配置{{ payChannel==='alipay'?'支付宝':'微信' }}收款码（图片URL或支付链接）</span>
+                                <span v-else class="text-xs text-slate-400 text-center px-4">请在后台配置{{ payChannel==='alipay'?'支付宝':'微信' }}收款码（图片URL或支付链接）</span>
                             </div>
                             <div class="bg-emerald-50 text-emerald-700 text-xs px-4 py-2.5 rounded-lg border border-emerald-100 max-w-md text-center">
                                 <p class="font-bold">请严格支付精准金额 {{ displayPayAmount }} 元</p>
@@ -491,12 +507,12 @@
 
                 <!-- 使用说明 -->
                 <div v-show="currentRoute === '#/docs'" class="max-w-6xl mx-auto">
-                    <div class="bg-white rounded-xl shadow-sm p-8 max-w-3xl mx-auto border border-slate-100">
+                    <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 max-w-3xl mx-auto border border-slate-100">
                         <h2 class="text-2xl font-medium text-center text-slate-800 mb-8">使用指南</h2>
                         <div class="space-y-6 text-slate-600 text-sm leading-relaxed">
                             <section>
                                 <h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">通用 vs 定制</h4>
-                                <p class="pl-4">通用监控：解锁通用看板全部图表。定制监控：按只计费（与通用同价），在个人中心管理，不解锁通用图表。定制最多 {{ publicSettings.custom_max_symbols || 3 }} 只。</p>
+                                <p class="pl-4">通用监控：解锁通用看板全部图表。定制监控：套餐总价含最多 {{ publicSettings.custom_max_symbols || 3 }} 只，在个人中心管理，不解锁通用图表。</p>
                             </section>
                             <section>
                                 <h4 class="text-lg font-medium text-slate-700 mb-2 border-l-4 theme-border pl-3">游客权限</h4>
@@ -511,18 +527,33 @@
                 </div>
             </div>
 
-            <footer class="mt-12 pt-6 pb-6 border-t border-slate-200/80 text-center text-xs text-slate-500 shrink-0">
+            <footer class="mt-10 pt-5 pb-5 border-t border-slate-200/80 text-center text-xs text-slate-500 shrink-0">
                 <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div class="flex items-center gap-2">
                         <img src="logo.png" alt="Logo" class="w-5 h-5 rounded object-cover" onerror="this.style.display='none'">
                         <span>© 2026 波幅探长 · 专业的波幅监控与数据分析平台</span>
                     </div>
-                    <div class="flex items-center gap-3 text-slate-400">
-                        <a v-if="publicSettings.social_douyin" :href="publicSettings.social_douyin" target="_blank" rel="noopener" class="hover:text-[#000000] transition-colors" title="抖音"><i class="fa-brands fa-tiktok text-lg"></i></a>
-                        <a v-if="publicSettings.social_shipinhao" :href="publicSettings.social_shipinhao" target="_blank" rel="noopener" class="hover:text-[#07C160] transition-colors" title="视频号"><i class="fa-brands fa-weixin text-lg"></i></a>
-                        <a v-if="publicSettings.social_xiaohongshu" :href="publicSettings.social_xiaohongshu" target="_blank" rel="noopener" class="hover:text-[#FE2C55] transition-colors" title="小红书"><i class="fa-solid fa-book text-lg"></i></a>
-                        <a v-if="publicSettings.social_gongzhonghao" :href="publicSettings.social_gongzhonghao" target="_blank" rel="noopener" class="hover:text-[#07C160] transition-colors" title="公众号"><i class="fa-solid fa-comment-dots text-lg"></i></a>
-                        <a v-if="publicSettings.social_kuaishou" :href="publicSettings.social_kuaishou" target="_blank" rel="noopener" class="hover:text-[#FF4906] transition-colors" title="快手"><i class="fa-solid fa-video text-lg"></i></a>
+                    <div class="flex items-center gap-4 text-slate-400">
+                        <a v-if="publicSettings.social_douyin" :href="publicSettings.social_douyin" target="_blank" rel="noopener" class="social-item hover:text-slate-700 transition-colors" title="抖音">
+                            <i class="fa-brands fa-tiktok text-lg"></i>
+                            <div class="social-qr-pop"><img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_douyin)" alt="抖音"><p class="text-[10px] text-slate-500 mt-1 text-center">抖音</p></div>
+                        </a>
+                        <a v-if="publicSettings.social_shipinhao" :href="publicSettings.social_shipinhao" target="_blank" rel="noopener" class="social-item hover:text-[#07C160] transition-colors" title="视频号">
+                            <i class="fa-brands fa-weixin text-lg"></i>
+                            <div class="social-qr-pop"><img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_shipinhao)" alt="视频号"><p class="text-[10px] text-slate-500 mt-1 text-center">视频号</p></div>
+                        </a>
+                        <a v-if="publicSettings.social_xiaohongshu" :href="publicSettings.social_xiaohongshu" target="_blank" rel="noopener" class="social-item hover:text-[#FE2C55] transition-colors" title="小红书">
+                            <i class="fa-solid fa-book text-lg"></i>
+                            <div class="social-qr-pop"><img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_xiaohongshu)" alt="小红书"><p class="text-[10px] text-slate-500 mt-1 text-center">小红书</p></div>
+                        </a>
+                        <a v-if="publicSettings.social_gongzhonghao" :href="publicSettings.social_gongzhonghao" target="_blank" rel="noopener" class="social-item hover:text-[#07C160] transition-colors" title="公众号">
+                            <i class="fa-solid fa-comment-dots text-lg"></i>
+                            <div class="social-qr-pop"><img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_gongzhonghao)" alt="公众号"><p class="text-[10px] text-slate-500 mt-1 text-center">公众号</p></div>
+                        </a>
+                        <a v-if="publicSettings.social_kuaishou" :href="publicSettings.social_kuaishou" target="_blank" rel="noopener" class="social-item hover:text-[#FF4906] transition-colors" title="快手">
+                            <i class="fa-solid fa-video text-lg"></i>
+                            <div class="social-qr-pop"><img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_kuaishou)" alt="快手"><p class="text-[10px] text-slate-500 mt-1 text-center">快手</p></div>
+                        </a>
                     </div>
                 </div>
             </footer>
@@ -530,7 +561,7 @@
     </div>
 
     <aside class="fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 flex flex-col shadow-2xl" :class="menuOpen ? 'translate-x-0' : '-translate-x-full'">
-        <div class="h-16 theme-bg text-white flex items-center justify-between px-5 text-lg tracking-wider">
+        <div class="h-14 sm:h-16 theme-bg text-white flex items-center justify-between px-5 text-lg tracking-wider">
             <a href="#/" @click="menuOpen=false" class="flex items-center gap-2 text-white">
                 <img src="logo.png" class="w-7 h-7 rounded-full bg-white/20 p-0.5 object-cover" onerror="this.style.display='none'">
                 <span>波幅探长</span>
@@ -586,7 +617,7 @@
                     <button v-if="customDraftItems.length>1" @click="customDraftItems.splice(i,1); dedupeCustomDraft()" class="text-slate-300 hover:text-red-500 px-1"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <button v-if="customDraftItems.length < (Number(publicSettings.custom_max_symbols)||3)" @click="customDraftItems.push({etf_code:'',etf_name:''})" class="text-xs theme-text">+ 再加一只</button>
-                <p class="text-[11px] text-slate-400">将跳转购买页选择定制套餐，费用按只数累加。最多 {{ publicSettings.custom_max_symbols || 3 }} 只，重复代码会自动去重。</p>
+                <p class="text-[11px] text-slate-400">套餐总价含最多 {{ publicSettings.custom_max_symbols || 3 }} 只，重复代码会自动去重。</p>
                 <p v-if="customDedupeTip" class="text-xs text-amber-600">{{ customDedupeTip }}</p>
             </div>
             <div class="px-6 py-4 bg-slate-50 flex justify-end gap-2">
