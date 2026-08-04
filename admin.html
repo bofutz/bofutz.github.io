@@ -238,7 +238,7 @@
             <div class="flex flex-col sm:flex-row justify-between gap-3">
               <div>
                 <h2 class="text-xl font-bold">套餐管理</h2>
-                <p class="text-xs text-slate-400">通用与定制单价独立配置；定制费用 = 单价 × 只数（上限见系统设置）</p>
+                <p class="text-xs text-slate-400">通用与定制套餐独立配置。定制为「套餐总价」，含系统设置中的最多只数（默认 3 只），不按只数乘价。</p>
               </div>
               <div class="flex gap-2">
                 <div class="flex bg-white border rounded-lg overflow-hidden text-xs">
@@ -253,7 +253,7 @@
               <div v-for="p in filteredPlans" :key="p.id" class="bg-white border rounded-xl p-4 shadow-sm relative">
                 <span v-if="p.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl">{{p.tag}}</span>
                 <div class="font-bold text-slate-800">{{p.name}}</div>
-                <div class="text-2xl font-light mt-1">¥{{p.price}} <span class="text-xs text-slate-400">{{(p.plan_type||'shared')==='custom'?'/只':''}}</span></div>
+                <div class="text-2xl font-light mt-1">¥{{p.price}} <span class="text-xs text-slate-400">{{(p.plan_type||'shared')==='custom'?'（套餐总价）':''}}</span></div>
                 <div class="text-xs text-slate-400 mt-1">{{p.days}} 天 · {{(p.plan_type||'shared')==='custom'?'定制':'通用'}} · 排序 {{p.sort_order||0}}</div>
                 <div class="mt-3 flex gap-2">
                   <button @click="openPlanModal(p)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
@@ -291,7 +291,7 @@
                       <button @click="deleteShared(w)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
                     </td>
                   </tr>
-                  <tr v-if="!sharedList.length"><td colspan="5" class="py-10 text-center text-slate-400">暂无数据</td></tr>
+                  <tr v-if="!sharedList.length"><td colspan="5" class="py-10 text-center text-slate-400">暂无</td></tr>
                 </tbody>
               </table>
             </div>
@@ -299,34 +299,32 @@
 
           <!-- 定制监控 -->
           <div v-show="currentTab==='custom'" class="space-y-4">
-            <div class="flex justify-between gap-3">
+            <div class="flex flex-col sm:flex-row justify-between gap-3">
               <h2 class="text-xl font-bold">定制监控</h2>
               <button @click="fetchCustom" class="bg-white border px-3 py-2 rounded-lg text-sm"><i class="fa-solid fa-rotate-right"></i></button>
             </div>
-            <div class="bg-white border rounded-xl overflow-hidden shadow-sm overflow-x-auto">
-              <table class="w-full text-sm whitespace-nowrap">
-                <thead class="bg-slate-50 text-slate-500 border-b"><tr>
-                  <th class="py-3 px-4 text-left">用户</th><th class="py-3 px-4 text-left">代码</th><th class="py-3 px-4 text-left">名称</th>
-                  <th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-left">到期</th><th class="py-3 px-4 text-right">操作</th>
-                </tr></thead>
-                <tbody class="divide-y">
-                  <tr v-for="w in customList" :key="w.id" class="hover:bg-slate-50">
-                    <td class="py-3 px-4">{{w.username||w.user_id}}</td>
-                    <td class="py-3 px-4 font-mono font-bold">{{w.etf_code}}</td>
-                    <td class="py-3 px-4">{{w.etf_name}}</td>
-                    <td class="py-3 px-4">
-                      <span class="text-xs px-2 py-0.5 rounded-full"
-                        :class="w.status==='active'?'bg-emerald-100 text-emerald-600':w.status==='pending'?'bg-orange-100 text-orange-600':'bg-slate-100 text-slate-500'">{{w.status}}</span>
-                    </td>
-                    <td class="py-3 px-4 text-xs">{{formatDate(w.expire_at)}}</td>
-                    <td class="py-3 px-4 text-right space-x-1">
-                      <button @click="openCustomEdit(w)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
-                      <button @click="deleteCustom(w)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
-                    </td>
-                  </tr>
-                  <tr v-if="!customList.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无数据</td></tr>
-                </tbody>
-              </table>
+            <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
+                  <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                    <th class="py-3 px-4 text-left">用户</th><th class="py-3 px-4 text-left">代码/名称</th>
+                    <th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-left">到期</th><th class="py-3 px-4 text-right">操作</th>
+                  </tr></thead>
+                  <tbody class="divide-y">
+                    <tr v-for="w in customList" :key="w.id" class="hover:bg-slate-50">
+                      <td class="py-3 px-4">{{w.username||w.user_id}}</td>
+                      <td class="py-3 px-4"><span class="font-mono font-bold">{{w.etf_code}}</span> <span class="text-xs text-slate-400">{{w.etf_name}}</span></td>
+                      <td class="py-3 px-4"><span :class="w.status==='active'?'text-emerald-500':(w.status==='pending'?'text-orange-500':'text-slate-400')">{{w.status}}</span></td>
+                      <td class="py-3 px-4 text-xs text-slate-400">{{w.expire_at?formatDate(w.expire_at):'-'}}</td>
+                      <td class="py-3 px-4 text-right space-x-1">
+                        <button @click="openCustomEdit(w)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
+                        <button @click="deleteCustom(w)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!customList.length"><td colspan="5" class="py-10 text-center text-slate-400">暂无</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -336,106 +334,154 @@
               <h2 class="text-xl font-bold">优惠码</h2>
               <button @click="openPromoModal()" class="theme-bg text-white text-sm px-3 py-2 rounded-lg">新增</button>
             </div>
-            <div class="bg-white border rounded-xl overflow-hidden shadow-sm overflow-x-auto">
-              <table class="w-full text-sm whitespace-nowrap">
-                <thead class="bg-slate-50 text-slate-500 border-b"><tr>
-                  <th class="py-3 px-4 text-left">代码</th><th class="py-3 px-4 text-left">名称</th><th class="py-3 px-4 text-left">折扣</th>
-                  <th class="py-3 px-4 text-left">有效期</th><th class="py-3 px-4 text-left">用量</th><th class="py-3 px-4 text-right">操作</th>
-                </tr></thead>
-                <tbody class="divide-y">
-                  <tr v-for="p in promos" :key="p.id" class="hover:bg-slate-50">
-                    <td class="py-3 px-4 font-mono font-bold">{{p.code}}</td>
-                    <td class="py-3 px-4">{{p.name||'-'}}</td>
-                    <td class="py-3 px-4">{{p.discount_type==='percent'?p.discount_value+'%':'-¥'+p.discount_value}}</td>
-                    <td class="py-3 px-4 text-xs">{{formatDate(p.start_at)}} ~ {{formatDate(p.end_at)}}</td>
-                    <td class="py-3 px-4 text-xs">{{p.used_count||0}}{{p.max_uses!=null?'/'+p.max_uses:''}}</td>
-                    <td class="py-3 px-4 text-right space-x-1">
-                      <button @click="openPromoModal(p)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
-                      <button @click="deletePromo(p)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
-                    </td>
-                  </tr>
-                  <tr v-if="!promos.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无优惠码</td></tr>
-                </tbody>
-              </table>
+            <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
+                  <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                    <th class="py-3 px-4 text-left">代码</th><th class="py-3 px-4 text-left">名称</th><th class="py-3 px-4 text-left">折扣</th>
+                    <th class="py-3 px-4 text-left">有效期</th><th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-right">操作</th>
+                  </tr></thead>
+                  <tbody class="divide-y">
+                    <tr v-for="p in promos" :key="p.id" class="hover:bg-slate-50">
+                      <td class="py-3 px-4 font-mono font-bold">{{p.code}}</td>
+                      <td class="py-3 px-4">{{p.name||'-'}}</td>
+                      <td class="py-3 px-4">{{p.discount_type==='percent'? (p.discount_value+'%') : ('¥'+p.discount_value)}}</td>
+                      <td class="py-3 px-4 text-xs">{{formatDate(p.start_at)}} ~ {{formatDate(p.end_at)}}</td>
+                      <td class="py-3 px-4"><span :class="p.enabled?'text-emerald-500':'text-slate-400'">{{p.enabled?'启用':'停用'}}</span></td>
+                      <td class="py-3 px-4 text-right space-x-1">
+                        <button @click="openPromoModal(p)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
+                        <button @click="deletePromo(p)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!promos.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
-          <!-- 系统设置 -->
-          <div v-show="currentTab==='settings'" class="space-y-4 max-w-3xl">
-            <h2 class="text-xl font-bold">系统设置</h2>
-            <div class="bg-white border rounded-xl p-5 shadow-sm space-y-4">
-              <div class="text-sm font-medium text-slate-700 border-b pb-2">赠送与免费额度</div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label class="text-xs">注册赠送通用天数<input type="number" v-model.number="settingsForm.gift_register_days" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">邀请人赠送天数<input type="number" v-model.number="settingsForm.gift_inviter_days" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">被邀请人额外天数<input type="number" v-model.number="settingsForm.gift_invitee_days" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">免费图表 Top N<input type="number" v-model.number="settingsForm.free_top_n_charts" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">定制标的数量上限（默认 3）
-                  <input type="number" min="1" max="50" v-model.number="settingsForm.custom_max_symbols" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm">
-                </label>
-                <label class="text-xs">支付即注册
-                  <select v-model="settingsForm.pay_register_enabled" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm">
-                    <option value="1">开启</option><option value="0">关闭</option>
+          <!-- 系统设置（重点改过文案） -->
+          <div v-show="currentTab==='settings'" class="space-y-4">
+            <div class="flex justify-between items-center">
+              <h2 class="text-xl font-bold">系统设置</h2>
+              <button @click="saveSettings" class="theme-bg text-white text-sm px-4 py-2 rounded-lg">保存设置</button>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div class="bg-white rounded-xl border p-5 space-y-3">
+                <div class="text-sm font-medium text-slate-700">注册 / 邀请赠送</div>
+                <div class="grid grid-cols-3 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">注册赠送天数</label>
+                    <input type="number" v-model.number="settingsForm.gift_register_days" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">邀请人赠送</label>
+                    <input type="number" v-model.number="settingsForm.gift_inviter_days" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">被邀请人额外</label>
+                    <input type="number" v-model.number="settingsForm.gift_invitee_days" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">免费图表 Top N</label>
+                    <input type="number" v-model.number="settingsForm.free_top_n_charts" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">定制套餐最多只数</label>
+                    <input type="number" v-model.number="settingsForm.custom_max_symbols" min="1" max="20" class="w-full border px-3 py-2 rounded-lg text-sm">
+                    <p class="text-[11px] text-slate-400 mt-1">套餐总价含这么多只（如 3 = 18.8 元最多填 3 只），不是按只另计费</p>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">允许支付即注册</label>
+                  <select v-model="settingsForm.pay_register_enabled" class="w-full border px-3 py-2 rounded-lg text-sm">
+                    <option value="1">开启</option>
+                    <option value="0">关闭</option>
                   </select>
-                </label>
+                </div>
               </div>
 
-              <div class="text-sm font-medium text-slate-700 border-b pb-2 pt-2">收款码（图片 URL 或支付链接，前端可转二维码）</div>
-              <div class="space-y-3">
-                <label class="text-xs block">支付宝收款码 / 链接
-                  <input v-model="settingsForm.alipay_qr_url" placeholder="https://... 图片或 alipays:// / 支付链接" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm font-mono">
-                </label>
-                <label class="text-xs block">微信收款码 / 链接
-                  <input v-model="settingsForm.wechat_qr_url" placeholder="https://... 图片或微信支付链接" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm font-mono">
-                </label>
-                <label class="text-xs">默认支付渠道
-                  <select v-model="settingsForm.default_pay_channel" class="mt-1 w-full border px-3 py-2 rounded-lg text-sm">
-                    <option value="alipay">支付宝</option><option value="wechat">微信</option>
+              <div class="bg-white rounded-xl border p-5 space-y-3">
+                <div class="text-sm font-medium text-slate-700">收款码（图片 URL 或支付链接）</div>
+                <p class="text-[11px] text-slate-400">填图片直链则直接显示；填支付链接则前台自动转二维码</p>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">支付宝</label>
+                  <input v-model="settingsForm.alipay_qr_url" placeholder="图片URL 或 支付链接" class="w-full border px-3 py-2 rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">微信</label>
+                  <input v-model="settingsForm.wechat_qr_url" placeholder="图片URL 或 支付链接" class="w-full border px-3 py-2 rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">默认支付通道</label>
+                  <select v-model="settingsForm.default_pay_channel" class="w-full border px-3 py-2 rounded-lg text-sm">
+                    <option value="alipay">支付宝</option>
+                    <option value="wechat">微信</option>
                   </select>
-                </label>
-                <p class="text-[11px] text-slate-400">若填写图片直链则直接展示；若为普通链接，前台会尝试用二维码 API 生成可扫码图片。</p>
+                </div>
               </div>
 
-              <div class="text-sm font-medium text-slate-700 border-b pb-2 pt-2">首页 Footer 社交链接</div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label class="text-xs">抖音<input v-model="settingsForm.social_douyin" placeholder="https://..." class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">视频号<input v-model="settingsForm.social_shipinhao" placeholder="https://..." class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">小红书<input v-model="settingsForm.social_xiaohongshu" placeholder="https://..." class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">公众号<input v-model="settingsForm.social_gongzhonghao" placeholder="https://..." class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
-                <label class="text-xs">快手<input v-model="settingsForm.social_kuaishou" placeholder="https://..." class="mt-1 w-full border px-3 py-2 rounded-lg text-sm"></label>
+              <div class="bg-white rounded-xl border p-5 space-y-3 lg:col-span-2">
+                <div class="text-sm font-medium text-slate-700">前台 Footer 社交（留空则不显示）</div>
+                <p class="text-[11px] text-slate-400">填写主页/账号链接。前台：鼠标悬停显示二维码，点击进入链接。清空某一项即从前台移除。</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">抖音链接</label>
+                    <input v-model="settingsForm.social_douyin" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">视频号链接</label>
+                    <input v-model="settingsForm.social_shipinhao" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">小红书链接</label>
+                    <input v-model="settingsForm.social_xiaohongshu" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">公众号链接</label>
+                    <input v-model="settingsForm.social_gongzhonghao" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">快手链接</label>
+                    <input v-model="settingsForm.social_kuaishou" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                </div>
               </div>
-
-              <button @click="saveSettings" class="theme-bg text-white px-5 py-2.5 rounded-lg text-sm">保存设置</button>
             </div>
           </div>
 
-          <!-- 答疑工单 + 广播 -->
+          <!-- 工单 -->
           <div v-show="currentTab==='tickets'" class="space-y-4">
-            <div class="flex flex-col sm:flex-row justify-between gap-3">
+            <div class="flex justify-between gap-3">
               <h2 class="text-xl font-bold">答疑工单</h2>
               <div class="flex gap-2">
-                <button @click="openBroadcast" class="text-sm bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-2 rounded-lg">
-                  <i class="fa-solid fa-bullhorn mr-1"></i>一键广播
-                </button>
+                <button @click="openBroadcast" class="text-sm bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-2 rounded-lg">一键广播</button>
                 <button @click="fetchTickets" class="bg-white border px-3 py-2 rounded-lg text-sm"><i class="fa-solid fa-rotate-right"></i></button>
               </div>
             </div>
             <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
-              <div v-if="!tickets.length" class="p-10 text-center text-slate-400 text-sm">暂无工单</div>
-              <div v-for="t in tickets" :key="t.id" class="border-b last:border-0 p-4 space-y-2">
-                <div class="flex justify-between gap-2 flex-wrap">
-                  <div>
-                    <span class="font-medium text-sm">{{t.subject}}</span>
-                    <span class="text-xs text-slate-400 ml-2">{{t.username||t.user_id}}</span>
-                  </div>
-                  <span class="text-xs" :class="t.status==='pending'?'text-orange-500':'text-emerald-500'">{{t.status==='pending'?'待回复':'已回复'}}</span>
-                </div>
-                <p class="text-xs text-slate-600 whitespace-pre-wrap">{{t.message}}</p>
-                <div v-if="t.admin_reply" class="bg-slate-50 rounded-lg p-3 text-xs"><span class="font-medium theme-text">官方回复：</span>{{t.admin_reply}}</div>
-                <div class="flex justify-between items-center">
-                  <span class="text-[10px] text-slate-400">{{formatDate(t.created_at)}} · #{{t.id}}</span>
-                  <button v-if="t.status==='pending'" @click="openReplyModal(t)" class="text-xs theme-bg text-white px-3 py-1 rounded-lg">回复</button>
-                </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                    <th class="py-3 px-4 text-left">时间</th><th class="py-3 px-4 text-left">用户</th><th class="py-3 px-4 text-left">主题</th>
+                    <th class="py-3 px-4 text-left">级别</th><th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-right">操作</th>
+                  </tr></thead>
+                  <tbody class="divide-y">
+                    <tr v-for="t in tickets" :key="t.id" class="hover:bg-slate-50">
+                      <td class="py-3 px-4 text-xs text-slate-400">{{formatDate(t.created_at)}}</td>
+                      <td class="py-3 px-4 font-bold">{{t.username||'-'}}</td>
+                      <td class="py-3 px-4">{{t.subject}}</td>
+                      <td class="py-3 px-4 text-xs">{{t.level}}</td>
+                      <td class="py-3 px-4"><span :class="t.status==='pending'?'text-orange-500':'text-emerald-500'">{{t.status==='pending'?'待回复':'已回复'}}</span></td>
+                      <td class="py-3 px-4 text-right">
+                        <button @click="openReplyModal(t)" class="text-xs theme-bg text-white px-3 py-1 rounded-lg">回复</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!tickets.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无工单</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -447,15 +493,14 @@
 
   <!-- Toast -->
   <div class="fixed top-4 right-4 z-[200] space-y-2">
-    <div v-for="(t,i) in toasts" :key="i" class="toast-enter px-4 py-2 rounded-lg shadow text-sm text-white"
-      :class="t.type==='error'?'bg-red-500':'bg-emerald-500'">{{t.msg}}</div>
+    <div v-for="(t,i) in toasts" :key="i" class="toast-enter px-4 py-2 rounded-lg shadow text-sm text-white" :class="t.type==='error'?'bg-red-500':'bg-emerald-500'">{{t.msg}}</div>
   </div>
 
   <!-- 充天数 -->
   <div v-if="chargeModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="chargeModalVisible=false">
-    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
-      <h3 class="font-bold">给 {{chargeTarget?.username}} 调整天数</h3>
-      <input type="number" v-model.number="chargeDays" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="可正可负">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold">充天数 · {{chargeTarget?.username}}</h3>
+      <input type="number" v-model.number="chargeDays" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="天数（可为负）">
       <div class="flex justify-end gap-2">
         <button @click="chargeModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
         <button @click="submitCharge" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">确认</button>
@@ -465,8 +510,8 @@
 
   <!-- 批量充 -->
   <div v-if="batchChargeVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="batchChargeVisible=false">
-    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
-      <h3 class="font-bold">批量充天数（已选 {{selectedUserIds.length}} 人）</h3>
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold">批量充天数（{{selectedUserIds.length}} 人）</h3>
       <input type="number" v-model.number="batchDays" class="w-full border px-3 py-2 rounded-lg text-sm">
       <div class="flex justify-end gap-2">
         <button @click="batchChargeVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
@@ -477,10 +522,10 @@
 
   <!-- 重置密码 -->
   <div v-if="resetPwdVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="resetPwdVisible=false">
-    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
-      <h3 class="font-bold">重置 {{resetTarget?.username}} 密码</h3>
-      <p class="text-xs text-slate-400">将重置为默认密码 bofutz，并踢出所有登录会话</p>
-      <input type="password" v-model="resetConfirmSecret" placeholder="再次输入 Admin-Secret 确认" class="w-full border px-3 py-2 rounded-lg text-sm">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold text-amber-600">重置密码 · {{resetTarget?.username}}</h3>
+      <p class="text-xs text-slate-400">请再次输入 Admin-Secret 确认</p>
+      <input type="password" v-model="resetConfirmSecret" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="Admin-Secret">
       <div class="flex justify-end gap-2">
         <button @click="resetPwdVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
         <button @click="submitResetPwd" class="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm">确认重置</button>
@@ -490,9 +535,10 @@
 
   <!-- 删除用户 -->
   <div v-if="deleteUserVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="deleteUserVisible=false">
-    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
-      <h3 class="font-bold text-red-600">删除用户 {{deleteTarget?.username}}</h3>
-      <input type="password" v-model="deleteConfirmSecret" placeholder="再次输入 Admin-Secret 确认" class="w-full border px-3 py-2 rounded-lg text-sm">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold text-red-600">删除用户 · {{deleteTarget?.username}}</h3>
+      <p class="text-xs text-slate-400">请再次输入 Admin-Secret 确认，不可恢复</p>
+      <input type="password" v-model="deleteConfirmSecret" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="Admin-Secret">
       <div class="flex justify-end gap-2">
         <button @click="deleteUserVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
         <button @click="submitDeleteUser" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm">确认删除</button>
@@ -500,39 +546,36 @@
     </div>
   </div>
 
-  <!-- 套餐编辑 -->
+  <!-- 套餐弹窗 -->
   <div v-if="planModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="planModalVisible=false">
     <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
-      <h3 class="font-bold">{{planForm.isEdit?'编辑':'新增'}}套餐</h3>
+      <h3 class="font-bold">{{planForm.isEdit?'编辑套餐':'新增套餐'}}</h3>
       <input v-model="planForm.name" placeholder="名称" class="w-full border px-3 py-2 rounded-lg text-sm">
       <div class="grid grid-cols-2 gap-2">
         <input type="number" v-model.number="planForm.price" placeholder="价格" class="border px-3 py-2 rounded-lg text-sm">
         <input type="number" v-model.number="planForm.days" placeholder="天数" class="border px-3 py-2 rounded-lg text-sm">
       </div>
-      <div class="grid grid-cols-2 gap-2">
-        <input v-model="planForm.tag" placeholder="角标(可选)" class="border px-3 py-2 rounded-lg text-sm">
-        <input type="number" v-model.number="planForm.sort_order" placeholder="排序" class="border px-3 py-2 rounded-lg text-sm">
-      </div>
       <select v-model="planForm.plan_type" class="w-full border px-3 py-2 rounded-lg text-sm">
-        <option value="shared">通用监控</option>
-        <option value="custom">定制监控（按只）</option>
+        <option value="shared">通用</option>
+        <option value="custom">定制（套餐总价）</option>
       </select>
+      <input v-model="planForm.tag" placeholder="角标（选填）" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="number" v-model.number="planForm.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm">
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="planForm.enabled"> 启用</label>
-      <div class="flex justify-end gap-2 pt-2">
+      <div class="flex justify-end gap-2">
         <button @click="planModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
         <button @click="submitPlan" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">保存</button>
       </div>
     </div>
   </div>
 
-  <!-- 通用监控编辑 -->
+  <!-- 通用监控弹窗 -->
   <div v-if="sharedModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="sharedModalVisible=false">
     <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
       <h3 class="font-bold">{{sharedForm.id?'编辑':'添加'}}通用标的</h3>
       <input v-model="sharedForm.etf_code" placeholder="代码" class="w-full border px-3 py-2 rounded-lg text-sm font-mono">
       <input v-model="sharedForm.etf_name" placeholder="名称" class="w-full border px-3 py-2 rounded-lg text-sm">
       <input type="number" v-model.number="sharedForm.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm">
-      <input v-model="sharedForm.note" placeholder="备注" class="w-full border px-3 py-2 rounded-lg text-sm">
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="sharedForm.enabled"> 启用</label>
       <div class="flex justify-end gap-2">
         <button @click="sharedModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
@@ -543,10 +586,10 @@
 
   <!-- 批量导入 -->
   <div v-if="showBatchImport" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="showBatchImport=false">
-    <div class="bg-white rounded-2xl w-full max-w-lg p-6 space-y-3">
-      <h3 class="font-bold">批量导入通用监控</h3>
-      <p class="text-xs text-slate-400">每行：代码,名称 或 代码 名称</p>
-      <textarea v-model="batchImportText" rows="8" class="w-full border px-3 py-2 rounded-lg text-sm font-mono" placeholder="562500,机器人ETF"></textarea>
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
+      <h3 class="font-bold">批量导入通用标的</h3>
+      <p class="text-xs text-slate-400">每行：代码,名称（或仅代码）</p>
+      <textarea v-model="batchImportText" rows="8" class="w-full border px-3 py-2 rounded-lg text-sm font-mono"></textarea>
       <div class="flex justify-end gap-2">
         <button @click="showBatchImport=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
         <button @click="submitBatchImport" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">导入</button>
@@ -557,11 +600,13 @@
   <!-- 定制编辑 -->
   <div v-if="customEditVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="customEditVisible=false">
     <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
-      <h3 class="font-bold">编辑定制标的</h3>
+      <h3 class="font-bold">编辑定制</h3>
       <input v-model="customEdit.etf_code" class="w-full border px-3 py-2 rounded-lg text-sm font-mono">
       <input v-model="customEdit.etf_name" class="w-full border px-3 py-2 rounded-lg text-sm">
       <select v-model="customEdit.status" class="w-full border px-3 py-2 rounded-lg text-sm">
-        <option value="active">active</option><option value="pending">pending</option><option value="expired">expired</option>
+        <option value="active">active</option>
+        <option value="pending">pending</option>
+        <option value="expired">expired</option>
       </select>
       <input type="datetime-local" v-model="customEdit.expireLocal" class="w-full border px-3 py-2 rounded-lg text-sm">
       <div class="flex justify-end gap-2">
@@ -571,24 +616,21 @@
     </div>
   </div>
 
-  <!-- 优惠码编辑 -->
+  <!-- 优惠码弹窗 -->
   <div v-if="promoModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="promoModalVisible=false">
     <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3 max-h-[90vh] overflow-y-auto">
       <h3 class="font-bold">{{promoForm.id?'编辑':'新增'}}优惠码</h3>
-      <input v-model="promoForm.code" placeholder="CODE" class="w-full border px-3 py-2 rounded-lg text-sm font-mono uppercase">
+      <input v-model="promoForm.code" placeholder="代码" class="w-full border px-3 py-2 rounded-lg text-sm font-mono uppercase">
       <input v-model="promoForm.name" placeholder="名称" class="w-full border px-3 py-2 rounded-lg text-sm">
-      <div class="grid grid-cols-2 gap-2">
-        <select v-model="promoForm.discount_type" class="border px-3 py-2 rounded-lg text-sm">
-          <option value="percent">百分比</option><option value="fixed">固定金额</option>
-        </select>
-        <input type="number" v-model.number="promoForm.discount_value" placeholder="值" class="border px-3 py-2 rounded-lg text-sm">
-      </div>
+      <select v-model="promoForm.discount_type" class="w-full border px-3 py-2 rounded-lg text-sm">
+        <option value="percent">百分比</option>
+        <option value="fixed">固定金额</option>
+      </select>
+      <input type="number" v-model.number="promoForm.discount_value" placeholder="折扣值" class="w-full border px-3 py-2 rounded-lg text-sm">
       <input type="datetime-local" v-model="promoForm.startLocal" class="w-full border px-3 py-2 rounded-lg text-sm">
       <input type="datetime-local" v-model="promoForm.endLocal" class="w-full border px-3 py-2 rounded-lg text-sm">
-      <div class="grid grid-cols-2 gap-2">
-        <input type="number" v-model.number="promoForm.max_uses" placeholder="总次数(空=不限)" class="border px-3 py-2 rounded-lg text-sm">
-        <input type="number" v-model.number="promoForm.max_per_user" placeholder="每用户" class="border px-3 py-2 rounded-lg text-sm">
-      </div>
+      <input type="number" v-model.number="promoForm.max_uses" placeholder="总次数上限（空=不限）" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="number" v-model.number="promoForm.max_per_user" placeholder="每用户次数" class="w-full border px-3 py-2 rounded-lg text-sm">
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="promoForm.enabled"> 启用</label>
       <div class="flex justify-end gap-2">
         <button @click="promoModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
@@ -597,12 +639,12 @@
     </div>
   </div>
 
-  <!-- 工单回复 -->
+  <!-- 回复工单 -->
   <div v-if="replyModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="replyModalVisible=false">
     <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
-      <h3 class="font-bold">回复工单 #{{currentTicket?.id}}</h3>
-      <p class="text-xs text-slate-500">{{currentTicket?.subject}}</p>
-      <textarea v-model="replyMessage" rows="4" class="w-full border px-3 py-2 rounded-lg text-sm"></textarea>
+      <h3 class="font-bold">回复 · {{currentTicket?.subject}}</h3>
+      <p class="text-xs text-slate-500 whitespace-pre-wrap">{{currentTicket?.message}}</p>
+      <textarea v-model="replyMessage" rows="4" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="回复内容"></textarea>
       <div class="flex justify-end gap-2">
         <button @click="replyModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
         <button @click="submitReply" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">发送</button>
@@ -610,11 +652,11 @@
     </div>
   </div>
 
-  <!-- 一键广播 -->
+  <!-- 广播 -->
   <div v-if="broadcastVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="broadcastVisible=false">
     <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
       <h3 class="font-bold"><i class="fa-solid fa-bullhorn mr-1 text-indigo-500"></i>一键广播给全体会员</h3>
-      <p class="text-xs text-slate-400">将写入公告，并为每位用户生成一条「已回复」工单，方便在答疑留言中看到。</p>
+      <p class="text-xs text-slate-400">将写入公告，并为每位用户生成一条「已回复」工单。</p>
       <input v-model="broadcastForm.title" placeholder="标题（默认：系统通知）" class="w-full border px-3 py-2 rounded-lg text-sm">
       <textarea v-model="broadcastForm.content" rows="5" placeholder="广播内容..." class="w-full border px-3 py-2 rounded-lg text-sm"></textarea>
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="broadcastForm.also_tg"> 同时通知管理员 TG</label>
@@ -631,7 +673,6 @@
 
 <script>
 const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
-
 const API_BASE = "https://vip.hahagw.eu.org";
 
 createApp({
@@ -644,7 +685,6 @@ createApp({
     const errorMsg = ref('');
     const sidebarOpen = ref(false);
     const toasts = ref([]);
-
     const showToast = (msg, type = 'success') => {
       toasts.value.push({ msg, type });
       setTimeout(() => toasts.value.shift(), 2800);
@@ -658,7 +698,6 @@ createApp({
     const customList = ref([]);
     const promos = ref([]);
     const stats = ref({});
-
     const userSearchQuery = ref('');
     const orderSearchQuery = ref('');
     const orderStatusFilter = ref('all');
@@ -1028,7 +1067,6 @@ createApp({
       } catch (e) { showToast(e.message, 'error'); }
     };
 
-    // 一键广播
     const broadcastVisible = ref(false);
     const broadcastLoading = ref(false);
     const broadcastForm = reactive({ title: '', content: '', also_tg: true });
