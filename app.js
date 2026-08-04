@@ -291,6 +291,7 @@ createApp({
     const loading = ref(false);
     const allData = ref([]);
     const chartsMap = ref({});
+    const chartAsOfFromApi = ref("");
     const showDropdown = ref(false);
     const selectedMonday = ref("");
     const searchQuery = ref("");
@@ -393,10 +394,14 @@ createApp({
     const selectWeek = (mondayStr) => { selectedMonday.value = mondayStr; showDropdown.value = false; };
 
     /**
-     * 图表「截止日期」= 全站最新有 day_status 的交易日（如 2026-08-03）
-     * 仅当当前选中周包含该日时，日线 icon 出现在对应列；历史周不显示日线 icon
+     * 优先用 Worker 返回的 chart_as_of（图表 updated_at 的北京日）
+     * 没有则退回行情 JSON 最新有 day_status 的日期
+     * 仅当选中周包含该日时，日线 icon 出现在对应列
      */
     const chartAsOfDate = computed(() => {
+      if (chartAsOfFromApi.value && isValidDate(chartAsOfFromApi.value)) {
+        return chartAsOfFromApi.value;
+      }
       let best = "";
       for (const item of allData.value) {
         if (!item.date || !isValidDate(item.date)) continue;
@@ -904,6 +909,9 @@ createApp({
         if (res.ok) {
           const data = await res.json();
           chartsMap.value = data.charts || {};
+          // 日线 icon 落列用
+          chartAsOfFromApi.value =
+            data.chart_as_of && isValidDate(data.chart_as_of) ? data.chart_as_of : "";
           if (isLoggedIn.value) {
             isVip.value = !!data.is_vip;
             if (data.shared_vip_days != null) {
