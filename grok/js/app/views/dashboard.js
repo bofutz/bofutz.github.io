@@ -216,14 +216,32 @@ export const DashboardView = {
         return hasDay || hasWeek || (chartsMap.value && chartsMap.value.hasOwnProperty(item.etf_code));
       });
 
-      // VIP / 定制 / 游客 过滤
+      // VIP / 定制 / 游客 过滤 + 补全通用列表空行
+      const padSharedMissing = () => {
+        if (!sharedWatchlist.value.length) return;
+        const existing = new Set(validItems.map((i) => i.etf_code));
+        for (const w of sharedWatchlist.value) {
+          if (!existing.has(w.etf_code)) {
+            validItems.push({
+              etf_code: w.etf_code,
+              etf_name: w.etf_name || w.etf_code,
+              days: [null, null, null, null, null],
+              week_status: null,
+            });
+            existing.add(w.etf_code);
+          }
+        }
+      };
+
       if (isLoggedIn.value && isVip.value) {
+        // 通用 VIP：只看通用监控列表，并补全无数据的标的
         if (sharedWatchlist.value.length > 0) {
           const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
-          const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
-          if (filtered.length > 0) validItems = filtered;
+          validItems = validItems.filter((i) => codeSet.has(i.etf_code));
+          padSharedMissing();
         }
       } else if (isLoggedIn.value && !isVip.value) {
+        // 已登录无通用 VIP：有定制则看定制 + 免费 TopN；否则看通用列表
         const activeCustom = (customWatchlist.value || []).filter(
           (w) => w.status === "active" || w.status === "pending"
         );
@@ -234,17 +252,36 @@ export const DashboardView = {
           const freeSet = new Set(freeEtfCodes.value);
           validItems = validItems.filter((i) => {
             const pure = pureCode(i.etf_code);
-            return customCodes.has(pure) || customCodes.has(i.etf_code) || freeSet.has(i.etf_code);
+            return (
+              customCodes.has(pure) ||
+              customCodes.has(i.etf_code) ||
+              freeSet.has(i.etf_code)
+            );
           });
+          // 补全自己的定制标的（本周尚无数据也显示）
+          const existing = new Set(validItems.map((i) => i.etf_code));
+          for (const w of activeCustom) {
+            const code = w.etf_code;
+            if (!existing.has(code)) {
+              validItems.push({
+                etf_code: code,
+                etf_name: w.etf_name || code,
+                days: [null, null, null, null, null],
+                week_status: null,
+              });
+              existing.add(code);
+            }
+          }
         } else if (sharedWatchlist.value.length > 0) {
           const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
-          const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
-          if (filtered.length > 0) validItems = filtered;
+          validItems = validItems.filter((i) => codeSet.has(i.etf_code));
+          padSharedMissing();
         }
       } else if (sharedWatchlist.value.length > 0) {
+        // 游客：通用列表 + 补全
         const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
-        const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
-        if (filtered.length > 0) validItems = filtered;
+        validItems = validItems.filter((i) => codeSet.has(i.etf_code));
+        padSharedMissing();
       }
 
       if (searchQuery.value) {
@@ -258,6 +295,7 @@ export const DashboardView = {
 
       validItems.sort((a, b) => {
         if (sortColumn.value) {
+          // 手动点列头：按该列排序
           if (sortColumn.value === "etf_name") {
             const cmp = (a.etf_name || "").localeCompare(b.etf_name || "", "zh-CN");
             return sortOrder.value === "asc" ? cmp : -cmp;
@@ -271,46 +309,61 @@ export const DashboardView = {
             return sortOrder.value === "desc" ? valB - valA : valA - valB;
           }
           if (sortColumn.value === "week_status") {
-            const valA = getStatusVal(a.week_status), valB = getStatusVal(b.week_status);
+            const valA = getStatusVal(a.week_status);
+            const valB = getStatusVal(b.week_status);
             if (valA === -9999 && valB !== -9999) return 1;
             if (valB === -9999 && valA !== -9999) return -1;
             return sortOrder.value === "desc" ? valB - valA : valA - valB;
           }
-        } else {
-          const valWkA =
-            a.week_status && a.week_status !== "-" ? Math.abs(getStatusVal(a.week_status)) : -9999;
-          const valWkB =
-            b.week_status && b.week_status !== "-" ? Math.abs(getStatusVal(b.week_status)) : -9999;
-          if (valWkA !== -9999 || valWkB !== -9999) {
-            if (valWkA !== -9999 && valWkB !== -9999) return valWkB - valWkA;
-            if (valWkA !== -9999) return -1;
-            if (valWkB !== -9999) return 1;
-          }
-          let latestIdx = 4;
+          return 0;
+        }
+
+        // 默认：以「最新图表日」那一列绝对值从大到小；无日数据再用周线绝对值
+        let latestIdx = latestDailyColIndex.value;
+        if (latestIdx < 0) {
+          latestIdx = 4;
           while (latestIdx >= 0) {
             const hasData = validItems.some(
               (i) =>
                 i.days[latestIdx] &&
                 i.days[latestIdx].day_status &&
-                i.days[latestIdx].day_status !== "-"
+                i.days[latestIdx].day_status !== "-" &&
+                i.days[latestIdx].day_status !== "--"
             );
             if (hasData) break;
             latestIdx--;
           }
-          if (latestIdx >= 0) {
-            const valA =
-              a.days[latestIdx] && a.days[latestIdx].day_status
-                ? Math.abs(getStatusVal(a.days[latestIdx].day_status))
-                : -9999;
-            const valB =
-              b.days[latestIdx] && b.days[latestIdx].day_status
-                ? Math.abs(getStatusVal(b.days[latestIdx].day_status))
-                : -9999;
-            return valB - valA;
-          }
         }
+
+        const dayAbs = (item) => {
+          if (latestIdx < 0) return -9999;
+          const st = item.days[latestIdx]?.day_status;
+          if (!st || st === "-" || st === "--") return -9999;
+          return Math.abs(getStatusVal(st));
+        };
+        const weekAbs = (item) => {
+          if (!item.week_status || item.week_status === "-" || item.week_status === "--") {
+            return -9999;
+          }
+          return Math.abs(getStatusVal(item.week_status));
+        };
+
+        const aDay = dayAbs(a);
+        const bDay = dayAbs(b);
+        if (aDay !== -9999 || bDay !== -9999) {
+          if (aDay !== -9999 && bDay !== -9999) return bDay - aDay;
+          if (aDay !== -9999) return -1;
+          if (bDay !== -9999) return 1;
+        }
+
+        const aWk = weekAbs(a);
+        const bWk = weekAbs(b);
+        if (aWk !== -9999 && bWk !== -9999) return bWk - aWk;
+        if (aWk !== -9999) return -1;
+        if (bWk !== -9999) return 1;
         return 0;
       });
+
       return validItems;
     });
 
