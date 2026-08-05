@@ -1,6 +1,8 @@
 /**
- * 波幅探长 app.js (基于原版完全恢复版)
+ * 波幅探长 前台逻辑脚本 v2.6 (完备修复版)
+ * js/app.js
  */
+
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
 
 createApp({
@@ -9,6 +11,7 @@ createApp({
     const menuOpen = ref(false);
     const userMenuOpen = ref(false);
     const freeEtfCodes = ref([]);
+    
     const publicSettings = ref({
       gift_register_days: "1",
       gift_inviter_days: "3",
@@ -69,8 +72,10 @@ createApp({
 
     const apiFetch = async (endpoint, options = {}) => {
       const token = localStorage.getItem("etf_token");
-      if (token) options.headers = { ...options.headers, Authorization: `Bearer ${token}` };
-      options.headers = { ...options.headers, "Content-Type": "application/json" };
+      options.headers = options.headers || {};
+      if (token) options.headers["Authorization"] = `Bearer ${token}`;
+      options.headers["Content-Type"] = "application/json";
+      
       const res = await fetch(`${API_BASE}${endpoint}`, options);
       if (res.status === 401) {
         logout(false);
@@ -110,7 +115,6 @@ createApp({
       } catch (_) {}
     };
 
-    // 认证
     const authModalVisible = ref(false);
     const authMode = ref("login");
     const authLoading = ref(false);
@@ -213,6 +217,7 @@ createApp({
           closeAuth();
           fetchData();
           fetchCustomWatchlist();
+          fetchVotes();
         }
       } catch (err) {
         alert(err.message);
@@ -232,7 +237,6 @@ createApp({
       navigate("#/");
     };
 
-    // 看板原版代码（原封不动）
     const loading = ref(false);
     const allData = ref([]);
     const chartsMap = ref({});
@@ -247,8 +251,7 @@ createApp({
 
     const handleSort = (column) => {
       if (sortColumn.value === column) {
-        if (sortOrder.value === "desc") sortOrder.value = "asc";
-        else { sortColumn.value = null; sortOrder.value = "desc"; }
+        sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
       } else {
         sortColumn.value = column;
         sortOrder.value = "desc";
@@ -261,28 +264,12 @@ createApp({
       return match ? parseFloat(match[0]) : -9999;
     };
 
-    const getDayTooltip = (dateStr) => {
-      if (!dateStr || !isValidDate(dateStr)) return "";
-      return `${String(parseMonth(dateStr)).padStart(2, "0")}-${String(parseDay(dateStr)).padStart(2, "0")}`;
-    };
-    const getWeekTooltip = (mondayStr) => {
-      if (!mondayStr || !isValidDate(mondayStr)) return "";
-      const m = String(parseMonth(mondayStr)).padStart(2, "0");
-      const weekNumStr = getWeekNumberInMonth(mondayStr);
-      const numMatch = weekNumStr.match(/[一二三四五六]/);
-      const map = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 };
-      const n = numMatch ? map[numMatch[0]] || 1 : 1;
-      return `${m}-${n}w`;
-    };
+    const getDayTooltip = (dateStr) => isValidDate(dateStr) ? `${String(parseMonth(dateStr)).padStart(2, "0")}-${String(parseDay(dateStr)).padStart(2, "0")}` : "";
+    const getWeekTooltip = (mondayStr) => isValidDate(mondayStr) ? `${String(parseMonth(mondayStr)).padStart(2, "0")}-${getWeekNumberInMonth(mondayStr)}` : "";
     const getMobileDayDate = (d) => getDayTooltip(d);
     const getMobileWeekDate = (m) => getWeekTooltip(m);
 
-    const uniqueDatesSet = computed(() => {
-      const validDates = allData.value
-        .filter((i) => (i.day_status || i.week_status) && isValidDate(i.date))
-        .map((i) => i.date);
-      return new Set(validDates);
-    });
+    const uniqueDatesSet = computed(() => new Set(allData.value.filter((i) => (i.day_status || i.week_status) && isValidDate(i.date)).map((i) => i.date)));
 
     const availablePeriods = computed(() => {
       const periods = {};
@@ -314,9 +301,7 @@ createApp({
     const selectWeek = (mondayStr) => { selectedMonday.value = mondayStr; showDropdown.value = false; };
 
     const chartAsOfDate = computed(() => {
-      if (chartAsOfFromApi.value && isValidDate(chartAsOfFromApi.value)) {
-        return chartAsOfFromApi.value;
-      }
+      if (chartAsOfFromApi.value && isValidDate(chartAsOfFromApi.value)) return chartAsOfFromApi.value;
       let best = "";
       for (const item of allData.value) {
         if (!item.date || !isValidDate(item.date)) continue;
@@ -329,8 +314,7 @@ createApp({
     const latestDailyColIndex = computed(() => {
       if (!selectedMonday.value || !chartAsOfDate.value) return -1;
       const weekDays = getWeekDays(selectedMonday.value);
-      if (weekDays.length < 5) return -1;
-      return weekDays.indexOf(chartAsOfDate.value);
+      return weekDays.length < 5 ? -1 : weekDays.indexOf(chartAsOfDate.value);
     });
 
     const isDailyChartColumn = (idx) => idx === latestDailyColIndex.value && latestDailyColIndex.value >= 0;
@@ -338,8 +322,7 @@ createApp({
     const getColumnDateLabel = (idx) => {
       if (!selectedMonday.value) return "";
       const weekDays = getWeekDays(selectedMonday.value);
-      if (!weekDays[idx]) return "";
-      return getDayTooltip(weekDays[idx]) || weekDays[idx];
+      return weekDays[idx] ? getDayTooltip(weekDays[idx]) || weekDays[idx] : "";
     };
 
     const formatMobileStatus = (status) => {
@@ -352,14 +335,16 @@ createApp({
       return String(status).includes("+") ? "mobile-status-up" : "mobile-status-down";
     };
 
-    // 核心看板渲染与过滤（完全保持原版）
     const sortedData = computed(() => {
       if (!selectedMonday.value) return [];
       const weekDays = getWeekDays(selectedMonday.value);
       if (weekDays.length < 5) return [];
+      
+      // 正确传入 weekDays 下标
       const fridayDate = weekDays;
       const y = parseYear(fridayDate), m = parseMonth(fridayDate), d = parseDay(fridayDate);
       if (!y) return [];
+      
       const friday16 = new Date(y, m - 1, d, 16, 0, 0);
       const isPastFriday16 = Date.now() >= friday16.getTime();
       const etfMap = {};
@@ -417,9 +402,7 @@ createApp({
           (w) => w.status === "active" || w.status === "pending"
         );
         if (activeCustom.length > 0) {
-          const customCodes = new Set(
-            activeCustom.map((w) => pureCode(w.etf_code)).filter(Boolean)
-          );
+          const customCodes = new Set(activeCustom.map((w) => pureCode(w.etf_code)).filter(Boolean));
           const freeSet = new Set(freeEtfCodes.value);
           validItems = validItems.filter((i) => {
             const pure = pureCode(i.etf_code);
@@ -546,6 +529,7 @@ createApp({
           fetch(atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=")).catch(() => null),
           fetchChartsMap(),
           fetchSharedWatchlist(),
+          fetchPublicSettings(),
         ]);
         if (res1 && res1.ok) {
           const data = await res1.json();
@@ -600,7 +584,6 @@ createApp({
       computeLockedFreeTop();
     }, { deep: true });
 
-    // 监控投票逻辑
     const voteList = ref([]);
     const voteSearchQuery = ref("");
     const voteModalVisible = ref(false);
@@ -673,7 +656,6 @@ createApp({
       finally { voteSubmitting.value = false; }
     };
 
-    // 定制标的与套餐支付逻辑
     const customWatchlist = ref([]);
     const customLoading = ref(false);
     const customEditorVisible = ref(false);
