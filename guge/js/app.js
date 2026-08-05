@@ -1,97 +1,7 @@
 /**
- * 波幅探长 app.js (完整修复 + 优化版)
- * 修复：公共数据独立加载、补全工具函数、Promise 容错、空状态提示
+ * 波幅探长 app.js (基于原版完全恢复版)
  */
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
-
-// ========== 工具函数（原版缺失，现全部补全） ==========
-function isValidDate(dateStr) {
-  if (!dateStr || typeof dateStr !== "string") return false;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
-  const d = new Date(dateStr + "T00:00:00");
-  return !isNaN(d.getTime());
-}
-
-function parseYear(dateStr) {
-  return parseInt((dateStr || "").split("-")[0], 10) || 0;
-}
-function parseMonth(dateStr) {
-  return parseInt((dateStr || "").split("-")[1], 10) || 0;
-}
-function parseDay(dateStr) {
-  return parseInt((dateStr || "").split("-")[2], 10) || 0;
-}
-
-function formatDate(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-/** 给定任意日期，返回该周的 Mon~Fri 字符串数组（交易日逻辑） */
-function getWeekDays(dateStr) {
-  if (!isValidDate(dateStr)) return [];
-  const d = new Date(dateStr + "T00:00:00");
-  const day = d.getDay(); // 0=Sun ... 6=Sat
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + mondayOffset);
-  const days = [];
-  for (let i = 0; i < 5; i++) {
-    const dd = new Date(monday);
-    dd.setDate(monday.getDate() + i);
-    days.push(formatDate(dd));
-  }
-  return days;
-}
-
-function getWeekNumberInMonth(mondayStr) {
-  if (!isValidDate(mondayStr)) return "";
-  const d = new Date(mondayStr + "T00:00:00");
-  const month = d.getMonth();
-  let week = 1;
-  const first = new Date(d.getFullYear(), month, 1);
-  // 简单按「本月第几周」计算（以周一为基准）
-  const firstMondayOffset = first.getDay() === 0 ? 1 : (1 - first.getDay() + 7) % 7;
-  const firstMonday = new Date(first);
-  firstMonday.setDate(1 + firstMondayOffset);
-  if (d < firstMonday) return "第一周";
-  const diff = Math.floor((d - firstMonday) / (7 * 86400000));
-  const map = ["一", "二", "三", "四", "五", "六"];
-  return `第${map[Math.min(diff, 5)] || "一"}周`;
-}
-
-function pureCode(code) {
-  if (!code) return "";
-  return String(code).replace(/\.(SH|SZ|ss|sz)$/i, "").trim();
-}
-
-function isEmail(str) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str || "");
-}
-
-function formatDateShort(dateStr) {
-  if (!isValidDate(dateStr)) return dateStr || "-";
-  return `${parseMonth(dateStr)}/${parseDay(dateStr)}`;
-}
-
-function formatDateExact(dateStr) {
-  if (!dateStr) return "-";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleString("zh-CN", { hour12: false });
-  } catch {
-    return dateStr;
-  }
-}
-
-// ========== 常量（请根据实际后端修改） ==========
-const API_BASE = window.API_BASE || ""; // 后端 API 根地址，可在 HTML 中预先定义
-const MAIL_API_BASE = window.MAIL_API_BASE || API_BASE;
-const TURNSTILE_SITEKEY = window.TURNSTILE_SITEKEY || "";
-const PUBLIC_DATA_URL = atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8="); // https://etf.hahagw.eu.org/
 
 createApp({
   setup() {
@@ -191,7 +101,6 @@ createApp({
 
     const fetchPublicSettings = async () => {
       try {
-        if (!API_BASE) return;
         const res = await fetch(`${API_BASE}/api/settings/public`);
         const data = await res.json();
         if (data.success && data.data) {
@@ -323,9 +232,8 @@ createApp({
       navigate("#/");
     };
 
-    // ========== 看板核心 ==========
+    // 看板原版代码（原封不动）
     const loading = ref(false);
-    const loadError = ref(""); // 新增：错误提示
     const allData = ref([]);
     const chartsMap = ref({});
     const chartAsOfFromApi = ref("");
@@ -437,19 +345,19 @@ createApp({
     const formatMobileStatus = (status) => {
       if (!status || status === "-" || status === "--") return "-";
       const match = String(status).match(/([-+]?[0-9]*\.?[0-9]+)/);
-      return match ? match[0] : "-";
+      return match ? match : "-";
     };
     const getMobileStatusClass = (status) => {
       if (!status || status === "-" || status === "--") return "mobile-status-neutral";
       return String(status).includes("+") ? "mobile-status-up" : "mobile-status-down";
     };
 
-    // 核心看板渲染与过滤
+    // 核心看板渲染与过滤（完全保持原版）
     const sortedData = computed(() => {
       if (!selectedMonday.value) return [];
       const weekDays = getWeekDays(selectedMonday.value);
       if (weekDays.length < 5) return [];
-      const fridayDate = weekDays[4];
+      const fridayDate = weekDays;
       const y = parseYear(fridayDate), m = parseMonth(fridayDate), d = parseDay(fridayDate);
       if (!y) return [];
       const friday16 = new Date(y, m - 1, d, 16, 0, 0);
@@ -474,7 +382,7 @@ createApp({
         const my = parseYear(weekDays[0]), mm = parseMonth(weekDays[0]), md = parseDay(weekDays[0]);
         const curMon = new Date(my, mm - 1, md);
         const prevMon = new Date(curMon.getTime() - 7 * 86400000);
-        const prevMondayStr = formatDate(prevMon);
+        const prevMondayStr = `${prevMon.getFullYear()}-${String(prevMon.getMonth() + 1).padStart(2, "0")}-${String(prevMon.getDate()).padStart(2, "0")}`;
         const prevWeekDates = getWeekDays(prevMondayStr);
         const lastWeekStatusMap = {};
         allData.value.forEach((item) => {
@@ -604,7 +512,6 @@ createApp({
 
     const fetchSharedWatchlist = async () => {
       try {
-        if (!API_BASE) return;
         const res = await fetch(`${API_BASE}/api/watchlist/shared`);
         const data = await res.json();
         if (data.success) sharedWatchlist.value = data.data || [];
@@ -613,7 +520,6 @@ createApp({
 
     const fetchChartsMap = async () => {
       try {
-        if (!API_BASE) return;
         const token = localStorage.getItem("etf_token");
         const headers = { "Content-Type": "application/json" };
         if (token) headers.Authorization = `Bearer ${token}`;
@@ -633,43 +539,25 @@ createApp({
       } catch (_) {}
     };
 
-    // ========== 关键修复：公共数据独立加载 ==========
     const fetchData = async () => {
       loading.value = true;
-      loadError.value = "";
       try {
-        // 1. 优先、独立加载公共历史数据（不依赖 API_BASE）
-        let publicOk = false;
-        try {
-          const res1 = await fetch(PUBLIC_DATA_URL);
-          if (res1.ok) {
-            const data = await res1.json();
-            if (Array.isArray(data) && data.length > 0) {
-              allData.value = data;
-              publicOk = true;
-              // 自动选最新有数据的周
-              if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
-                selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
-              }
-            }
-          }
-        } catch (e) {
-          console.error("公共数据加载失败", e);
-          loadError.value = "历史数据源暂时不可用，请稍后重试";
-        }
-
-        // 2. 其他接口并行，互不影响
-        await Promise.allSettled([
+        const [res1] = await Promise.all([
+          fetch(atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=")).catch(() => null),
           fetchChartsMap(),
           fetchSharedWatchlist(),
         ]);
-
-        if (!publicOk && !allData.value.length) {
-          loadError.value = loadError.value || "暂无历史数据，请检查网络或稍后刷新";
+        if (res1 && res1.ok) {
+          const data = await res1.json();
+          if (Array.isArray(data)) {
+            allData.value = data;
+            if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
+              selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
+            }
+          }
         }
       } catch (e) {
         console.error(e);
-        loadError.value = "数据加载异常：" + (e.message || "未知错误");
       } finally {
         loading.value = false;
       }
@@ -685,7 +573,7 @@ createApp({
       if (weekDays.length < 5) { freeEtfCodes.value = []; return; }
       const sharedCodes = sharedWatchlist.value.length ? new Set(sharedWatchlist.value.map((w) => w.etf_code)) : null;
       const inScope = (code) => !sharedCodes || sharedCodes.has(code);
-      const fridayDate = weekDays[4];
+      const fridayDate = weekDays;
       const fy = parseYear(fridayDate), fm = parseMonth(fridayDate), fd = parseDay(fridayDate);
       const isPastFriday16 = fy ? Date.now() >= new Date(fy, fm - 1, fd, 16, 0, 0).getTime() : false;
       const etfMap = {};
@@ -712,7 +600,7 @@ createApp({
       computeLockedFreeTop();
     }, { deep: true });
 
-    // 监控投票逻辑（保持原样）
+    // 监控投票逻辑
     const voteList = ref([]);
     const voteSearchQuery = ref("");
     const voteModalVisible = ref(false);
@@ -728,7 +616,6 @@ createApp({
 
     const fetchVotes = async () => {
       try {
-        if (!API_BASE) return;
         const res = await fetch(`${API_BASE}/api/votes/top`);
         const data = await res.json();
         if (data.success) voteList.value = data.data || [];
@@ -857,7 +744,6 @@ createApp({
 
     const fetchPlans = async () => {
       try {
-        if (!API_BASE) return;
         const res = await fetch(`${API_BASE}/api/plans`);
         const data = await res.json();
         if (data.success && data.data?.length) {
@@ -919,7 +805,7 @@ createApp({
       isLoggedIn, isVip, username, vipDaysLeft, referralCode, logout, publicSettings,
       authModalVisible, authMode, authForm, authLoading, openAuth, closeAuth, submitAuth, switchAuthMode,
       sendEmailCode, sendCodeLoading, countdown,
-      loading, loadError, sortedData, showDropdown, searchQuery, availablePeriods, currentPeriodLabel, selectWeek, selectedMonday,
+      loading, sortedData, showDropdown, searchQuery, availablePeriods, currentPeriodLabel, selectWeek, selectedMonday,
       handleSort, expandedRowKey, toggleRow, getPastWeeks,
       openChart, getColorClass, isDailyChartColumn, getColumnDateLabel,
       formatMobileStatus, getMobileStatusClass, getDayTooltip, getWeekTooltip, getMobileDayDate, getMobileWeekDate, freeEtfCodes,
@@ -933,8 +819,6 @@ createApp({
       promoInput, promoChecking, promoValid, promoMessage, displayPayAmount, payRegister, payChannel, currentPayQrSrc,
       orderList, formatDateExact, ticketList, showTicketForm, ticketForm, ticketLoading, submitTicket,
       pwdForm, pwdLoading, submitPasswordChange,
-      // 暴露给模板的工具
-      getWeekDays, isValidDate,
     };
   },
 }).mount("#app");
