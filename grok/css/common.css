@@ -1,0 +1,130 @@
+/* css/common.css
+ * 波幅探长 · 公共样式
+ * 前台 index / 后台 admin 共用
+ */
+
+[v-cloak] {
+  display: none !important;
+}
+
+body {
+  background-color: #f4f6f8;
+  -webkit-tap-highlight-color: transparent;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* ========== 主题色 ========== */
+.theme-bg {
+  background-color: #4da6a0;
+}
+.theme-text {
+  color: #4da6a0;
+}
+.theme-border {
+  border-color: #4da6a0;
+}
+
+/* ========== 自定义滚动条 ========== */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ========== 侧边导航项 ========== */
+.nav-item {
+  transition: all 0.2s;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+}
+.nav-item i {
+  width: 24px;
+  text-align: center;
+  margin-right: 8px;
+  color: #94a3b8;
+  font-size: 16px;
+}
+.nav-item:hover:not(.active) {
+  color: #4da6a0;
+}
+.nav-item:hover:not(.active) i {
+  color: #4da6a0;
+}
+.nav-item.active {
+  background-color: #e2e8f0;
+  color: #334155;
+  border-left: 3px solid #4da6a0;
+  padding-left: 21px;
+  font-weight: 500;
+}
+.nav-item.active i {
+  color: #4da6a0;
+}
+
+/* ========== 模态遮罩 ========== */
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+/* ========== Toast 动画 ========== */
+.toast-enter {
+  animation: toastIn 0.25s ease;
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ========== 角标呼吸灯 ========== */
+.badge-pulse {
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ========== 表单焦点 ========== */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #4da6a0;
+  box-shadow: 0 0 0 3px rgba(77, 166, 160, 0.15);
+}
+
+/* ========== 通用按钮禁用态 ========== */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ========== 通用卡片阴影 ========== */
+.card-shadow {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+/* ========== 文字选中 ========== */
+.select-none {
+  -webkit-user-select: none;
+  user-select: none;
+}
