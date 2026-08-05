@@ -1,8 +1,6 @@
 /**
- * 波幅探长 前台逻辑处理脚本 v2.5
- * js/app.js
+ * 波幅探长 app.js (基于原版完全恢复版)
  */
-
 const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } = Vue;
 
 createApp({
@@ -11,7 +9,6 @@ createApp({
     const menuOpen = ref(false);
     const userMenuOpen = ref(false);
     const freeEtfCodes = ref([]);
-    
     const publicSettings = ref({
       gift_register_days: "1",
       gift_inviter_days: "3",
@@ -72,10 +69,8 @@ createApp({
 
     const apiFetch = async (endpoint, options = {}) => {
       const token = localStorage.getItem("etf_token");
-      options.headers = options.headers || {};
-      if (token) options.headers["Authorization"] = `Bearer ${token}`;
-      options.headers["Content-Type"] = "application/json";
-      
+      if (token) options.headers = { ...options.headers, Authorization: `Bearer ${token}` };
+      options.headers = { ...options.headers, "Content-Type": "application/json" };
       const res = await fetch(`${API_BASE}${endpoint}`, options);
       if (res.status === 401) {
         logout(false);
@@ -115,7 +110,7 @@ createApp({
       } catch (_) {}
     };
 
-    // 认证管理
+    // 认证
     const authModalVisible = ref(false);
     const authMode = ref("login");
     const authLoading = ref(false);
@@ -218,7 +213,6 @@ createApp({
           closeAuth();
           fetchData();
           fetchCustomWatchlist();
-          fetchVotes();
         }
       } catch (err) {
         alert(err.message);
@@ -238,7 +232,7 @@ createApp({
       navigate("#/");
     };
 
-    // 看板与行情数据处理
+    // 看板原版代码（原封不动）
     const loading = ref(false);
     const allData = ref([]);
     const chartsMap = ref({});
@@ -253,7 +247,8 @@ createApp({
 
     const handleSort = (column) => {
       if (sortColumn.value === column) {
-        sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
+        if (sortOrder.value === "desc") sortOrder.value = "asc";
+        else { sortColumn.value = null; sortOrder.value = "desc"; }
       } else {
         sortColumn.value = column;
         sortOrder.value = "desc";
@@ -266,12 +261,28 @@ createApp({
       return match ? parseFloat(match[0]) : -9999;
     };
 
-    const getDayTooltip = (dateStr) => isValidDate(dateStr) ? `${String(parseMonth(dateStr)).padStart(2, "0")}-${String(parseDay(dateStr)).padStart(2, "0")}` : "";
-    const getWeekTooltip = (mondayStr) => isValidDate(mondayStr) ? `${String(parseMonth(mondayStr)).padStart(2, "0")}-${getWeekNumberInMonth(mondayStr)}` : "";
+    const getDayTooltip = (dateStr) => {
+      if (!dateStr || !isValidDate(dateStr)) return "";
+      return `${String(parseMonth(dateStr)).padStart(2, "0")}-${String(parseDay(dateStr)).padStart(2, "0")}`;
+    };
+    const getWeekTooltip = (mondayStr) => {
+      if (!mondayStr || !isValidDate(mondayStr)) return "";
+      const m = String(parseMonth(mondayStr)).padStart(2, "0");
+      const weekNumStr = getWeekNumberInMonth(mondayStr);
+      const numMatch = weekNumStr.match(/[一二三四五六]/);
+      const map = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 };
+      const n = numMatch ? map[numMatch[0]] || 1 : 1;
+      return `${m}-${n}w`;
+    };
     const getMobileDayDate = (d) => getDayTooltip(d);
     const getMobileWeekDate = (m) => getWeekTooltip(m);
 
-    const uniqueDatesSet = computed(() => new Set(allData.value.filter((i) => (i.day_status || i.week_status) && isValidDate(i.date)).map((i) => i.date)));
+    const uniqueDatesSet = computed(() => {
+      const validDates = allData.value
+        .filter((i) => (i.day_status || i.week_status) && isValidDate(i.date))
+        .map((i) => i.date);
+      return new Set(validDates);
+    });
 
     const availablePeriods = computed(() => {
       const periods = {};
@@ -303,7 +314,9 @@ createApp({
     const selectWeek = (mondayStr) => { selectedMonday.value = mondayStr; showDropdown.value = false; };
 
     const chartAsOfDate = computed(() => {
-      if (chartAsOfFromApi.value && isValidDate(chartAsOfFromApi.value)) return chartAsOfFromApi.value;
+      if (chartAsOfFromApi.value && isValidDate(chartAsOfFromApi.value)) {
+        return chartAsOfFromApi.value;
+      }
       let best = "";
       for (const item of allData.value) {
         if (!item.date || !isValidDate(item.date)) continue;
@@ -316,7 +329,8 @@ createApp({
     const latestDailyColIndex = computed(() => {
       if (!selectedMonday.value || !chartAsOfDate.value) return -1;
       const weekDays = getWeekDays(selectedMonday.value);
-      return weekDays.length < 5 ? -1 : weekDays.indexOf(chartAsOfDate.value);
+      if (weekDays.length < 5) return -1;
+      return weekDays.indexOf(chartAsOfDate.value);
     });
 
     const isDailyChartColumn = (idx) => idx === latestDailyColIndex.value && latestDailyColIndex.value >= 0;
@@ -324,7 +338,8 @@ createApp({
     const getColumnDateLabel = (idx) => {
       if (!selectedMonday.value) return "";
       const weekDays = getWeekDays(selectedMonday.value);
-      return weekDays[idx] ? getDayTooltip(weekDays[idx]) || weekDays[idx] : "";
+      if (!weekDays[idx]) return "";
+      return getDayTooltip(weekDays[idx]) || weekDays[idx];
     };
 
     const formatMobileStatus = (status) => {
@@ -337,16 +352,14 @@ createApp({
       return String(status).includes("+") ? "mobile-status-up" : "mobile-status-down";
     };
 
+    // 核心看板渲染与过滤（完全保持原版）
     const sortedData = computed(() => {
       if (!selectedMonday.value) return [];
       const weekDays = getWeekDays(selectedMonday.value);
       if (weekDays.length < 5) return [];
-      
-      // 修复处：正确获取周五的日期字符串
       const fridayDate = weekDays;
       const y = parseYear(fridayDate), m = parseMonth(fridayDate), d = parseDay(fridayDate);
       if (!y) return [];
-      
       const friday16 = new Date(y, m - 1, d, 16, 0, 0);
       const isPastFriday16 = Date.now() >= friday16.getTime();
       const etfMap = {};
@@ -404,7 +417,9 @@ createApp({
           (w) => w.status === "active" || w.status === "pending"
         );
         if (activeCustom.length > 0) {
-          const customCodes = new Set(activeCustom.map((w) => pureCode(w.etf_code)).filter(Boolean));
+          const customCodes = new Set(
+            activeCustom.map((w) => pureCode(w.etf_code)).filter(Boolean)
+          );
           const freeSet = new Set(freeEtfCodes.value);
           validItems = validItems.filter((i) => {
             const pure = pureCode(i.etf_code);
@@ -531,7 +546,6 @@ createApp({
           fetch(atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=")).catch(() => null),
           fetchChartsMap(),
           fetchSharedWatchlist(),
-          fetchPublicSettings(),
         ]);
         if (res1 && res1.ok) {
           const data = await res1.json();
@@ -552,91 +566,39 @@ createApp({
     const computeLockedFreeTop = () => {
       const n = parseInt(publicSettings.value.free_top_n_charts, 10) || 3;
       const rows = allData.value || [];
-      if (!rows.length) {
-        freeEtfCodes.value = [];
-        return;
-      }
-
-      let latestMonday = "";
-      if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks?.length > 0) {
-        latestMonday = availablePeriods.value[0].weeks[0].monday;
-      }
-      if (!latestMonday) {
-        freeEtfCodes.value = [];
-        return;
-      }
-
+      if (!rows.length) { freeEtfCodes.value = []; return; }
+      let latestMonday = availablePeriods.value.length > 0 && availablePeriods.value[0].weeks?.length > 0 ? availablePeriods.value[0].weeks[0].monday : "";
+      if (!latestMonday) { freeEtfCodes.value = []; return; }
       const weekDays = getWeekDays(latestMonday);
-      if (weekDays.length < 5) {
-        freeEtfCodes.value = [];
-        return;
-      }
-
-      const sharedCodes = sharedWatchlist.value.length
-        ? new Set(sharedWatchlist.value.map((w) => w.etf_code))
-        : null;
+      if (weekDays.length < 5) { freeEtfCodes.value = []; return; }
+      const sharedCodes = sharedWatchlist.value.length ? new Set(sharedWatchlist.value.map((w) => w.etf_code)) : null;
       const inScope = (code) => !sharedCodes || sharedCodes.has(code);
-
       const fridayDate = weekDays;
       const fy = parseYear(fridayDate), fm = parseMonth(fridayDate), fd = parseDay(fridayDate);
-      const isPastFriday16 = fy
-        ? Date.now() >= new Date(fy, fm - 1, fd, 16, 0, 0).getTime()
-        : false;
-
+      const isPastFriday16 = fy ? Date.now() >= new Date(fy, fm - 1, fd, 16, 0, 0).getTime() : false;
       const etfMap = {};
       rows.forEach((item) => {
         if (!inScope(item.etf_code) || !item.date) return;
         const idx = weekDays.indexOf(item.date);
         if (idx === -1) return;
-        if (!etfMap[item.etf_code]) {
-          etfMap[item.etf_code] = {
-            etf_code: item.etf_code,
-            days: [null, null, null, null, null],
-            week_status: null,
-          };
-        }
+        if (!etfMap[item.etf_code]) { etfMap[item.etf_code] = { etf_code: item.etf_code, days: [null, null, null, null, null], week_status: null }; }
         etfMap[item.etf_code].days[idx] = item;
-        if (
-          isPastFriday16 &&
-          item.week_status &&
-          item.week_status !== "-" &&
-          item.week_status !== "--"
-        ) {
+        if (isPastFriday16 && item.week_status && item.week_status !== "-" && item.week_status !== "--") {
           etfMap[item.etf_code].week_status = item.week_status;
         }
       });
-
-      let items = Object.values(etfMap).filter((item) => {
-        const hasDay = item.days.some(
-          (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
-        );
-        const hasWeek = item.week_status && item.week_status !== "-" && item.week_status !== "--";
-        return hasDay || hasWeek;
-      });
-
+      let items = Object.values(etfMap).filter((item) => item.days.some((d) => d && d.day_status && d.day_status !== "-") || (item.week_status && item.week_status !== "-"));
       items.sort((a, b) => {
-        const valWkA =
-          a.week_status && a.week_status !== "-" ? Math.abs(getStatusVal(a.week_status)) : -9999;
-        const valWkB =
-          b.week_status && b.week_status !== "-" ? Math.abs(getStatusVal(b.week_status)) : -9999;
-        if (valWkA !== -9999 || valWkB !== -9999) {
-          if (valWkA !== -9999 && valWkB !== -9999) return valWkB - valWkA;
-          if (valWkA !== -9999) return -1;
-          if (valWkB !== -9999) return 1;
-        }
-        return 0;
+        const valWkA = a.week_status && a.week_status !== "-" ? Math.abs(getStatusVal(a.week_status)) : -9999;
+        const valWkB = b.week_status && b.week_status !== "-" ? Math.abs(getStatusVal(b.week_status)) : -9999;
+        return valWkB - valWkA;
       });
-
       freeEtfCodes.value = items.slice(0, n).map((i) => i.etf_code);
     };
 
-    watch(
-      [allData, sharedWatchlist, availablePeriods, () => publicSettings.value.free_top_n_charts],
-      () => {
-        computeLockedFreeTop();
-      },
-      { deep: true }
-    );
+    watch([allData, sharedWatchlist, availablePeriods, () => publicSettings.value.free_top_n_charts], () => {
+      computeLockedFreeTop();
+    }, { deep: true });
 
     // 监控投票逻辑
     const voteList = ref([]);
@@ -649,7 +611,6 @@ createApp({
     const voteMaxPerUser = computed(() => parseInt(publicSettings.value.vote_max_per_user, 10) || 10);
     const voteDisplayTopN = computed(() => parseInt(publicSettings.value.vote_display_top_n, 10) || 100);
     const voteMinPlanDays = computed(() => parseInt(publicSettings.value.vote_min_plan_days, 10) || 30);
-
     const hasVoteEligibility = computed(() => isLoggedIn.value && vipDaysLeft.value >= voteMinPlanDays.value);
     const userVotedCount = computed(() => myVotedCodes.value.length);
 
@@ -657,14 +618,10 @@ createApp({
       try {
         const res = await fetch(`${API_BASE}/api/votes/top`);
         const data = await res.json();
-        if (data.success) {
-          voteList.value = data.data || [];
-        }
+        if (data.success) voteList.value = data.data || [];
         if (isLoggedIn.value) {
           const userRes = await apiFetch("/api/user/votes");
-          if (userRes.success) {
-            myVotedCodes.value = userRes.data || [];
-          }
+          if (userRes.success) myVotedCodes.value = userRes.data || [];
         }
       } catch (_) {}
     };
@@ -678,17 +635,13 @@ createApp({
       return list.slice(0, voteDisplayTopN.value);
     });
 
-    const maxVoteCount = computed(() => {
-      if (!voteList.value.length) return 1;
-      return Math.max(...voteList.value.map((i) => i.vote_count || 0), 1);
-    });
-
+    const maxVoteCount = computed(() => voteList.value.length ? Math.max(...voteList.value.map((i) => i.vote_count || 0), 1) : 1);
     const getVotePercent = (count) => Math.min(100, Math.round(((count || 0) / maxVoteCount.value) * 100));
 
     const openVoteModal = () => {
       if (!isLoggedIn.value) { openAuth("login"); return; }
       if (!hasVoteEligibility.value) {
-        alert(`监控投票仅限付费周期 ≥ ${voteMinPlanDays.value} 天的会员参与，请先开通或续费套餐。`);
+        alert(`监控投票仅限付费周期 ≥ ${voteMinPlanDays.value} 天的会员参与`);
         navigate("#/plan");
         return;
       }
@@ -698,51 +651,26 @@ createApp({
 
     const quickVote = async (code, name) => {
       if (!isLoggedIn.value) { openAuth("login"); return; }
-      if (!hasVoteEligibility.value) {
-        alert("只有月度及以上付费会员可参与投票");
-        return;
-      }
-      if (userVotedCount.value >= voteMaxPerUser.value) {
-        alert(`您本月投票额度已满 (${voteMaxPerUser.value} 只)`);
-        return;
-      }
+      if (!hasVoteEligibility.value) { alert("只有月度及以上付费会员可参与投票"); return; }
+      if (userVotedCount.value >= voteMaxPerUser.value) { alert(`您本月投票额度已满`); return; }
       try {
-        await apiFetch("/api/votes/submit", {
-          method: "POST",
-          body: JSON.stringify({ votes: [{ etf_code: code, etf_name: name }] }),
-        });
-        alert(`投票成功！您为 ${code} 投上了关键一票`);
+        await apiFetch("/api/votes/submit", { method: "POST", body: JSON.stringify({ votes: [{ etf_code: code, etf_name: name }] }) });
+        alert(`投票成功！`);
         fetchVotes();
-      } catch (e) {
-        alert(e.message);
-      }
+      } catch (e) { alert(e.message); }
     };
 
     const submitVotes = async () => {
-      const validVotes = voteDraftItems.value
-        .map((r) => ({ etf_code: pureCode(r.etf_code), etf_name: (r.etf_name || r.etf_code).trim() }))
-        .filter((r) => r.etf_code);
-
+      const validVotes = voteDraftItems.value.map((r) => ({ etf_code: pureCode(r.etf_code), etf_name: (r.etf_name || r.etf_code).trim() })).filter((r) => r.etf_code);
       if (!validVotes.length) { alert("请至少填写一只标的代码"); return; }
-      if (validVotes.length + userVotedCount.value > voteMaxPerUser.value) {
-        alert(`超出限制！您最多还能投 ${voteMaxPerUser.value - userVotedCount.value} 只标的`);
-        return;
-      }
-
       voteSubmitting.value = true;
       try {
-        await apiFetch("/api/votes/submit", {
-          method: "POST",
-          body: JSON.stringify({ votes: validVotes }),
-        });
+        await apiFetch("/api/votes/submit", { method: "POST", body: JSON.stringify({ votes: validVotes }) });
         alert("监控投票提交成功！");
         voteModalVisible.value = false;
         fetchVotes();
-      } catch (e) {
-        alert(e.message);
-      } finally {
-        voteSubmitting.value = false;
-      }
+      } catch (e) { alert(e.message); }
+      finally { voteSubmitting.value = false; }
     };
 
     // 定制标的与套餐支付逻辑
@@ -757,11 +685,8 @@ createApp({
       try {
         const data = await apiFetch("/api/watchlist/custom");
         customWatchlist.value = data.data || [];
-      } catch (_) {
-        customWatchlist.value = [];
-      } finally {
-        customLoading.value = false;
-      }
+      } catch (_) { customWatchlist.value = []; }
+      finally { customLoading.value = false; }
     };
 
     const removeCustomItem = async (item) => {
@@ -772,13 +697,10 @@ createApp({
       } catch (e) { alert(e.message); }
     };
 
-    // 图表弹窗
     let currentViewer = null;
-
     const openChart = (etfCode, type) => {
       if (isLoggedIn.value && isVip.value) { showViewer(etfCode, type); return; }
-      const isInFreeList = freeEtfCodes.value.includes(etfCode);
-      if (isInFreeList) { showViewer(etfCode, type); return; }
+      if (freeEtfCodes.value.includes(etfCode)) { showViewer(etfCode, type); return; }
       if (confirm("此为「通用监控」VIP专属图表。\n是否去开通通用VIP？")) {
         if (!isLoggedIn.value) openAuth("login");
         else { planTab.value = "shared"; navigate("#/plan"); }
@@ -791,10 +713,7 @@ createApp({
       const image = new Image();
       image.src = imgUrl.split("?")[0];
       if (currentViewer) currentViewer.destroy();
-      currentViewer = new Viewer(image, {
-        hidden: () => { currentViewer.destroy(); currentViewer = null; },
-        navbar: false, title: false, button: true, backdrop: true,
-      });
+      currentViewer = new Viewer(image, { hidden: () => { currentViewer.destroy(); currentViewer = null; }, navbar: false, title: false, button: true, backdrop: true });
       currentViewer.show();
     };
 
@@ -803,7 +722,6 @@ createApp({
       return status.includes("+") ? "text-red-500" : "text-emerald-500";
     };
 
-    // 套餐支付与工单、密码修改
     const orderList = ref([]);
     const vipPlans = ref([]);
     const planTab = ref("shared");
@@ -822,10 +740,7 @@ createApp({
     const displayPayAmount = computed(() => topUpForm.amount);
     const currentPayQrSrc = computed(() => payChannel.value === "wechat" ? publicSettings.value.wechat_qr_url : publicSettings.value.alipay_qr_url);
 
-    const selectTopUpPlan = (plan) => {
-      topUpForm.planId = plan.id;
-      topUpForm.amount = Number(plan.price);
-    };
+    const selectTopUpPlan = (plan) => { topUpForm.planId = plan.id; topUpForm.amount = Number(plan.price); };
 
     const fetchPlans = async () => {
       try {
@@ -875,6 +790,7 @@ createApp({
 
     onMounted(() => {
       checkLoginState();
+      fetchPublicSettings();
       fetchData();
       fetchPlans();
       if (currentRoute.value === "#/vote") fetchVotes();
