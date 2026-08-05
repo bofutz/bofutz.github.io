@@ -1,3 +1,5 @@
+const DashboardModule = {
+    template: `
 <!-- dashboard.html -->
 <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
     <div class="flex-1 bg-white rounded-xl shadow-sm border border-slate-100 relative">
@@ -152,3 +154,5 @@
         </div>
     </div>
 </div>
+`
+};
