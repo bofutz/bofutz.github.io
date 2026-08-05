@@ -208,75 +208,120 @@ export const DashboardView = {
         }
       }
 
-      let validItems = Object.values(etfMap).filter((item) => {
-        const hasDay = item.days.some(
-          (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
-        );
-        const hasWeek = item.week_status && item.week_status !== "-" && item.week_status !== "--";
-        return hasDay || hasWeek || (chartsMap.value && chartsMap.value.hasOwnProperty(item.etf_code));
-      });
-
-      // VIP / 定制 / 游客 过滤 + 补全通用列表空行
-      const padSharedMissing = () => {
-        if (!sharedWatchlist.value.length) return;
-        const existing = new Set(validItems.map((i) => i.etf_code));
-        for (const w of sharedWatchlist.value) {
-          if (!existing.has(w.etf_code)) {
-            validItems.push({
-              etf_code: w.etf_code,
-              etf_name: w.etf_name || w.etf_code,
-              days: [null, null, null, null, null],
-              week_status: null,
-            });
-            existing.add(w.etf_code);
+      // 从行情 etfMap 取一行（支持纯数字代码对齐）
+      const pickFromMap = (code) => {
+        if (etfMap[code]) return etfMap[code];
+        const pure = pureCode(code);
+        if (pure) {
+          for (const k of Object.keys(etfMap)) {
+            if (pureCode(k) === pure || k === pure) return etfMap[k];
           }
         }
+        return null;
       };
 
+      const rowFromShared = (w) => {
+        const hit = pickFromMap(w.etf_code);
+        if (hit) {
+          return {
+            ...hit,
+            etf_code: w.etf_code,
+            etf_name: w.etf_name || hit.etf_name || w.etf_code,
+          };
+        }
+        return {
+          etf_code: w.etf_code,
+          etf_name: w.etf_name || w.etf_code,
+          days: [null, null, null, null, null],
+          week_status: null,
+        };
+      };
+
+      // 仅启用的通用标的（若接口无 enabled 字段则全部保留）
+      const sharedEnabled = (sharedWatchlist.value || []).filter(
+        (w) => w.enabled === undefined || w.enabled === true || w.enabled === 1
+      );
+
+      let validItems = [];
+
       if (isLoggedIn.value && isVip.value) {
-        // 通用 VIP：只看通用监控列表，并补全无数据的标的
-        if (sharedWatchlist.value.length > 0) {
-          const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
-          validItems = validItems.filter((i) => codeSet.has(i.etf_code));
-          padSharedMissing();
+        // ★ 通用 VIP：以通用监控列表为主表（无数据也显示，可点图表）
+        if (sharedEnabled.length > 0) {
+          validItems = sharedEnabled.map(rowFromShared);
+        } else {
+          // 列表尚未加载时，先展示有行情的
+          validItems = Object.values(etfMap).filter((item) => {
+            const hasDay = item.days.some(
+              (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
+            );
+            const hasWeek =
+              item.week_status && item.week_status !== "-" && item.week_status !== "--";
+            return (
+              hasDay ||
+              hasWeek ||
+              (chartsMap.value && chartsMap.value.hasOwnProperty(item.etf_code))
+            );
+          });
         }
       } else if (isLoggedIn.value && !isVip.value) {
-        // 已登录无通用 VIP：有定制则看定制 + 免费 TopN；否则看通用列表
         const activeCustom = (customWatchlist.value || []).filter(
           (w) => w.status === "active" || w.status === "pending"
         );
         if (activeCustom.length > 0) {
-          const customCodes = new Set(
-            activeCustom.map((w) => pureCode(w.etf_code)).filter(Boolean)
-          );
           const freeSet = new Set(freeEtfCodes.value);
-          validItems = validItems.filter((i) => {
-            const pure = pureCode(i.etf_code);
-            return (
-              customCodes.has(pure) ||
-              customCodes.has(i.etf_code) ||
-              freeSet.has(i.etf_code)
-            );
-          });
-          // 补全自己的定制标的（本周尚无数据也显示）
-          const existing = new Set(validItems.map((i) => i.etf_code));
+          const seen = new Set();
           for (const w of activeCustom) {
-            const code = w.etf_code;
-            if (!existing.has(code)) {
+            const row = rowFromShared(w);
+            if (!seen.has(row.etf_code)) {
+              validItems.push(row);
+              seen.add(row.etf_code);
+            }
+          }
+          // 附带免费 TopN
+          for (const code of freeEtfCodes.value) {
+            if (seen.has(code)) continue;
+            const hit = pickFromMap(code);
+            if (hit) {
+              validItems.push(hit);
+              seen.add(code);
+            } else {
               validItems.push({
                 etf_code: code,
-                etf_name: w.etf_name || code,
+                etf_name: code,
                 days: [null, null, null, null, null],
                 week_status: null,
               });
-              existing.add(code);
+              seen.add(code);
             }
           }
-        } else if (sharedWatchlist.value.length > 0) {
-          const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
-          validItems = validItems.filter((i) => codeSet.has(i.etf_code));
-          padSharedMissing();
+        } else if (sharedEnabled.length > 0) {
+          // 无定制：仍展示全部通用列表（图表权限由 openChart 控制）
+          validItems = sharedEnabled.map(rowFromShared);
+        } else {
+          validItems = Object.values(etfMap).filter((item) => {
+            const hasDay = item.days.some(
+              (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
+            );
+            const hasWeek =
+              item.week_status && item.week_status !== "-" && item.week_status !== "--";
+            return hasDay || hasWeek;
+          });
         }
+      } else {
+        // 游客：全部通用列表（无数据也显示；图表仅免费 TopN 可点）
+        if (sharedEnabled.length > 0) {
+          validItems = sharedEnabled.map(rowFromShared);
+        } else {
+          validItems = Object.values(etfMap).filter((item) => {
+            const hasDay = item.days.some(
+              (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
+            );
+            const hasWeek =
+              item.week_status && item.week_status !== "-" && item.week_status !== "--";
+            return hasDay || hasWeek;
+          });
+        }
+      }
       } else if (sharedWatchlist.value.length > 0) {
         // 游客：通用列表 + 补全
         const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
@@ -422,10 +467,37 @@ export const DashboardView = {
     };
 
     const showViewer = (etfCode, type) => {
-      const specificKey = `${etfCode}_${type}`;
+      const codes = [etfCode, pureCode(etfCode)].filter(Boolean);
       let imgUrl = null;
-      if (chartsMap.value?.[specificKey]) imgUrl = chartsMap.value[specificKey];
-      else if (chartsMap.value?.[etfCode]?.[type]) imgUrl = chartsMap.value[etfCode][type];
+      for (const c of codes) {
+        const specificKey = `${c}_${type}`;
+        if (chartsMap.value?.[specificKey]) {
+          imgUrl = chartsMap.value[specificKey];
+          break;
+        }
+        if (chartsMap.value?.[c]?.[type]) {
+          imgUrl = chartsMap.value[c][type];
+          break;
+        }
+        if (typeof chartsMap.value?.[c] === "string") {
+          const raw = chartsMap.value[c];
+          if (type === "weekly") {
+            imgUrl = raw.includes("_daily")
+              ? raw.replace("_daily", "_weekly")
+              : raw.replace(/\.png$/i, "_weekly.png");
+          } else {
+            imgUrl = raw;
+          }
+          break;
+        }
+      }
+      if (!imgUrl) {
+        const c = pureCode(etfCode) || etfCode;
+        imgUrl =
+          type === "weekly"
+            ? `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${c}_weekly.png`
+            : `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${c}_daily.png`;
+      }
       else if (type === "weekly") {
         if (typeof chartsMap.value?.[etfCode] === "string") {
           const raw = chartsMap.value[etfCode];
