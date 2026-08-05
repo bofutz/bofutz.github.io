@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 后台【套餐管理】分块组件 (支持 通用 / 定制 / 双重套餐)
+ * 波幅探长 - 后台【套餐管理】分块组件 (支持 通用 / 定制 / 两者兼得)
  * js/components/admin/PlanMgmt.js
  */
 import { store } from "../../store.js";
@@ -95,7 +95,7 @@ export default {
     };
 
     const getPlanTypeLabel = (type) => {
-      const map = { shared: "通用监控", custom: "定制监控", both: "通用+定制双重" };
+      const map = { shared: "通用监控", custom: "定制监控", both: "两者兼得 (通用+定制)" };
       return map[type] || "通用监控";
     };
 
@@ -121,11 +121,11 @@ export default {
       <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <div>
           <h2 class="text-xl font-bold text-slate-800">套餐管理</h2>
-          <p class="text-xs text-slate-400 mt-1">配置套餐属性 (通用监控 / 定制监控 / 通用+定制双重套餐)</p>
+          <p class="text-xs text-slate-400 mt-1">管理员可新增/编辑套餐类型：【通用监控】、【定制监控】或【两者兼得】</p>
         </div>
         <div class="flex gap-2">
           <div class="flex bg-white border border-slate-200 rounded-lg overflow-hidden text-xs">
-            <button v-for="s in [{k:'all',t:'全部'},{k:'shared',t:'通用'},{k:'custom',t:'定制'},{k:'both',t:'通用+定制'}]"
+            <button v-for="s in [{k:'all',t:'全部'},{k:'shared',t:'通用'},{k:'custom',t:'定制'},{k:'both',t:'两者兼得'}]"
                     :key="s.k" @click="planTypeFilter = s.k"
                     class="px-3 py-2 border-l first:border-0"
                     :class="planTypeFilter === s.k ? 'theme-bg text-white font-bold' : 'text-slate-600 hover:bg-slate-50'">
@@ -136,7 +136,7 @@ export default {
         </div>
       </div>
 
-      <!-- 套餐卡片列表 -->
+      <!-- 套餐列表 -->
       <div v-if="loading" class="text-center py-10 text-slate-400">
         <i class="fa-solid fa-circle-notch animate-spin text-2xl theme-text"></i>
       </div>
@@ -149,7 +149,7 @@ export default {
           <div class="font-bold text-slate-800 text-base">{{ p.name }}</div>
           <div class="text-2xl font-light text-slate-800">¥ {{ p.price }}</div>
           <div class="text-xs text-slate-400">
-            {{ p.days }} 天 · <span class="font-bold theme-text">{{ getPlanTypeLabel(p.plan_type) }}</span> · 排序 {{ p.sort_order || 0 }}
+            {{ p.days }} 天 · <span class="font-bold theme-text">{{ getPlanTypeLabel(p.plan_type) }}</span>
           </div>
           <div class="pt-2 flex gap-2 border-t border-slate-50 items-center">
             <button @click="openModal(p)" class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded hover:bg-slate-200">编辑</button>
@@ -161,26 +161,29 @@ export default {
         </div>
       </div>
 
-      <!-- 套餐编辑/新增弹窗 -->
+      <!-- 套餐新增与编辑弹窗 -->
       <div v-if="modalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="modalVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3.5 shadow-2xl">
           <h3 class="font-bold text-slate-800">{{ planForm.isEdit ? '编辑套餐' : '新增套餐' }}</h3>
-          <input v-model="planForm.name" placeholder="套餐名称" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="planForm.name" placeholder="套餐名称 (例如: 双重超值月卡)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
           <div class="grid grid-cols-2 gap-2">
             <input type="number" v-model.number="planForm.price" placeholder="价格 (元)" class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
             <input type="number" v-model.number="planForm.days" placeholder="有效期 (天)" class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
           </div>
+
           <div>
-            <label class="text-xs text-slate-500 mb-1 block">套餐类型</label>
-            <select v-model="planForm.plan_type" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
-              <option value="shared">通用监控 (解锁通用看板)</option>
-              <option value="custom">定制监控 (定制标的专属)</option>
-              <option value="both">通用 + 定制双重套餐</option>
+            <label class="text-xs text-slate-500 mb-1 block font-bold">套餐类型设置</label>
+            <select v-model="planForm.plan_type" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none font-medium">
+              <option value="shared">通用监控</option>
+              <option value="custom">定制监控</option>
+              <option value="both">两者兼得 (通用 + 定制)</option>
             </select>
           </div>
-          <input v-model="planForm.tag" placeholder="角标文案 (如: 推荐/热销)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
-          <input type="number" v-model.number="planForm.sort_order" placeholder="排序 (越小越靠前)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+
+          <input v-model="planForm.tag" placeholder="角标文案 (如: 爆款/超值)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <input type="number" v-model.number="planForm.sort_order" placeholder="排序 (数字越小越靠前)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
           <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" v-model="planForm.enabled"> 启用套餐</label>
+
           <div class="flex justify-end gap-2 pt-2">
             <button @click="modalVisible = false" class="px-4 py-2 text-sm text-slate-500">取消</button>
             <button @click="submitPlan" class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold">保存</button>
