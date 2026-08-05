@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 后台【套餐管理】分块组件 (支持 通用 / 定制 / 两者兼得)
+ * 波幅探长 - 后台【套餐管理】分块组件 (支持 通用 / 定制 / 两者)
  * js/components/admin/PlanMgmt.js
  */
 import { store } from "../../store.js";
@@ -95,7 +95,7 @@ export default {
     };
 
     const getPlanTypeLabel = (type) => {
-      const map = { shared: "通用监控", custom: "定制监控", both: "两者兼得 (通用+定制)" };
+      const map = { shared: "通用监控", custom: "定制监控", both: "通用+定制" };
       return map[type] || "通用监控";
     };
 
