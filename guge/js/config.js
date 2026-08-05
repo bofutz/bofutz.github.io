@@ -8,7 +8,7 @@ const API_BASE = "https://vip.hahagw.eu.org";
 const MAIL_API_BASE = "https://mail.hahagw.eu.org";
 const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
-// 2. 日期校验与解析工具函数（已修复 match 索引）
+// 2. 日期校验与解析工具函数
 const isValidDate = (dateStr) => {
   if (!dateStr || typeof dateStr !== "string") return false;
   const match = dateStr.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
