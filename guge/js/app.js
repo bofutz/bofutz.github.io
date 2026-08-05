@@ -1,5 +1,5 @@
 /**
- * 波幅探长 前台逻辑处理脚本 v2.3
+ * 波幅探长 前台逻辑处理脚本 v2.4 (完整修复版)
  * js/app.js
  */
 
@@ -7,13 +7,11 @@ const { createApp, ref, computed, reactive, onMounted, onUnmounted, watch, nextT
 
 createApp({
   setup() {
-    // 路由与页面状态
     const currentRoute = ref(window.location.hash || "#/");
     const menuOpen = ref(false);
     const userMenuOpen = ref(false);
     const freeEtfCodes = ref([]);
     
-    // 全局系统配置参数
     const publicSettings = ref({
       gift_register_days: "1",
       gift_inviter_days: "3",
@@ -72,7 +70,6 @@ createApp({
       return map[currentRoute.value] || "数据看板";
     });
 
-    // 封装通用 API 请求
     const apiFetch = async (endpoint, options = {}) => {
       const token = localStorage.getItem("etf_token");
       options.headers = options.headers || {};
@@ -89,7 +86,6 @@ createApp({
       return data;
     };
 
-    // 用户登录与状态管理
     const isLoggedIn = ref(false);
     const isVip = ref(false);
     const username = ref("");
@@ -119,7 +115,7 @@ createApp({
       } catch (_) {}
     };
 
-    // 用户认证 (登录/注册)
+    // 认证管理
     const authModalVisible = ref(false);
     const authMode = ref("login");
     const authLoading = ref(false);
@@ -345,6 +341,11 @@ createApp({
       if (!selectedMonday.value) return [];
       const weekDays = getWeekDays(selectedMonday.value);
       if (weekDays.length < 5) return [];
+      const fridayDate = weekDays;
+      const y = parseYear(fridayDate), m = parseMonth(fridayDate), d = parseDay(fridayDate);
+      if (!y) return [];
+      const friday16 = new Date(y, m - 1, d, 16, 0, 0);
+      const isPastFriday16 = Date.now() >= friday16.getTime();
       const etfMap = {};
 
       allData.value.forEach((item) => {
@@ -355,19 +356,117 @@ createApp({
             etfMap[item.etf_code] = { etf_code: item.etf_code, etf_name: item.etf_name, days: [null, null, null, null, null], week_status: null };
           }
           etfMap[item.etf_code].days[idx] = item;
-          if (item.week_status && item.week_status !== "-" && item.week_status !== "--") {
+          if (isPastFriday16 && item.week_status && item.week_status !== "-" && item.week_status !== "--") {
             etfMap[item.etf_code].week_status = item.week_status;
           }
         }
       });
 
-      let validItems = Object.values(etfMap);
+      if (!isPastFriday16) {
+        const my = parseYear(weekDays[0]), mm = parseMonth(weekDays[0]), md = parseDay(weekDays[0]);
+        const curMon = new Date(my, mm - 1, md);
+        const prevMon = new Date(curMon.getTime() - 7 * 86400000);
+        const prevMondayStr = `${prevMon.getFullYear()}-${String(prevMon.getMonth() + 1).padStart(2, "0")}-${String(prevMon.getDate()).padStart(2, "0")}`;
+        const prevWeekDates = getWeekDays(prevMondayStr);
+        const lastWeekStatusMap = {};
+        allData.value.forEach((item) => {
+          if (!item.date) return;
+          if (prevWeekDates.includes(item.date) && item.week_status && item.week_status !== "-" && item.week_status !== "--") {
+            lastWeekStatusMap[item.etf_code] = item.week_status;
+          }
+        });
+        for (const code in lastWeekStatusMap) {
+          if (!etfMap[code]) {
+            const etfItem = allData.value.find((i) => i.etf_code === code);
+            etfMap[code] = { etf_code: code, etf_name: etfItem ? etfItem.etf_name : code, days: [null, null, null, null, null], week_status: null };
+          }
+          etfMap[code].week_status = lastWeekStatusMap[code];
+        }
+      }
+
+      let validItems = Object.values(etfMap).filter((item) => {
+        const hasDay = item.days.some((d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--");
+        const hasWeek = item.week_status && item.week_status !== "-" && item.week_status !== "--";
+        return hasDay || hasWeek || (chartsMap.value && chartsMap.value.hasOwnProperty(item.etf_code));
+      });
+
+      if (isLoggedIn.value && isVip.value) {
+        if (sharedWatchlist.value.length > 0) {
+          const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
+          const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
+          if (filtered.length > 0) validItems = filtered;
+        }
+      } else if (isLoggedIn.value && !isVip.value) {
+        const activeCustom = (customWatchlist.value || []).filter(
+          (w) => w.status === "active" || w.status === "pending"
+        );
+        if (activeCustom.length > 0) {
+          const customCodes = new Set(activeCustom.map((w) => pureCode(w.etf_code)).filter(Boolean));
+          const freeSet = new Set(freeEtfCodes.value);
+          validItems = validItems.filter((i) => {
+            const pure = pureCode(i.etf_code);
+            return customCodes.has(pure) || customCodes.has(i.etf_code) || freeSet.has(i.etf_code);
+          });
+        } else if (sharedWatchlist.value.length > 0) {
+          const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
+          const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
+          if (filtered.length > 0) validItems = filtered;
+        }
+      } else if (sharedWatchlist.value.length > 0) {
+        const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
+        const filtered = validItems.filter((i) => codeSet.has(i.etf_code));
+        if (filtered.length > 0) validItems = filtered;
+      }
+
       if (searchQuery.value) {
         const q = searchQuery.value.toLowerCase().trim();
         validItems = validItems.filter(
           (item) => (item.etf_name && item.etf_name.toLowerCase().includes(q)) || (item.etf_code && item.etf_code.toLowerCase().includes(q))
         );
       }
+
+      validItems.sort((a, b) => {
+        if (sortColumn.value) {
+          if (sortColumn.value === "etf_name") {
+            const cmp = (a.etf_name || "").localeCompare(b.etf_name || "", "zh-CN");
+            return sortOrder.value === "asc" ? cmp : -cmp;
+          }
+          if (sortColumn.value.startsWith("d")) {
+            const idx = parseInt(sortColumn.value.substring(1), 10);
+            const valA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
+            const valB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
+            if (valA === -9999 && valB !== -9999) return 1;
+            if (valB === -9999 && valA !== -9999) return -1;
+            return sortOrder.value === "desc" ? valB - valA : valA - valB;
+          }
+          if (sortColumn.value === "week_status") {
+            const valA = getStatusVal(a.week_status), valB = getStatusVal(b.week_status);
+            if (valA === -9999 && valB !== -9999) return 1;
+            if (valB === -9999 && valA !== -9999) return -1;
+            return sortOrder.value === "desc" ? valB - valA : valA - valB;
+          }
+        } else {
+          const valWkA = a.week_status && a.week_status !== "-" ? Math.abs(getStatusVal(a.week_status)) : -9999;
+          const valWkB = b.week_status && b.week_status !== "-" ? Math.abs(getStatusVal(b.week_status)) : -9999;
+          if (valWkA !== -9999 || valWkB !== -9999) {
+            if (valWkA !== -9999 && valWkB !== -9999) return valWkB - valWkA;
+            if (valWkA !== -9999) return -1;
+            if (valWkB !== -9999) return 1;
+          }
+          let latestIdx = 4;
+          while (latestIdx >= 0) {
+            const hasData = validItems.some((i) => i.days[latestIdx] && i.days[latestIdx].day_status && i.days[latestIdx].day_status !== "-");
+            if (hasData) break;
+            latestIdx--;
+          }
+          if (latestIdx >= 0) {
+            const valA = a.days[latestIdx] && a.days[latestIdx].day_status ? Math.abs(getStatusVal(a.days[latestIdx].day_status)) : -9999;
+            const valB = b.days[latestIdx] && b.days[latestIdx].day_status ? Math.abs(getStatusVal(b.days[latestIdx].day_status)) : -9999;
+            return valB - valA;
+          }
+        }
+        return 0;
+      });
       return validItems;
     });
 
@@ -393,7 +492,61 @@ createApp({
       return Object.values(weekMap).sort((a, b) => b.monday.localeCompare(a.monday));
     };
 
-    // 监控投票核心逻辑模块（新增）
+    const fetchSharedWatchlist = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/watchlist/shared`);
+        const data = await res.json();
+        if (data.success) sharedWatchlist.value = data.data || [];
+      } catch (_) {}
+    };
+
+    const fetchChartsMap = async () => {
+      try {
+        const token = localStorage.getItem("etf_token");
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`${API_BASE}/api/etfs`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          chartsMap.value = data.charts || {};
+          chartAsOfFromApi.value = data.chart_as_of && isValidDate(data.chart_as_of) ? data.chart_as_of : "";
+          if (isLoggedIn.value) {
+            isVip.value = !!data.is_vip;
+            if (data.shared_vip_days != null) {
+              vipDaysLeft.value = data.shared_vip_days;
+              localStorage.setItem("etf_vip_days", data.shared_vip_days);
+            }
+          }
+        }
+      } catch (_) {}
+    };
+
+    const fetchData = async () => {
+      loading.value = true;
+      try {
+        const [res1] = await Promise.all([
+          fetch(atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=")).catch(() => null),
+          fetchChartsMap(),
+          fetchSharedWatchlist(),
+          fetchPublicSettings(),
+        ]);
+        if (res1 && res1.ok) {
+          const data = await res1.json();
+          if (Array.isArray(data)) {
+            allData.value = data;
+            if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
+              selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
+            }
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        loading.value = false;
+      }
+    };
+
+    // 监控投票逻辑
     const voteList = ref([]);
     const voteSearchQuery = ref("");
     const voteModalVisible = ref(false);
@@ -529,7 +682,6 @@ createApp({
 
     // 图表弹窗
     let currentViewer = null;
-    const freeTopN = computed(() => parseInt(publicSettings.value.free_top_n_charts, 10) || 3);
 
     const openChart = (etfCode, type) => {
       if (isLoggedIn.value && isVip.value) { showViewer(etfCode, type); return; }
@@ -594,29 +746,6 @@ createApp({
       } catch (_) {}
     };
 
-    const fetchData = async () => {
-      loading.value = true;
-      try {
-        const [res1] = await Promise.all([
-          fetch(atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=")).catch(() => null),
-          fetchPublicSettings(),
-        ]);
-        if (res1 && res1.ok) {
-          const data = await res1.json();
-          if (Array.isArray(data)) {
-            allData.value = data;
-            if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks.length > 0) {
-              selectedMonday.value = availablePeriods.value[0].weeks[0].monday;
-            }
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        loading.value = false;
-      }
-    };
-
     const ticketList = ref([]);
     const showTicketForm = ref(false);
     const ticketLoading = ref(false);
@@ -673,7 +802,6 @@ createApp({
       openChart, getColorClass, isDailyChartColumn, getColumnDateLabel,
       formatMobileStatus, getMobileStatusClass, getDayTooltip, getWeekTooltip, getMobileDayDate, getMobileWeekDate, freeEtfCodes,
       
-      // 监控投票暴露响应式变量与方法
       voteList, filteredVoteList, voteSearchQuery, voteModalVisible, voteSubmitting, voteDraftItems,
       hasVoteEligibility, userVotedCount, voteMaxPerUser, voteDisplayTopN, myVotedCodes,
       fetchVotes, openVoteModal, quickVote, submitVotes, getVotePercent,
