@@ -1,6 +1,4 @@
-const DashboardModule = {
-    template: `
-<!-- dashboard.html -->
+const dashboardHtml = `
 <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
     <div class="flex-1 bg-white rounded-xl shadow-sm border border-slate-100 relative">
         <button @click.stop="showDropdown = !showDropdown" class="w-full flex items-center justify-between px-3 sm:px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 rounded-xl">
@@ -33,7 +31,6 @@ const DashboardModule = {
     <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-50"></i><p>该周期暂无相关数据</p>
 </div>
 <div v-else>
-    <!-- 桌面表格 -->
     <div class="hidden sm:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="overflow-x-auto custom-scrollbar">
             <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
@@ -99,7 +96,6 @@ const DashboardModule = {
         </div>
     </div>
 
-    <!-- 手机卡片（优化版） -->
     <div class="sm:hidden space-y-2.5">
         <div v-for="item in sortedData" :key="item.etf_code" class="m-card">
             <div class="px-3.5 py-2.5 flex items-center justify-between" @click="toggleRow(item)">
@@ -154,5 +150,4 @@ const DashboardModule = {
         </div>
     </div>
 </div>
-`
-};
+`;
