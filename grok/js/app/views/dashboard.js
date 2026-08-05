@@ -237,7 +237,6 @@ export const DashboardView = {
         };
       };
 
-      // 仅启用的通用标的（若接口无 enabled 字段则全部保留）
       const sharedEnabled = (sharedWatchlist.value || []).filter(
         (w) => w.enabled === undefined || w.enabled === true || w.enabled === 1
       );
@@ -245,11 +244,9 @@ export const DashboardView = {
       let validItems = [];
 
       if (isLoggedIn.value && isVip.value) {
-        // ★ 通用 VIP：以通用监控列表为主表（无数据也显示，可点图表）
         if (sharedEnabled.length > 0) {
           validItems = sharedEnabled.map(rowFromShared);
         } else {
-          // 列表尚未加载时，先展示有行情的
           validItems = Object.values(etfMap).filter((item) => {
             const hasDay = item.days.some(
               (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
@@ -259,7 +256,7 @@ export const DashboardView = {
             return (
               hasDay ||
               hasWeek ||
-              (chartsMap.value && chartsMap.value.hasOwnProperty(item.etf_code))
+              (chartsMap.value && Object.prototype.hasOwnProperty.call(chartsMap.value, item.etf_code))
             );
           });
         }
@@ -268,7 +265,6 @@ export const DashboardView = {
           (w) => w.status === "active" || w.status === "pending"
         );
         if (activeCustom.length > 0) {
-          const freeSet = new Set(freeEtfCodes.value);
           const seen = new Set();
           for (const w of activeCustom) {
             const row = rowFromShared(w);
@@ -277,13 +273,11 @@ export const DashboardView = {
               seen.add(row.etf_code);
             }
           }
-          // 附带免费 TopN
           for (const code of freeEtfCodes.value) {
             if (seen.has(code)) continue;
             const hit = pickFromMap(code);
             if (hit) {
               validItems.push(hit);
-              seen.add(code);
             } else {
               validItems.push({
                 etf_code: code,
@@ -291,11 +285,10 @@ export const DashboardView = {
                 days: [null, null, null, null, null],
                 week_status: null,
               });
-              seen.add(code);
             }
+            seen.add(code);
           }
         } else if (sharedEnabled.length > 0) {
-          // 无定制：仍展示全部通用列表（图表权限由 openChart 控制）
           validItems = sharedEnabled.map(rowFromShared);
         } else {
           validItems = Object.values(etfMap).filter((item) => {
@@ -307,20 +300,17 @@ export const DashboardView = {
             return hasDay || hasWeek;
           });
         }
+      } else if (sharedEnabled.length > 0) {
+        validItems = sharedEnabled.map(rowFromShared);
       } else {
-        // 游客：全部通用列表（无数据也显示；图表仅免费 TopN 可点）
-        if (sharedEnabled.length > 0) {
-          validItems = sharedEnabled.map(rowFromShared);
-        } else {
-          validItems = Object.values(etfMap).filter((item) => {
-            const hasDay = item.days.some(
-              (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
-            );
-            const hasWeek =
-              item.week_status && item.week_status !== "-" && item.week_status !== "--";
-            return hasDay || hasWeek;
-          });
-        }
+        validItems = Object.values(etfMap).filter((item) => {
+          const hasDay = item.days.some(
+            (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
+          );
+          const hasWeek =
+            item.week_status && item.week_status !== "-" && item.week_status !== "--";
+          return hasDay || hasWeek;
+        });
       }
 
       if (searchQuery.value) {
@@ -493,7 +483,7 @@ export const DashboardView = {
             : `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${c}_daily.png`;
       }
       const image = new Image();
-      image.src = imgUrl.split("?")[0];
+      image.src = String(imgUrl).split("?")[0];
       if (currentViewer) currentViewer.destroy();
       currentViewer = new Viewer(image, {
         hidden: () => {
