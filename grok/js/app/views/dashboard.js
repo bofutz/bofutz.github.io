@@ -541,17 +541,15 @@ export const DashboardView = {
         return hasDay || hasWeek;
       });
 
-      items.sort((a, b) => {
-        const valWkA =
-          a.week_status && a.week_status !== "-" ? Math.abs(getStatusVal(a.week_status)) : -9999;
-        const valWkB =
-          b.week_status && b.week_status !== "-" ? Math.abs(getStatusVal(b.week_status)) : -9999;
-        if (valWkA !== -9999 || valWkB !== -9999) {
-          if (valWkA !== -9999 && valWkB !== -9999) return valWkB - valWkA;
-          if (valWkA !== -9999) return -1;
-          if (valWkB !== -9999) return 1;
-        }
-        let latestIdx = 4;
+      // 与看板默认排序一致：先「最新图表日」列绝对值，再周线绝对值
+      let latestIdx = -1;
+      // 与 etfMap 同一周（最新周），保证免费 TopN 始终对应当前行情排序
+      if (latestMonday && chartAsOfDate.value) {
+        const wd = getWeekDays(latestMonday);
+        latestIdx = wd.indexOf(chartAsOfDate.value);
+      }
+      if (latestIdx < 0) {
+        latestIdx = 4;
         while (latestIdx >= 0) {
           const hasData = items.some(
             (i) =>
@@ -563,17 +561,35 @@ export const DashboardView = {
           if (hasData) break;
           latestIdx--;
         }
-        if (latestIdx >= 0) {
-          const valA =
-            a.days[latestIdx] && a.days[latestIdx].day_status
-              ? Math.abs(getStatusVal(a.days[latestIdx].day_status))
-              : -9999;
-          const valB =
-            b.days[latestIdx] && b.days[latestIdx].day_status
-              ? Math.abs(getStatusVal(b.days[latestIdx].day_status))
-              : -9999;
-          return valB - valA;
+      }
+
+      items.sort((a, b) => {
+        const dayAbs = (item) => {
+          if (latestIdx < 0) return -9999;
+          const st = item.days[latestIdx]?.day_status;
+          if (!st || st === "-" || st === "--") return -9999;
+          return Math.abs(getStatusVal(st));
+        };
+        const weekAbs = (item) => {
+          if (!item.week_status || item.week_status === "-" || item.week_status === "--") {
+            return -9999;
+          }
+          return Math.abs(getStatusVal(item.week_status));
+        };
+
+        const aDay = dayAbs(a);
+        const bDay = dayAbs(b);
+        if (aDay !== -9999 || bDay !== -9999) {
+          if (aDay !== -9999 && bDay !== -9999) return bDay - aDay;
+          if (aDay !== -9999) return -1;
+          if (bDay !== -9999) return 1;
         }
+
+        const aWk = weekAbs(a);
+        const bWk = weekAbs(b);
+        if (aWk !== -9999 && bWk !== -9999) return bWk - aWk;
+        if (aWk !== -9999) return -1;
+        if (bWk !== -9999) return 1;
         return 0;
       });
 
@@ -659,7 +675,14 @@ export const DashboardView = {
     };
 
     watch(
-      [allData, sharedWatchlist, availablePeriods, () => props.publicSettings.free_top_n_charts],
+      [
+        allData,
+        sharedWatchlist,
+        availablePeriods,
+        selectedMonday,
+        chartAsOfDate,
+        () => props.publicSettings.free_top_n_charts,
+      ],
       () => computeLockedFreeTop(),
       { deep: true }
     );
