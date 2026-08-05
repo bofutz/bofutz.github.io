@@ -1,5 +1,5 @@
 /**
- * 波幅探长 管理后台逻辑处理脚本 v2.3
+ * 波幅探长 管理后台逻辑脚本 v2.5 (全响应式导出修复版)
  * js/admin.js
  */
 
@@ -21,7 +21,6 @@ createApp({
       setTimeout(() => toasts.value.shift(), 2800);
     };
 
-    // 数据源定义
     const users = ref([]);
     const orders = ref([]);
     const plans = ref([]);
@@ -30,11 +29,8 @@ createApp({
     const customList = ref([]);
     const promos = ref([]);
     const stats = ref({});
-    
-    // 监控投票后台定义（新增）
     const voteAdminList = ref([]);
 
-    // 筛选与勾选状态
     const userSearchQuery = ref('');
     const orderSearchQuery = ref('');
     const orderStatusFilter = ref('all');
@@ -42,8 +38,6 @@ createApp({
 
     const pendingOrdersCount = computed(() => (orders.value.filter(o => o.status === 'pending') || []).length);
     const pendingTicketsCount = computed(() => (tickets.value.filter(t => t.status === 'pending') || []).length);
-    
-    // 投票统计计算
     const totalVotesSum = computed(() => voteAdminList.value.reduce((sum, item) => sum + (item.vote_count || 0), 0));
     const voteTotalCount = computed(() => voteAdminList.value.length);
 
@@ -73,7 +67,6 @@ createApp({
       return list;
     });
 
-    // API 请求封装
     const fetchAdmin = async (endpoint, options = {}) => {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
@@ -143,7 +136,6 @@ createApp({
       } finally { loading.value = false; isInitialLoad.value = false; }
     };
 
-    // 数据获取列表函数
     const fetchStats = async () => {
       try { const d = await fetchAdmin('/api/admin/stats'); if (d.success) stats.value = d.data || {}; } catch (_) {}
     };
@@ -173,7 +165,6 @@ createApp({
       try { const d = await fetchAdmin('/api/admin/promos'); if (d.success) promos.value = d.data || []; } catch (e) { showToast(e.message, 'error'); }
     };
 
-    // 监控投票后台接口（新增）
     const fetchVotes = async (spin = true) => {
       if (spin) loading.value = true;
       try {
@@ -201,7 +192,6 @@ createApp({
       } catch (e) { showToast(e.message, 'error'); }
     };
 
-    // 系统参数表单定义（含投票设置）
     const settingsForm = reactive({
       gift_register_days: 1, gift_inviter_days: 3, gift_invitee_days: 2,
       free_top_n_charts: 3, pay_register_enabled: '1', custom_max_symbols: 3,
@@ -230,7 +220,6 @@ createApp({
       } catch (e) { showToast(e.message, 'error'); }
     };
 
-    // 用户操作弹窗与处理
     const chargeModalVisible = ref(false);
     const chargeTarget = ref(null);
     const chargeDays = ref(7);
@@ -283,7 +272,6 @@ createApp({
       } catch (e) { showToast(e.message, 'error'); }
     };
 
-    // 订单审核与工单广播
     const approveOrder = async (o) => {
       if (!confirm(`确定通过用户 ${o.username || o.register_username} 的订单？`)) return;
       try {
@@ -301,6 +289,140 @@ createApp({
 
     const getPlanName = (id) => { const p = plans.value.find(x => x.id === id); return p ? p.name : id; };
 
+    // 套餐弹窗与管理函数（补全导出）
+    const planModalVisible = ref(false);
+    const planForm = reactive({ id: '', name: '', price: 0, days: 0, tag: '', sort_order: 0, enabled: true, plan_type: 'shared', isEdit: false });
+    const openPlanModal = (p = null) => {
+      if (p) Object.assign(planForm, { ...p, enabled: !!p.enabled, plan_type: p.plan_type || 'shared', isEdit: true });
+      else Object.assign(planForm, { id: '', name: '', price: 0, days: 0, tag: '', sort_order: 0, enabled: true, plan_type: 'shared', isEdit: false });
+      planModalVisible.value = true;
+    };
+    const submitPlan = async () => {
+      try {
+        await fetchAdmin('/api/admin/plans', { method: 'POST', body: JSON.stringify(planForm) });
+        showToast('已保存', 'success'); planModalVisible.value = false; fetchPlans();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deletePlan = async (p) => {
+      if (!confirm(`删除套餐 ${p.name}？`)) return;
+      try {
+        await fetchAdmin('/api/admin/plans', { method: 'DELETE', body: JSON.stringify({ id: p.id }) });
+        showToast('已删除', 'success'); fetchPlans();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    // 通用监控弹窗函数（补全导出）
+    const sharedModalVisible = ref(false);
+    const sharedForm = reactive({ id: null, etf_code: '', etf_name: '', sort_order: 0, enabled: true, note: '' });
+    const openSharedModal = (w = null) => {
+      if (w) Object.assign(sharedForm, { id: w.id, etf_code: w.etf_code, etf_name: w.etf_name, sort_order: w.sort_order, enabled: !!w.enabled, note: w.note || '' });
+      else Object.assign(sharedForm, { id: null, etf_code: '', etf_name: '', sort_order: 0, enabled: true, note: '' });
+      sharedModalVisible.value = true;
+    };
+    const submitShared = async () => {
+      try {
+        await fetchAdmin('/api/admin/watchlist/shared', { method: 'POST', body: JSON.stringify(sharedForm) });
+        showToast('已保存', 'success'); sharedModalVisible.value = false; fetchShared();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deleteShared = async (w) => {
+      if (!confirm(`删除 ${w.etf_code}？`)) return;
+      try {
+        await fetchAdmin('/api/admin/watchlist/shared', { method: 'DELETE', body: JSON.stringify({ id: w.id }) });
+        showToast('已删除', 'success'); fetchShared();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const showBatchImport = ref(false);
+    const batchImportText = ref('');
+    const submitBatchImport = async () => {
+      const items = batchImportText.value.split('\n').map(line => {
+        const parts = line.split(/[,，\t]/).map(s => s.trim()).filter(Boolean);
+        if (!parts.length) return null;
+        return { etf_code: parts[0], etf_name: parts || parts[0] };
+      }).filter(Boolean);
+      try {
+        const d = await fetchAdmin('/api/admin/watchlist/shared/batch', { method: 'POST', body: JSON.stringify({ items }) });
+        showToast(`新增 ${d.added}，跳过 ${d.skipped}`, 'success');
+        showBatchImport.value = false; batchImportText.value = ''; fetchShared();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    // 定制监控编辑函数（补全导出）
+    const customEditVisible = ref(false);
+    const customEdit = reactive({ id: null, etf_code: '', etf_name: '', status: 'active', expireLocal: '' });
+    const openCustomEdit = (w) => {
+      Object.assign(customEdit, { id: w.id, etf_code: w.etf_code, etf_name: w.etf_name, status: w.status, expireLocal: w.expire_at ? new Date(w.expire_at).toISOString().slice(0, 16) : '' });
+      customEditVisible.value = true;
+    };
+    const submitCustomEdit = async () => {
+      try {
+        const expire_at = customEdit.expireLocal ? new Date(customEdit.expireLocal).getTime() : null;
+        await fetchAdmin('/api/admin/watchlist/custom', {
+          method: 'POST',
+          body: JSON.stringify({ id: customEdit.id, etf_code: customEdit.etf_code, etf_name: customEdit.etf_name, status: customEdit.status, expire_at }),
+        });
+        showToast('已保存', 'success'); customEditVisible.value = false; fetchCustom();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deleteCustom = async (w) => {
+      if (!confirm('删除该定制？')) return;
+      try {
+        await fetchAdmin('/api/admin/watchlist/custom', { method: 'DELETE', body: JSON.stringify({ id: w.id }) });
+        showToast('已删除', 'success'); fetchCustom();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    // 优惠码弹窗函数（补全导出）
+    const promoModalVisible = ref(false);
+    const promoForm = reactive({
+      id: null, code: '', name: '', plan_id: '', discount_type: 'percent', discount_value: 10,
+      startLocal: '', endLocal: '', max_uses: null, max_per_user: 1, enabled: true,
+    });
+    const openPromoModal = (p = null) => {
+      if (p) {
+        Object.assign(promoForm, {
+          id: p.id, code: p.code, name: p.name || '', plan_id: p.plan_id || '',
+          discount_type: p.discount_type, discount_value: p.discount_value,
+          startLocal: p.start_at ? new Date(p.start_at).toISOString().slice(0, 16) : '',
+          endLocal: p.end_at ? new Date(p.end_at).toISOString().slice(0, 16) : '',
+          max_uses: p.max_uses, max_per_user: p.max_per_user, enabled: !!p.enabled,
+        });
+      } else {
+        const now = Date.now();
+        Object.assign(promoForm, {
+          id: null, code: '', name: '', plan_id: '', discount_type: 'percent', discount_value: 10,
+          startLocal: new Date(now).toISOString().slice(0, 16),
+          endLocal: new Date(now + 7 * 86400000).toISOString().slice(0, 16),
+          max_uses: null, max_per_user: 1, enabled: true,
+        });
+      }
+      promoModalVisible.value = true;
+    };
+    const submitPromo = async () => {
+      try {
+        await fetchAdmin('/api/admin/promos', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: promoForm.id, code: promoForm.code, name: promoForm.name,
+            plan_id: promoForm.plan_id || null, discount_type: promoForm.discount_type,
+            discount_value: promoForm.discount_value,
+            start_at: new Date(promoForm.startLocal).getTime(),
+            end_at: new Date(promoForm.endLocal).getTime(),
+            max_uses: promoForm.max_uses || null, max_per_user: promoForm.max_per_user, enabled: promoForm.enabled,
+          }),
+        });
+        showToast('已保存', 'success'); promoModalVisible.value = false; fetchPromos();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deletePromo = async (p) => {
+      if (!confirm(`删除 ${p.code}？`)) return;
+      try {
+        await fetchAdmin('/api/admin/promos', { method: 'DELETE', body: JSON.stringify({ id: p.id }) });
+        showToast('已删除', 'success'); fetchPromos();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
     const replyModalVisible = ref(false);
     const currentTicket = ref(null);
     const replyMessage = ref('');
@@ -308,7 +430,7 @@ createApp({
     const submitReply = async () => {
       try {
         await fetchAdmin('/api/admin/tickets/reply', { method: 'POST', body: JSON.stringify({ ticket_id: currentTicket.value.id, reply_message: replyMessage.value }) });
-        showToast('回复已发送', 'success'); replyModalVisible.value = false; fetchTickets();
+        showToast('已回复', 'success'); replyModalVisible.value = false; fetchTickets();
       } catch (e) { showToast(e.message, 'error'); }
     };
 
@@ -339,12 +461,10 @@ createApp({
       users, orders, plans, tickets, sharedList, customList, promos, stats,
       userSearchQuery, orderSearchQuery, orderStatusFilter, selectedUserIds,
       filteredUsers, filteredOrders, pendingOrdersCount, pendingTicketsCount,
-      
-      // 监控投票暴露给视图
       voteAdminList, totalVotesSum, voteTotalCount, fetchVotes, deleteVoteItem, clearMonthlyVotes,
-      
       fetchUsers, fetchOrders, fetchPlans, fetchShared, fetchCustom, fetchPromos, fetchTickets,
-      getPlanName, formatDate: formatDateExact, toasts,
+      getPlanName, formatDate: (ts) => ts ? new Date(ts).toLocaleString() : '-', toasts,
+      
       chargeModalVisible, chargeTarget, chargeDays, openChargeModal, submitCharge,
       batchChargeVisible, batchDays, openBatchCharge, submitBatchCharge, toggleSelectAllUsers,
       resetPwdVisible, resetTarget, resetConfirmSecret, openResetPwd, submitResetPwd,
@@ -352,6 +472,13 @@ createApp({
       approveOrder, rejectOrder, settingsForm, fetchSettings, saveSettings,
       replyModalVisible, currentTicket, replyMessage, openReplyModal, submitReply,
       broadcastVisible, broadcastLoading, broadcastForm, openBroadcast, submitBroadcast,
+
+      // 【核心补全】向视图层全量暴露所有模态框控制变量与操作方法
+      planModalVisible, planForm, openPlanModal, submitPlan, deletePlan,
+      sharedModalVisible, sharedForm, openSharedModal, submitShared, deleteShared,
+      showBatchImport, batchImportText, submitBatchImport,
+      customEditVisible, customEdit, openCustomEdit, submitCustomEdit, deleteCustom,
+      promoModalVisible, promoForm, openPromoModal, submitPromo, deletePromo,
     };
   },
 }).mount('#admin-app');
