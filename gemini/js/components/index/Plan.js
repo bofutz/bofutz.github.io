@@ -1,18 +1,18 @@
 /**
- * 波幅探长 - 前台购买套餐分块组件 (会员侧仅展示 通用监控 / 定制监控 选项卡)
+ * 波幅探长 - 前台购买套餐组件 (根据选中的分类决定购买哪种权限)
  * js/components/index/Plan.js
  */
 import { store } from "../../store.js";
 import { planApi } from "../../api/plan.js";
 
-const { ref, reactive, computed, onMounted } = Vue;
+const { ref, reactive, computed, watch, onMounted } = Vue;
 
 export default {
   name: "Plan",
   setup() {
     const plans = ref([]);
     const loading = ref(false);
-    const planTab = ref("shared"); // 前端只保留 'shared' | 'custom'
+    const planTab = ref("shared"); // 'shared' | 'custom'
 
     const topUpForm = reactive({
       planId: "",
@@ -20,7 +20,7 @@ export default {
       originalAmount: 18.8,
       floatingAmount: "18.82",
       txId: "",
-      orderType: "vip",
+      orderType: "vip", // 'vip' (通用) | 'custom_watchlist' (定制)
     });
 
     const promoInput = ref("");
@@ -38,7 +38,7 @@ export default {
       refCode: "",
     });
 
-    // 前端计算：选择“通用监控”显示 shared 和 both；选择“定制监控”显示 custom 和 both
+    // 计算当前分类下展示的套餐：选通用展示 shared+both，选定制展示 custom+both
     const displayPlans = computed(() => {
       if (planTab.value === "custom") {
         return plans.value.filter((p) => p.plan_type === "custom" || p.plan_type === "both");
@@ -71,10 +71,19 @@ export default {
       topUpForm.amount = Number(plan.price);
       topUpForm.originalAmount = Number(plan.price);
       topUpForm.floatingAmount = generateFloatingAmount(plan.price);
-      topUpForm.orderType = plan.plan_type === "custom" ? "custom_watchlist" : "vip";
+      
+      // 核心依据：用户在哪个分类页签下选中购买，决定订单类型
+      topUpForm.orderType = planTab.value === "custom" ? "custom_watchlist" : "vip";
       promoValid.value = false;
       promoMessage.value = "";
     };
+
+    // 切换分类页签时自动重置订单类型与选中套餐
+    watch(planTab, () => {
+      if (displayPlans.value.length > 0) {
+        selectPlan(displayPlans.value[0]);
+      }
+    });
 
     const applyPromo = async () => {
       if (!promoInput.value.trim()) {
@@ -160,10 +169,10 @@ export default {
     <div class="max-w-5xl mx-auto space-y-6 select-none">
       <div>
         <h2 class="text-2xl font-bold text-slate-800">选择服务套餐</h2>
-        <p class="text-xs text-slate-400 mt-1">支持通用监控与定制监控服务，两者兼得套餐自动包含双重权益。</p>
+        <p class="text-xs text-slate-400 mt-1">请选择您需要购买的服务类型（通用监控 或 定制监控）。</p>
       </div>
 
-      <!-- 会员端仅展示 2 个分类选项卡 -->
+      <!-- 分类选项卡 -->
       <div class="flex gap-2 text-sm">
         <button @click="planTab='shared'" class="px-5 py-2.5 rounded-lg border transition-all" :class="planTab==='shared'?'theme-bg text-white border-transparent font-bold shadow-sm':'bg-white text-slate-600 hover:bg-slate-50'">
           通用监控
@@ -173,22 +182,21 @@ export default {
         </button>
       </div>
 
-      <!-- 套餐列表卡片 -->
+      <!-- 套餐列表 -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div v-for="plan in displayPlans" :key="plan.id" @click="selectPlan(plan)"
              class="bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer relative transition-all flex flex-col justify-between"
              :class="topUpForm.planId === plan.id ? 'theme-border ring-2 ring-[#4da6a0]/20' : 'border-slate-100 hover:border-slate-200'">
           
-          <div v-if="plan.tag || plan.plan_type === 'both'" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2.5 py-0.5 rounded-bl font-bold">
-            {{ plan.tag || '通用+定制兼得' }}
+          <div v-if="plan.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2.5 py-0.5 rounded-bl font-bold">
+            {{ plan.tag }}
           </div>
 
           <div>
             <div class="text-slate-500 text-sm mb-2 font-medium">{{ plan.name }}</div>
             <div class="text-3xl font-light text-slate-800 mb-2">¥ {{ plan.price }}</div>
             <div class="text-xs text-slate-400">
-              有效期 {{ plan.days }} 天
-              <span v-if="plan.plan_type==='both'" class="text-emerald-600 font-bold ml-1">(含通用看板 + 定制监控)</span>
+              有效期 {{ plan.days }} 天 · 购买后充值至：<strong class="theme-text">{{ planTab === 'custom' ? '定制监控' : '通用监控 VIP' }}</strong>
             </div>
           </div>
 
@@ -198,9 +206,10 @@ export default {
         </div>
       </div>
 
-      <!-- 支付及凭证提交卡片 -->
+      <!-- 支付及单号提交卡片 -->
       <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 max-w-2xl mx-auto space-y-5">
-        <div class="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+        <div v-if="settings.promo_enabled === '1' || settings.promo_enabled === 1 || settings.promo_enabled === true"
+             class="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
           <label class="text-xs font-bold text-slate-600 mb-2 block">优惠码 (选填)</label>
           <div class="flex gap-2">
             <input v-model="promoInput" type="text" placeholder="输入优惠码" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
