@@ -279,21 +279,24 @@
 <script src="admin_dashboard.js"></script>
 <script src="admin_users.js"></script>
 <script src="admin_orders.js"></script>
-<!-- 后续补充模块
 <script src="admin_plans.js"></script>
 <script src="admin_shared.js"></script>
 <script src="admin_custom.js"></script>
 <script src="admin_promos.js"></script>
 <script src="admin_settings.js"></script>
 <script src="admin_tickets.js"></script>
--->
 
 <!-- 2. 挂载 HTML 模板到对应的占位符 -->
 <script>
   document.getElementById('admin-dashboard-mount').innerHTML = adminDashboardHtml;
   document.getElementById('admin-users-mount').innerHTML = adminUsersHtml;
   document.getElementById('admin-orders-mount').innerHTML = adminOrdersHtml;
-  // 后续模块补充
+  document.getElementById('admin-plans-mount').innerHTML = adminPlansHtml;
+  document.getElementById('admin-shared-mount').innerHTML = adminSharedHtml;
+  document.getElementById('admin-custom-mount').innerHTML = adminCustomHtml;
+  document.getElementById('admin-promos-mount').innerHTML = adminPromosHtml;
+  document.getElementById('admin-settings-mount').innerHTML = adminSettingsHtml;
+  document.getElementById('admin-tickets-mount').innerHTML = adminTicketsHtml;
 </script>
 
 <!-- 3. 原有的 Vue 实例保持不变，完整粘贴过来 -->
