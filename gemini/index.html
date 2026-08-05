@@ -33,7 +33,6 @@
         .mobile-status-neutral { color: #94a3b8 !important; }
         .chart-icon { transition: color .15s; }
         .chart-icon:hover { color: #3b82f6 !important; }
-        /* 社交 hover 二维码 */
         .social-item { position: relative; }
         .social-qr-pop {
             display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
@@ -46,7 +45,6 @@
         }
         .social-item:hover .social-qr-pop { display: block; }
         .social-qr-pop img { width: 112px; height: 112px; object-fit: contain; border-radius: 6px; }
-        /* 手机卡片 */
         .m-card { background: #fff; border-radius: 14px; border: 1px solid #eef2f6; box-shadow: 0 1px 3px rgba(15,23,42,.04); overflow: hidden; }
         .m-day-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; }
         .m-day-cell { padding: 8px 2px; text-align: center; border-right: 1px solid #f1f5f9; }
@@ -56,10 +54,8 @@
 <body class="text-slate-700 font-sans h-screen overflow-hidden flex">
 
 <div id="app" v-cloak class="flex w-full h-full" @click="closeDropdowns">
-
     <div class="flex-1 flex flex-col h-full overflow-hidden relative">
-
-        <!-- ================= 通用模块：Top 导航栏 ================= -->
+        <!-- Top 导航栏 -->
         <header class="h-14 sm:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-6 z-10 shrink-0">
             <div class="flex items-center gap-2 sm:gap-3">
                 <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2"><i class="fa-solid fa-bars text-xl"></i></button>
@@ -91,35 +87,15 @@
 
         <main class="flex-1 overflow-auto custom-scrollbar p-3 sm:p-6 relative flex flex-col justify-between">
             <div class="flex-1">
-                
-                <!-- ================= 预留挂载点：数据看板模块 ================= -->
-                <div v-show="currentRoute === '#/'" class="max-w-7xl mx-auto space-y-3 sm:space-y-4">
-                    <!-- INCLUDE: dashboard.html 将在此处被引入 -->
-                </div>
-
-                <!-- ================= 预留挂载点：个人中心模块 ================= -->
-                <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-5">
-                    <!-- INCLUDE: profile.html 将在此处被引入 -->
-                </div>
-
-                <!-- ================= 预留挂载点：答疑留言模块 ================= -->
-                <div v-show="currentRoute === '#/tickets'" class="max-w-3xl mx-auto space-y-4">
-                    <!-- INCLUDE: tickets.html 将在此处被引入 -->
-                </div>
-
-                <!-- ================= 预留挂载点：购买套餐模块 ================= -->
-                <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto">
-                    <!-- INCLUDE: plan.html 将在此处被引入 -->
-                </div>
-
-                <!-- ================= 预留挂载点：使用说明模块 ================= -->
-                <div v-show="currentRoute === '#/docs'" class="max-w-6xl mx-auto">
-                    <!-- INCLUDE: docs.html 将在此处被引入 -->
-                </div>
-
+                <!-- 模块注入容器 -->
+                <div v-show="currentRoute === '#/'" class="max-w-7xl mx-auto space-y-3 sm:space-y-4" id="dashboard-mount"></div>
+                <div v-show="currentRoute === '#/profile'" class="max-w-4xl mx-auto space-y-5" id="profile-mount"></div>
+                <div v-show="currentRoute === '#/tickets'" class="max-w-3xl mx-auto space-y-4" id="tickets-mount"></div>
+                <div v-show="currentRoute === '#/plan'" class="max-w-6xl mx-auto" id="plan-mount"></div>
+                <div v-show="currentRoute === '#/docs'" class="max-w-6xl mx-auto" id="docs-mount"></div>
             </div>
 
-            <!-- ================= 通用模块：底部 Footer ================= -->
+            <!-- Footer -->
             <footer class="mt-10 pt-5 pb-5 border-t border-slate-200/80 text-center text-xs text-slate-500 shrink-0">
                 <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div class="flex items-center gap-2">
@@ -153,7 +129,7 @@
         </main>
     </div>
 
-    <!-- ================= 通用模块：左侧边栏 ================= -->
+    <!-- 左侧栏 -->
     <aside class="fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 flex flex-col shadow-2xl" :class="menuOpen ? 'translate-x-0' : '-translate-x-full'">
         <div class="h-14 sm:h-16 theme-bg text-white flex items-center justify-between px-5 text-lg tracking-wider">
             <a href="#/" @click="menuOpen=false" class="flex items-center gap-2 text-white">
@@ -171,7 +147,7 @@
         </div>
     </aside>
 
-    <!-- ================= 通用模块：全局认证弹窗 ================= -->
+    <!-- 登录注册弹窗 -->
     <div v-if="authModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="closeAuth">
         <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
             <div class="flex border-b border-slate-100">
@@ -200,7 +176,7 @@
         </div>
     </div>
 
-    <!-- ================= 通用模块：定制编辑弹窗 ================= -->
+    <!-- 定制编辑弹窗 -->
     <div v-if="customEditorVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="customEditorVisible=false">
         <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
             <div class="px-6 py-4 border-b bg-slate-50 font-medium">添加定制监控</div>
@@ -220,9 +196,25 @@
             </div>
         </div>
     </div>
-
 </div>
 
+<!-- 1. 引入各分块内容 JS -->
+<script src="dashboard.js"></script>
+<script src="profile.js"></script>
+<script src="tickets.js"></script>
+<script src="plan.js"></script>
+<script src="docs.js"></script>
+
+<!-- 2. 在 Vue 挂载前注入 HTML 到 DOM 中 -->
+<script>
+    document.getElementById('dashboard-mount').innerHTML = dashboardHtml;
+    document.getElementById('profile-mount').innerHTML = profileHtml;
+    document.getElementById('tickets-mount').innerHTML = ticketsHtml;
+    document.getElementById('plan-mount').innerHTML = planHtml;
+    document.getElementById('docs-mount').innerHTML = docsHtml;
+</script>
+
+<!-- 3. 正常运行原始应用 -->
 <script src="app.js"></script>
 </body>
 </html>
