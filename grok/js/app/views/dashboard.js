@@ -425,7 +425,9 @@ export const DashboardView = {
           weekMap[monday].week_status = item.week_status;
         }
       });
-      return Object.values(weekMap).sort((a, b) => b.monday.localeCompare(a.monday));
+      return Object.values(weekMap)
+        .sort((a, b) => b.monday.localeCompare(a.monday))
+        .slice(0, 4); // 只展示最近 4 周
     };
 
     // ---------- 图表 ----------
