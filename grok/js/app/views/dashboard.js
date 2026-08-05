@@ -322,12 +322,6 @@ export const DashboardView = {
           });
         }
       }
-      } else if (sharedWatchlist.value.length > 0) {
-        // 游客：通用列表 + 补全
-        const codeSet = new Set(sharedWatchlist.value.map((w) => w.etf_code));
-        validItems = validItems.filter((i) => codeSet.has(i.etf_code));
-        padSharedMissing();
-      }
 
       if (searchQuery.value) {
         const q = searchQuery.value.toLowerCase().trim();
@@ -497,21 +491,6 @@ export const DashboardView = {
           type === "weekly"
             ? `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${c}_weekly.png`
             : `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${c}_daily.png`;
-      }
-      else if (type === "weekly") {
-        if (typeof chartsMap.value?.[etfCode] === "string") {
-          const raw = chartsMap.value[etfCode];
-          imgUrl = raw.includes("_daily")
-            ? raw.replace("_daily", "_weekly")
-            : raw.replace(/\.png$/i, "_weekly.png");
-        } else {
-          imgUrl = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${etfCode}_weekly.png`;
-        }
-      } else {
-        imgUrl =
-          typeof chartsMap.value?.[etfCode] === "string"
-            ? chartsMap.value[etfCode]
-            : `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${etfCode}_daily.png`;
       }
       const image = new Image();
       image.src = imgUrl.split("?")[0];
