@@ -1,0 +1,427 @@
+/**
+ * 前台布局组件
+ * - 顶栏 Header
+ * - 左侧抽屉 Sidebar
+ * - 页脚 Footer
+ * - 登录/注册弹窗
+ * - 定制标的编辑弹窗
+ */
+import {
+  ref, reactive, computed, nextTick, watch,
+} from "https://unpkg.com/vue@3/dist/vue.esm-browser.js";
+import { PAGE_TITLES, PROTECTED_ROUTES, MAIL_API_BASE, TURNSTILE_SITEKEY } from "../config.js";
+import { isEmail } from "../utils.js";
+import { apiFetch } from "../api.js";
+import {
+  isLoggedIn, isVip, username, vipDaysLeft, referralCode,
+  checkLoginState, setLoginState, clearLoginState,
+} from "../auth.js";
+
+export function useLayout({ currentRoute, navigate, publicSettings, customDraftItems, customMaxSymbols, customDedupeTip, dedupeCustomDraft, confirmCustomAndPay }) {
+  const menuOpen = ref(false);
+  const userMenuOpen = ref(false);
+  const showDropdown = ref(false); // 看板周期下拉由 dashboard 自己管，这里仅提供 close 入口
+
+  const pageTitle = computed(() => PAGE_TITLES[currentRoute.value] || "数据看板");
+
+  const requireLoginThen = (path) => {
+    if (!isLoggedIn.value) {
+      openAuth("login");
+      menuOpen.value = false;
+      return;
+    }
+    navigate(path);
+  };
+
+  const closeDropdowns = () => {
+    userMenuOpen.value = false;
+    showDropdown.value = false;
+  };
+
+  // ---------- 认证弹窗 ----------
+  const authModalVisible = ref(false);
+  const authMode = ref("login");
+  const authLoading = ref(false);
+  const authForm = reactive({
+    username: "",
+    password: "",
+    refCode: "",
+    emailCode: "",
+    turnstileToken: "",
+  });
+  const sendCodeLoading = ref(false);
+  const countdown = ref(0);
+
+  const renderTurnstile = () => {
+    if (authMode.value !== "register") return;
+    nextTick(() => {
+      setTimeout(() => {
+        const container = document.getElementById("turnstile-container");
+        if (container && window.turnstile) {
+          container.innerHTML = "";
+          try {
+            window.turnstile.render("#turnstile-container", {
+              sitekey: TURNSTILE_SITEKEY,
+              callback: (token) => { authForm.turnstileToken = token; },
+              "expired-callback": () => { authForm.turnstileToken = ""; },
+            });
+          } catch (_) {}
+        }
+      }, 150);
+    });
+  };
+
+  const switchAuthMode = (mode) => {
+    authMode.value = mode;
+    authForm.password = "";
+    authForm.emailCode = "";
+    authForm.turnstileToken = "";
+    if (mode === "register") renderTurnstile();
+  };
+
+  const openAuth = (mode) => {
+    authModalVisible.value = true;
+    switchAuthMode(mode);
+  };
+
+  const closeAuth = () => {
+    authModalVisible.value = false;
+  };
+
+  const sendEmailCode = async () => {
+    if (!isEmail(authForm.username)) {
+      alert("请输入正确邮箱");
+      return;
+    }
+    if (!authForm.turnstileToken) {
+      alert("请先完成人机验证");
+      return;
+    }
+    sendCodeLoading.value = true;
+    try {
+      const res = await fetch(`${MAIL_API_BASE}/api/send-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: authForm.username,
+          turnstileToken: authForm.turnstileToken,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.msg || "验证码已发送");
+        countdown.value = 60;
+        const timer = setInterval(() => {
+          countdown.value--;
+          if (countdown.value <= 0) {
+            clearInterval(timer);
+            if (window.turnstile) window.turnstile.reset("#turnstile-container");
+          }
+        }, 1000);
+      } else {
+        alert(data.msg || "发送失败");
+        if (window.turnstile) window.turnstile.reset("#turnstile-container");
+      }
+    } catch (_) {
+      alert("网络错误");
+      if (window.turnstile) window.turnstile.reset("#turnstile-container");
+    } finally {
+      sendCodeLoading.value = false;
+    }
+  };
+
+  const submitAuth = async (onLoginSuccess) => {
+    if (!authForm.username || !authForm.password) {
+      alert("账号和密码不能为空");
+      return;
+    }
+    if (authMode.value === "register") {
+      if (!isEmail(authForm.username)) {
+        alert("请填写合法邮箱");
+        return;
+      }
+      if (!authForm.emailCode) {
+        alert("请输入邮箱验证码");
+        return;
+      }
+    }
+    authLoading.value = true;
+    try {
+      if (authMode.value === "register") {
+        const reg = await apiFetch("/api/register", {
+          method: "POST",
+          body: JSON.stringify({
+            username: authForm.username.trim(),
+            password: authForm.password,
+            ref_code: authForm.refCode,
+            code: authForm.emailCode,
+          }),
+        });
+        alert(
+          (reg.message || "注册成功，请登录") +
+            (reg.vip_days_gift ? `（已获 ${reg.vip_days_gift} 天体验）` : "")
+        );
+        switchAuthMode("login");
+      } else {
+        const data = await apiFetch("/api/login", {
+          method: "POST",
+          body: JSON.stringify({
+            username: authForm.username.trim(),
+            password: authForm.password,
+          }),
+        });
+        setLoginState({
+          token: data.token,
+          username: authForm.username.trim(),
+          referral_code: data.referral_code,
+          shared_vip_days: data.shared_vip_days ?? data.vip_days_left ?? 0,
+        });
+        closeAuth();
+        if (typeof onLoginSuccess === "function") onLoginSuccess();
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      authLoading.value = false;
+    }
+  };
+
+  const logout = (showAlert = true, afterLogout) => {
+    clearLoginState();
+    if (showAlert) alert("已退出登录");
+    if (typeof afterLogout === "function") afterLogout();
+    navigate("#/");
+  };
+
+  // ---------- 定制编辑弹窗（由 profile / plan 触发） ----------
+  const customEditorVisible = ref(false);
+
+  const openCustomEditor = () => {
+    if (!isLoggedIn.value) {
+      openAuth("login");
+      return;
+    }
+    if (Array.isArray(customDraftItems?.value)) {
+      customDraftItems.value = [{ etf_code: "", etf_name: "" }];
+    }
+    if (customDedupeTip) customDedupeTip.value = "";
+    customEditorVisible.value = true;
+  };
+
+  // ---------- 模板片段（供 main.js 拼接） ----------
+  const headerTemplate = `
+    <header class="h-14 sm:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-6 z-10 shrink-0">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2">
+          <i class="fa-solid fa-bars text-xl"></i>
+        </button>
+        <a @click.prevent="navigate('#/')" href="#/" class="flex items-center gap-2 cursor-pointer hover:opacity-85">
+          <img src="assets/logo.png" alt="Logo" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover shadow-sm border border-slate-100" onerror="this.style.display='none'">
+          <span class="text-base sm:text-lg font-bold theme-text tracking-wide hidden sm:block">波幅探长</span>
+        </a>
+        <span class="text-sm font-semibold text-slate-500 border-l border-slate-200 pl-3 hidden sm:block">{{ pageTitle }}</span>
+        <span class="text-sm font-semibold text-slate-700 sm:hidden">{{ pageTitle }}</span>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-5">
+        <div v-if="!isLoggedIn" class="flex gap-2">
+          <button @click="openAuth('login')" class="text-sm font-medium text-slate-600 hover:theme-text px-1">登录</button>
+          <button @click="openAuth('register')" class="text-sm font-medium theme-bg text-white px-3 py-1.5 rounded-lg hover:opacity-90 shadow-sm">注册</button>
+        </div>
+        <div v-else class="relative">
+          <div @click.stop="userMenuOpen = !userMenuOpen" class="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded select-none">
+            <i class="fa-solid fa-circle-user text-slate-400 text-2xl"></i>
+            <span class="text-sm font-medium text-slate-600 hidden sm:inline">{{ username }}</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-slate-400" :class="{'rotate-180': userMenuOpen}"></i>
+          </div>
+          <div v-if="userMenuOpen" @click.stop class="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-slate-100 z-50 overflow-hidden">
+            <div @click="navigate('#/profile'); userMenuOpen=false" class="px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 cursor-pointer flex items-center border-b border-slate-50">
+              <i class="fa-regular fa-user mr-2 text-slate-400"></i>个人中心
+            </div>
+            <div @click="logout(true); userMenuOpen=false" class="px-4 py-3 text-sm text-red-500 hover:bg-red-50 cursor-pointer flex items-center">
+              <i class="fa-solid fa-right-from-bracket mr-2"></i>退出登录
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  `;
+
+  const sidebarTemplate = `
+    <aside
+      class="fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 flex flex-col shadow-2xl"
+      :class="menuOpen ? 'translate-x-0' : '-translate-x-full'"
+    >
+      <div class="h-14 sm:h-16 theme-bg text-white flex items-center justify-between px-5 text-lg tracking-wider">
+        <a href="#/" @click="menuOpen=false" class="flex items-center gap-2 text-white">
+          <img src="assets/logo.png" class="w-7 h-7 rounded-full bg-white/20 p-0.5 object-cover" onerror="this.style.display='none'">
+          <span>波幅探长</span>
+        </a>
+        <button @click="menuOpen=false" class="text-white/70 hover:text-white">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto py-2 custom-scrollbar">
+        <div @click="navigate('#/')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/'}">
+          <i class="fa-solid fa-chart-simple w-6"></i> 数据看板
+        </div>
+        <div @click="requireLoginThen('#/profile')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/profile'}">
+          <i class="fa-solid fa-user w-6"></i> 个人中心
+        </div>
+        <div @click="navigate('#/plan')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/plan'}">
+          <i class="fa-solid fa-bag-shopping w-6"></i> 购买套餐
+        </div>
+        <div @click="requireLoginThen('#/tickets')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/tickets'}">
+          <i class="fa-solid fa-headset w-6"></i> 答疑留言
+        </div>
+        <div @click="navigate('#/docs')" class="nav-item block px-6 py-3.5" :class="{active: currentRoute==='#/docs'}">
+          <i class="fa-solid fa-book w-6"></i> 使用说明
+        </div>
+      </div>
+    </aside>
+    <div v-if="menuOpen" @click="menuOpen=false" class="fixed inset-0 bg-black/40 z-40 sm:hidden"></div>
+  `;
+
+  const footerTemplate = `
+    <footer class="mt-10 pt-5 pb-5 border-t border-slate-200/80 text-center text-xs text-slate-500 shrink-0">
+      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="assets/logo.png" alt="Logo" class="w-5 h-5 rounded object-cover" onerror="this.style.display='none'">
+          <span>© 2026 波幅探长 · 专业的波幅监控与数据分析平台</span>
+        </div>
+        <div class="flex items-center gap-4 text-slate-400">
+          <a v-if="publicSettings.social_douyin" :href="publicSettings.social_douyin" target="_blank" rel="noopener" class="social-item hover:text-slate-700 transition-colors" title="抖音">
+            <i class="fa-brands fa-tiktok text-lg"></i>
+            <div class="social-qr-pop">
+              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_douyin)" alt="抖音">
+              <p class="text-[10px] text-slate-500 mt-1 text-center">抖音</p>
+            </div>
+          </a>
+          <a v-if="publicSettings.social_shipinhao" :href="publicSettings.social_shipinhao" target="_blank" rel="noopener" class="social-item hover:text-[#07C160] transition-colors" title="视频号">
+            <i class="fa-brands fa-weixin text-lg"></i>
+            <div class="social-qr-pop">
+              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_shipinhao)" alt="视频号">
+              <p class="text-[10px] text-slate-500 mt-1 text-center">视频号</p>
+            </div>
+          </a>
+          <a v-if="publicSettings.social_xiaohongshu" :href="publicSettings.social_xiaohongshu" target="_blank" rel="noopener" class="social-item hover:text-[#FE2C55] transition-colors" title="小红书">
+            <i class="fa-solid fa-book text-lg"></i>
+            <div class="social-qr-pop">
+              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_xiaohongshu)" alt="小红书">
+              <p class="text-[10px] text-slate-500 mt-1 text-center">小红书</p>
+            </div>
+          </a>
+          <a v-if="publicSettings.social_gongzhonghao" :href="publicSettings.social_gongzhonghao" target="_blank" rel="noopener" class="social-item hover:text-[#07C160] transition-colors" title="公众号">
+            <i class="fa-solid fa-comment-dots text-lg"></i>
+            <div class="social-qr-pop">
+              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_gongzhonghao)" alt="公众号">
+              <p class="text-[10px] text-slate-500 mt-1 text-center">公众号</p>
+            </div>
+          </a>
+          <a v-if="publicSettings.social_kuaishou" :href="publicSettings.social_kuaishou" target="_blank" rel="noopener" class="social-item hover:text-[#FF4906] transition-colors" title="快手">
+            <i class="fa-solid fa-video text-lg"></i>
+            <div class="social-qr-pop">
+              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(publicSettings.social_kuaishou)" alt="快手">
+              <p class="text-[10px] text-slate-500 mt-1 text-center">快手</p>
+            </div>
+          </a>
+        </div>
+      </div>
+    </footer>
+  `;
+
+  const authModalTemplate = `
+    <div v-if="authModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="closeAuth">
+      <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+        <div class="flex border-b border-slate-100">
+          <button @click="switchAuthMode('login')" class="flex-1 py-4 text-sm font-medium" :class="authMode==='login'?'theme-text border-b-2 theme-border':'text-slate-400'">账号登录</button>
+          <button @click="switchAuthMode('register')" class="flex-1 py-4 text-sm font-medium" :class="authMode==='register'?'theme-text border-b-2 theme-border':'text-slate-400'">免费注册</button>
+        </div>
+        <div class="p-6 space-y-3.5">
+          <div v-if="authMode==='register'" class="bg-emerald-50 text-emerald-600 text-xs p-2 rounded-lg text-center border border-emerald-100">
+            新注册即送通用 VIP <strong>{{ publicSettings.gift_register_days || 1 }}</strong> 天
+          </div>
+          <input v-model="authForm.username" type="email" :placeholder="authMode==='register'?'注册电子邮箱':'邮箱账号'" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <div v-show="authMode==='register'" class="flex justify-center min-h-[65px]"><div id="turnstile-container"></div></div>
+          <div v-if="authMode==='register'" class="flex gap-2">
+            <input v-model="authForm.emailCode" type="text" placeholder="6位邮箱验证码" class="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm font-mono">
+            <button @click="sendEmailCode" type="button" :disabled="sendCodeLoading||countdown>0" class="px-3 py-2 text-xs theme-bg text-white rounded-lg disabled:opacity-50 whitespace-nowrap">
+              {{ countdown>0 ? countdown+'s' : (sendCodeLoading?'发送中...':'获取验证码') }}
+            </button>
+          </div>
+          <input v-model="authForm.password" type="password" :placeholder="authMode==='register'?'设置密码(至少6位)':'输入密码'" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm">
+          <input v-if="authMode==='register'" v-model="authForm.refCode" type="text" placeholder="推荐码(选填)" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm">
+          <p v-if="authMode==='register' && authForm.refCode" class="text-[11px] text-slate-400">
+            填写邀请码后，双方各送 VIP：邀请人 {{ publicSettings.gift_inviter_days || 3 }} 天 · 您 {{ (Number(publicSettings.gift_register_days)||1) + (Number(publicSettings.gift_invitee_days)||2) }} 天（含注册赠送）
+          </p>
+          <button @click="submitAuth(onLoginSuccess)" :disabled="authLoading" class="w-full theme-bg text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-50">
+            {{ authMode==='login'?'立即登录':'注册账号' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const customEditorTemplate = `
+    <div v-if="customEditorVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="customEditorVisible=false">
+      <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+        <div class="px-6 py-4 border-b bg-slate-50 font-medium">添加定制监控</div>
+        <div class="p-6 space-y-3">
+          <div v-for="(row, i) in customDraftItems" :key="i" class="flex gap-2">
+            <input v-model="row.etf_code" @blur="dedupeCustomDraft" placeholder="代码" class="w-28 px-2 py-2 border rounded-lg text-sm font-mono">
+            <input v-model="row.etf_name" placeholder="名称" class="flex-1 px-2 py-2 border rounded-lg text-sm">
+            <button v-if="customDraftItems.length>1" @click="customDraftItems.splice(i,1); dedupeCustomDraft()" class="text-slate-300 hover:text-red-500 px-1">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <button v-if="customDraftItems.length < (Number(publicSettings.custom_max_symbols)||3)" @click="customDraftItems.push({etf_code:'',etf_name:''})" class="text-xs theme-text">
+            + 再加一只
+          </button>
+          <p class="text-[11px] text-slate-400">套餐总价含最多 {{ publicSettings.custom_max_symbols || 3 }} 只，重复代码会自动去重。</p>
+          <p v-if="customDedupeTip" class="text-xs text-amber-600">{{ customDedupeTip }}</p>
+        </div>
+        <div class="px-6 py-4 bg-slate-50 flex justify-end gap-2">
+          <button @click="customEditorVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+          <button @click="confirmCustomAndPay" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">去选套餐支付</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return {
+    // 状态
+    menuOpen,
+    userMenuOpen,
+    showDropdown,
+    pageTitle,
+    authModalVisible,
+    authMode,
+    authForm,
+    authLoading,
+    sendCodeLoading,
+    countdown,
+    customEditorVisible,
+    // 登录态（透传）
+    isLoggedIn,
+    isVip,
+    username,
+    vipDaysLeft,
+    referralCode,
+    // 方法
+    requireLoginThen,
+    closeDropdowns,
+    openAuth,
+    closeAuth,
+    switchAuthMode,
+    sendEmailCode,
+    submitAuth,
+    logout,
+    openCustomEditor,
+    checkLoginState,
+    // 模板片段
+    headerTemplate,
+    sidebarTemplate,
+    footerTemplate,
+    authModalTemplate,
+    customEditorTemplate,
+  };
+}
