@@ -1,5 +1,5 @@
 /**
- * 波幅探长 前台逻辑处理脚本 v2.4 (完整修复版)
+ * 波幅探长 前台逻辑处理脚本 v2.5
  * js/app.js
  */
 
@@ -341,9 +341,12 @@ createApp({
       if (!selectedMonday.value) return [];
       const weekDays = getWeekDays(selectedMonday.value);
       if (weekDays.length < 5) return [];
+      
+      // 修复处：正确获取周五的日期字符串
       const fridayDate = weekDays;
       const y = parseYear(fridayDate), m = parseMonth(fridayDate), d = parseDay(fridayDate);
       if (!y) return [];
+      
       const friday16 = new Date(y, m - 1, d, 16, 0, 0);
       const isPastFriday16 = Date.now() >= friday16.getTime();
       const etfMap = {};
@@ -545,6 +548,95 @@ createApp({
         loading.value = false;
       }
     };
+
+    const computeLockedFreeTop = () => {
+      const n = parseInt(publicSettings.value.free_top_n_charts, 10) || 3;
+      const rows = allData.value || [];
+      if (!rows.length) {
+        freeEtfCodes.value = [];
+        return;
+      }
+
+      let latestMonday = "";
+      if (availablePeriods.value.length > 0 && availablePeriods.value[0].weeks?.length > 0) {
+        latestMonday = availablePeriods.value[0].weeks[0].monday;
+      }
+      if (!latestMonday) {
+        freeEtfCodes.value = [];
+        return;
+      }
+
+      const weekDays = getWeekDays(latestMonday);
+      if (weekDays.length < 5) {
+        freeEtfCodes.value = [];
+        return;
+      }
+
+      const sharedCodes = sharedWatchlist.value.length
+        ? new Set(sharedWatchlist.value.map((w) => w.etf_code))
+        : null;
+      const inScope = (code) => !sharedCodes || sharedCodes.has(code);
+
+      const fridayDate = weekDays;
+      const fy = parseYear(fridayDate), fm = parseMonth(fridayDate), fd = parseDay(fridayDate);
+      const isPastFriday16 = fy
+        ? Date.now() >= new Date(fy, fm - 1, fd, 16, 0, 0).getTime()
+        : false;
+
+      const etfMap = {};
+      rows.forEach((item) => {
+        if (!inScope(item.etf_code) || !item.date) return;
+        const idx = weekDays.indexOf(item.date);
+        if (idx === -1) return;
+        if (!etfMap[item.etf_code]) {
+          etfMap[item.etf_code] = {
+            etf_code: item.etf_code,
+            days: [null, null, null, null, null],
+            week_status: null,
+          };
+        }
+        etfMap[item.etf_code].days[idx] = item;
+        if (
+          isPastFriday16 &&
+          item.week_status &&
+          item.week_status !== "-" &&
+          item.week_status !== "--"
+        ) {
+          etfMap[item.etf_code].week_status = item.week_status;
+        }
+      });
+
+      let items = Object.values(etfMap).filter((item) => {
+        const hasDay = item.days.some(
+          (d) => d && d.day_status && d.day_status !== "-" && d.day_status !== "--"
+        );
+        const hasWeek = item.week_status && item.week_status !== "-" && item.week_status !== "--";
+        return hasDay || hasWeek;
+      });
+
+      items.sort((a, b) => {
+        const valWkA =
+          a.week_status && a.week_status !== "-" ? Math.abs(getStatusVal(a.week_status)) : -9999;
+        const valWkB =
+          b.week_status && b.week_status !== "-" ? Math.abs(getStatusVal(b.week_status)) : -9999;
+        if (valWkA !== -9999 || valWkB !== -9999) {
+          if (valWkA !== -9999 && valWkB !== -9999) return valWkB - valWkA;
+          if (valWkA !== -9999) return -1;
+          if (valWkB !== -9999) return 1;
+        }
+        return 0;
+      });
+
+      freeEtfCodes.value = items.slice(0, n).map((i) => i.etf_code);
+    };
+
+    watch(
+      [allData, sharedWatchlist, availablePeriods, () => publicSettings.value.free_top_n_charts],
+      () => {
+        computeLockedFreeTop();
+      },
+      { deep: true }
+    );
 
     // 监控投票逻辑
     const voteList = ref([]);
