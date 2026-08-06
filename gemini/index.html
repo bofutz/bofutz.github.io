@@ -58,7 +58,88 @@
   <v-toast></v-toast>
 </div>
 
-<!-- 载入前台主脚本驱动 -->
-<script src="app.js"></script>
+<!-- ES Modules 入口总装组件脚本 -->
+<script type="module">
+  import { store } from "./js/store.js";
+  import { etfApi } from "./js/api/etf.js";
+
+  // 通用组件
+  import Header from "./js/components/common/Header.js";
+  import Sidebar from "./js/components/common/Sidebar.js";
+  import Footer from "./js/components/common/Footer.js";
+  import AuthModal from "./js/components/common/AuthModal.js";
+  import Toast from "./js/components/common/Toast.js";
+
+  // 业务组件
+  import Dashboard from "./js/components/index/Dashboard.js";
+  import Profile from "./js/components/index/Profile.js";
+  import Plan from "./js/components/index/Plan.js";
+  import Vote from "./js/components/index/Vote.js";
+  import Tickets from "./js/components/index/Tickets.js";
+
+  const { createApp, ref, computed, onMounted } = Vue;
+
+  createApp({
+    components: {
+      "v-header": Header,
+      "v-sidebar": Sidebar,
+      "v-footer": Footer,
+      "v-auth-modal": AuthModal,
+      "v-toast": Toast,
+      Dashboard,
+      Profile,
+      Plan,
+      Vote,
+      Tickets,
+    },
+    setup() {
+      const currentRoute = ref(window.location.hash || "#/");
+
+      const navigate = (path) => {
+        currentRoute.value = path;
+        window.location.hash = path;
+      };
+
+      const currentComponent = computed(() => {
+        switch (currentRoute.value) {
+          case "#/profile": return "Profile";
+          case "#/plan": return "Plan";
+          case "#/vote": return "Vote";
+          case "#/tickets": return "Tickets";
+          default: return "Dashboard";
+        }
+      });
+
+      const pageTitle = computed(() => {
+        const map = {
+          "#/": "数据看板",
+          "#/profile": "个人中心",
+          "#/plan": "购买套餐",
+          "#/vote": "全网监控投票",
+          "#/tickets": "答疑留言",
+        };
+        return map[currentRoute.value] || "数据看板";
+      });
+
+      onMounted(() => {
+        store.checkLoginState();
+        etfApi.fetchPublicSettings().then((res) => {
+          if (res.data) store.setPublicSettings(res.data);
+        });
+
+        window.addEventListener("hashchange", () => {
+          currentRoute.value = window.location.hash || "#/";
+        });
+      });
+
+      return {
+        currentRoute,
+        currentComponent,
+        pageTitle,
+        navigate,
+      };
+    },
+  }).mount("#app");
+</script>
 </body>
 </html>
