@@ -19,7 +19,7 @@ export async function apiFetch(endpoint, options = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) throw new Error(data.error || "请求失败");
   return data;
-}
+} 
 
 /** 后台：带 Admin-Secret */
 export async function adminFetch(endpoint, adminSecret, options = {}) {
