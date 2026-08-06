@@ -13,6 +13,7 @@ export const PAGE_TITLES = {
   "#/": "数据看板",
   "#/plan": "购买套餐",
   "#/profile": "个人中心",
+  "#/vote": "监控投票",
   "#/tickets": "答疑留言",
   "#/docs": "使用说明",
 };
