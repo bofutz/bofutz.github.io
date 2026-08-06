@@ -133,12 +133,6 @@ export const getMobileStatusClass = (status) => {
   return String(status).includes("+") ? "mobile-status-up" : "mobile-status-down";
 };
 
-/** 纯代码提取（6位数字） */
-export function pureCode(code) {
-  const m = String(code || "").match(/\d{6}/);
-  return m ? m[0] : String(code || "").trim();
-}
-
 /** 当前自然月 key：YYYY-MM */
 export function currentMonthKey(d = new Date()) {
   const y = d.getFullYear();
