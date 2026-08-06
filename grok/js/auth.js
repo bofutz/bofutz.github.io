@@ -19,7 +19,7 @@ export function checkLoginState() {
       isVip.value = vipDaysLeft.value > 0;
     } else {
       isLoggedIn.value = false;
-      isVip.value = false;
+      isVip.value = false; 
       username.value = "";
       referralCode.value = "";
       vipDaysLeft.value = 0;
