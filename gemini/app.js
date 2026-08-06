@@ -1,15 +1,14 @@
 /**
- * 波幅探长 - 前台独立核心脚本 (app.js)
- * 包含：Viewer.js 高级图片查看器 (放大/缩小/旋转/翻转/拖拽)
- * 数据看板 (4周数据展开 / 绝对值 Top 3 免费 / 日线半日线周线)
- * 个人中心 (完全还原图一 5 大卡片)、购买套餐 (优惠码开关控制)、全网监控投票、答疑留言与指南
+ * 波幅探长 - 前台完整逻辑脚本 (app.js)
+ * 恢复全功能 Viewer.js 查看器 (放大/缩小/旋转/翻转/拖拽)
+ * 个人中心 5 大卡片 (完全还原图一)、看板 (4周展开/绝对值Top3免费/日线半日线周线)
+ * 购买套餐 (分类上架/优惠码显隐开关/精准支付)、监控投票、答疑与指南
  */
 const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
 
 const API_BASE = "https://vip.hahagw.eu.org";
-const TURNSTILE_SITEKEY = "0x4AAAAAAEDLWs232Np7X0xa";
 
-// 全局状态 Store
+// 全局响应式状态 Store
 const store = reactive({
   isLoggedIn: false,
   isVip: false,
@@ -54,6 +53,7 @@ const store = reactive({
     store.isLoggedIn = false;
     store.isVip = false;
     store.username = "";
+    store.referralCode = "";
     store.vipDaysLeft = 0;
     store.showToast("已退出登录");
     window.location.hash = "#/";
@@ -76,40 +76,42 @@ async function apiFetch(endpoint, options = {}) {
   return data;
 }
 
-// 核心函数：高级 Viewer.js 全功能图片查看器 (放大/缩小/旋转/翻转/拖拽)
+// Viewer.js 全功能高级图片查看器 (包含：放大/缩小/旋转/翻转/拖拽/复位)
 function openViewerImage(imageUrl) {
   if (!imageUrl) return;
   const image = new Image();
   image.src = imageUrl;
-  if (window.Viewer) {
-    const viewer = new window.Viewer(image, {
-      hidden() { viewer.destroy(); },
-      toolbar: {
-        zoomIn: 1,
-        zoomOut: 1,
-        oneToOne: 1,
-        reset: 1,
-        prev: 0,
-        play: 0,
-        next: 0,
-        rotateLeft: 1,
-        rotateRight: 1,
-        flipHorizontal: 1,
-        flipVertical: 1,
-      },
-      navbar: false,
-      title: false,
-      tooltip: true,
-      movable: true,
-      zoomable: true,
-      rotatable: true,
-      scalable: true,
-      transition: true,
-    });
-    viewer.show();
-  } else {
-    window.open(imageUrl, "_blank");
-  }
+  image.onload = () => {
+    if (window.Viewer) {
+      const viewer = new window.Viewer(image, {
+        hidden() { viewer.destroy(); },
+        toolbar: {
+          zoomIn: 1,
+          zoomOut: 1,
+          oneToOne: 1,
+          reset: 1,
+          prev: 0,
+          play: 0,
+          next: 0,
+          rotateLeft: 1,
+          rotateRight: 1,
+          flipHorizontal: 1,
+          flipVertical: 1,
+        },
+        navbar: false,
+        title: false,
+        tooltip: true,
+        movable: true,
+        zoomable: true,
+        rotatable: true,
+        scalable: true,
+        transition: true,
+      });
+      viewer.show();
+    } else {
+      window.open(imageUrl, "_blank");
+    }
+  };
 }
 
 // 1. Header 组件
@@ -143,7 +145,7 @@ const HeaderComp = {
           <button @click="openAuth('register')" class="text-sm font-medium theme-bg text-white px-3 py-1.5 rounded-lg hover:opacity-90">注册</button>
         </div>
         <div v-else class="relative">
-          <div @click.stop="toggleUserMenu" class="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded">
+          <div @click.stop="toggleUserMenu" class="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded select-none">
             <i class="fa-solid fa-circle-user text-slate-400 text-2xl"></i>
             <span class="text-sm font-medium text-slate-600 hidden sm:inline">{{ store.username }}</span>
             <i class="fa-solid fa-chevron-down text-[10px] text-slate-400" :class="{'rotate-180': store.userMenuOpen}"></i>
@@ -216,6 +218,18 @@ const FooterComp = {
             <i class="fa-brands fa-weixin text-lg"></i>
             <div class="social-qr-pop"><img :src="getQrUrl(settings.social_shipinhao)"><p class="text-[10px] text-slate-500 mt-1">视频号</p></div>
           </a>
+          <a v-if="settings.social_xiaohongshu" :href="settings.social_xiaohongshu" target="_blank" class="social-item hover:text-[#FE2C55]" title="小红书">
+            <i class="fa-solid fa-book text-lg"></i>
+            <div class="social-qr-pop"><img :src="getQrUrl(settings.social_xiaohongshu)"><p class="text-[10px] text-slate-500 mt-1">小红书</p></div>
+          </a>
+          <a v-if="settings.social_gongzhonghao" :href="settings.social_gongzhonghao" target="_blank" class="social-item hover:text-[#07C160]" title="公众号">
+            <i class="fa-solid fa-comment-dots text-lg"></i>
+            <div class="social-qr-pop"><img :src="getQrUrl(settings.social_gongzhonghao)"><p class="text-[10px] text-slate-500 mt-1">公众号</p></div>
+          </a>
+          <a v-if="settings.social_kuaishou" :href="settings.social_kuaishou" target="_blank" class="social-item hover:text-[#FF4906]" title="快手">
+            <i class="fa-solid fa-video text-lg"></i>
+            <div class="social-qr-pop"><img :src="getQrUrl(settings.social_kuaishou)"><p class="text-[10px] text-slate-500 mt-1">快手</p></div>
+          </a>
         </div>
       </div>
     </footer>
@@ -273,16 +287,16 @@ const AuthModalComp = {
           <button @click="store.authMode='login'" class="flex-1 py-2 font-bold" :class="store.authMode==='login'?'theme-text border-b-2 theme-border':'text-slate-400'">账号登录</button>
           <button @click="store.authMode='register'" class="flex-1 py-2 font-bold" :class="store.authMode==='register'?'theme-text border-b-2 theme-border':'text-slate-400'">免费注册</button>
         </div>
-        <input v-model="form.username" placeholder="电子邮箱账号" class="w-full border px-3 py-2 rounded-lg text-sm">
-        <input v-model="form.password" type="password" placeholder="密码 (至少6位)" class="w-full border px-3 py-2 rounded-lg text-sm">
-        <input v-if="store.authMode==='register'" v-model="form.refCode" placeholder="推荐码 (选填)" class="w-full border px-3 py-2 rounded-lg text-sm">
+        <input v-model="form.username" placeholder="电子邮箱账号" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+        <input v-model="form.password" type="password" placeholder="密码 (至少6位)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+        <input v-if="store.authMode==='register'" v-model="form.refCode" placeholder="推荐码 (选填)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
         <button @click="submit" class="w-full theme-bg text-white font-bold py-2.5 rounded-lg text-sm">{{ store.authMode==='login'?'立即登录':'确认注册' }}</button>
       </div>
     </div>
   `,
 };
 
-// 6. Dashboard 组件 (绝对值 Top3 免费 / 展开 4 周 / 支持日线半日线周线 Viewer.js 全功能)
+// 6. Dashboard 组件 (展开 4 周 / 绝对值 Top 3 免费 / 日线半日线周线全功能 Viewer.js)
 const DashboardComp = {
   setup() {
     const loading = ref(false);
@@ -316,7 +330,7 @@ const DashboardComp = {
       return m ? parseFloat(m[0]) : -9999;
     };
 
-    // 过去 4 周历史数据 (展开 4 行)
+    // 展开过去 4 周历史数据 (最多 4 行)
     const getPastWeeks = (etfCode) => {
       if (!selectedMonday.value) return [];
       const pastData = allData.value.filter(i => i.etf_code === etfCode && (i.day_status || i.week_status));
@@ -335,7 +349,7 @@ const DashboardComp = {
       return Object.values(weekMap).sort((a, b) => b.monday.localeCompare(a.monday)).slice(0, 4);
     };
 
-    // 最新交易日绝对值降序与免费 Top 3
+    // 绝对值降序与免费 Top 3
     const processedData = computed(() => {
       if (!selectedMonday.value) return { list: [], freeCodes: [] };
       const weekDays = getWeekDays(selectedMonday.value);
@@ -382,22 +396,19 @@ const DashboardComp = {
       return false;
     };
 
-    // 点击日线列图标，弹窗提供日线/半日线查看
-    const openDailyOptionModal = (item) => {
+    const openDailyModal = (item) => {
       if (!checkViewPermission(item.etf_code)) return;
       dailyTarget.code = item.etf_code;
       dailyTarget.name = item.etf_name || item.etf_code;
       dailyModalVisible.value = true;
     };
 
-    // 查看具体图表 (使用全功能 Viewer.js 渲染放大缩小旋转)
     const viewChart = (code, type) => {
       dailyModalVisible.value = false;
       const url = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_${type}.png`;
       openViewerImage(url);
     };
 
-    // 点击周线列图标直接放大查看周线图表
     const openWeeklyChart = (item) => {
       if (!checkViewPermission(item.etf_code)) return;
       const url = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_weekly.png`;
@@ -419,14 +430,14 @@ const DashboardComp = {
 
     return {
       loading, searchQuery, processedData, expandedRowKey, dailyModalVisible, dailyTarget,
-      openDailyOptionModal, openWeeklyChart, viewChart, getPastWeeks,
+      openDailyModal, openWeeklyChart, viewChart, getPastWeeks,
       toggleRow: (i) => { expandedRowKey.value = expandedRowKey.value === i.etf_code ? null : i.etf_code; },
       getColorClass: (s) => (!s || s === "-") ? "text-slate-300" : (s.includes("+") ? "text-red-500" : "text-emerald-500"),
     };
   },
   template: `
     <div class="max-w-7xl mx-auto space-y-4 select-none">
-      <div class="flex justify-between items-center bg-white p-3.5 rounded-xl border">
+      <div class="flex justify-between items-center bg-white p-3.5 rounded-xl border shadow-sm">
         <span class="text-sm font-bold text-slate-700">数据看板 (最新绝对值前 3 名标的免费看图)</span>
         <input v-model="searchQuery" placeholder="搜索 代码/名称..." class="border px-3 py-1.5 rounded-lg text-sm outline-none focus:theme-border">
       </div>
@@ -435,7 +446,7 @@ const DashboardComp = {
         <table class="w-full text-center text-sm whitespace-nowrap">
           <thead class="bg-slate-50 border-b text-xs font-bold">
             <tr>
-              <th class="py-3 px-4 text-left">标的名称 (按最新绝对值倒序)</th>
+              <th class="py-3 px-4 text-left">标的名称 (绝对值倒序)</th>
               <th v-for="idx in 5" :key="idx">周{{ ['一','二','三','四','五'][idx-1] }}</th>
               <th>周线</th>
             </tr>
@@ -449,14 +460,12 @@ const DashboardComp = {
                   <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                 </td>
                 
-                <!-- 日线 5 天数据 (点击图标弹出日线/半日线查看选择) -->
                 <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
                   <span>{{ item.days[idx-1]?.day_status || '-' }}</span>
                   <i v-if="item.days[idx-1]" class="fa-regular fa-image text-slate-300 hover:text-blue-500 ml-1 cursor-pointer"
-                     title="查看日线/半日线图表" @click.stop="openDailyOptionModal(item)"></i>
+                     title="查看日线/半日线图表" @click.stop="openDailyModal(item)"></i>
                 </td>
 
-                <!-- 周线数据 (点击图标直接放大查看周线图表) -->
                 <td class="p-3 font-medium" :class="getColorClass(item.week_status)">
                   <span>{{ item.week_status || '-' }}</span>
                   <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 ml-1 cursor-pointer"
@@ -464,7 +473,6 @@ const DashboardComp = {
                 </td>
               </tr>
 
-              <!-- 展开过去 4 周历史数据行 -->
               <template v-if="expandedRowKey === item.etf_code">
                 <tr v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50 text-xs">
                   <td class="p-2.5 text-left font-mono text-slate-400 pl-6"><i class="fa-regular fa-clock mr-1"></i>{{ week.monday }}</td>
@@ -477,17 +485,16 @@ const DashboardComp = {
         </table>
       </div>
 
-      <!-- 点击日线列选择【日线】或【半日线】查看弹窗 -->
       <div v-if="dailyModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="dailyModalVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl text-center">
           <h3 class="font-bold text-slate-800 text-base">{{ dailyTarget.name }} ({{ dailyTarget.code }})</h3>
-          <p class="text-xs text-slate-400">请选择要查看的图表类型（全功能可放大/缩小/旋转）：</p>
+          <p class="text-xs text-slate-400">请选择要查看的图表类型：</p>
           <div class="space-y-2">
             <button @click="viewChart(dailyTarget.code, 'daily')" class="w-full theme-bg text-white font-bold py-2.5 rounded-xl text-sm shadow hover:opacity-90">
-              <i class="fa-solid fa-chart-line mr-2"></i>查看【日线图表】
+              <i class="fa-solid fa-chart-line mr-2"></i>查看【日线图表】(支持旋转放大)
             </button>
             <button @click="viewChart(dailyTarget.code, 'half_day')" class="w-full bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl text-sm hover:bg-slate-200">
-              <i class="fa-solid fa-chart-column mr-2"></i>查看【半日线图表】
+              <i class="fa-solid fa-chart-column mr-2"></i>查看【半日线图表】(支持旋转放大)
             </button>
           </div>
         </div>
@@ -496,7 +503,7 @@ const DashboardComp = {
   `,
 };
 
-// 7. Profile 组件 (完全还原图一的 5 大卡片)
+// 7. Profile 组件 (完全还原图一 5 大卡片)
 const ProfileComp = {
   setup() {
     const orders = ref([]);
@@ -504,7 +511,7 @@ const ProfileComp = {
     const customList = ref([]);
     const pwdForm = reactive({ oldPassword: "", newPassword: "", confirmPassword: "" });
 
-    onMounted(async () => {
+    const loadData = async () => {
       if (!store.isLoggedIn) return;
       try {
         const [oRes, iRes, cRes] = await Promise.all([
@@ -516,7 +523,7 @@ const ProfileComp = {
         invitees.value = iRes.data || [];
         customList.value = cRes.data || [];
       } catch (_) {}
-    });
+    };
 
     const changePassword = async () => {
       if (!pwdForm.oldPassword || pwdForm.newPassword.length < 6 || pwdForm.newPassword !== pwdForm.confirmPassword) {
@@ -525,72 +532,95 @@ const ProfileComp = {
       }
       try {
         await apiFetch("/api/password", { method: "POST", body: JSON.stringify({ old_password: pwdForm.oldPassword, new_password: pwdForm.newPassword }) });
-        store.showToast("修改成功，请重新登录");
+        store.showToast("密码修改成功，请重新登录");
         store.logout();
       } catch (err) { store.showToast(err.message, "error"); }
     };
+
+    onMounted(loadData);
 
     return { store, settings: computed(() => store.publicSettings), orders, invitees, customList, pwdForm, changePassword };
   },
   template: `
     <div class="max-w-4xl mx-auto space-y-5 select-none">
-      <!-- 1. VIP 卡片 -->
-      <div class="bg-white p-6 rounded-xl border flex items-center justify-between shadow-sm">
+      <!-- 1. 通用监控 VIP 权限 (卡片一) -->
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border flex items-center justify-between">
         <div>
           <div class="text-xs text-slate-400 mb-1">通用监控 VIP 权限</div>
-          <div class="text-2xl font-bold" :class="store.isVip?'theme-text':'text-slate-400'">
-            {{ store.isVip ? '已开通' : '未开通' }}
-            <span v-if="store.isVip" class="text-xs bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full border border-emerald-100 font-bold">剩余 {{ store.vipDaysLeft }} 天</span>
+          <div class="flex items-center gap-2">
+            <span class="text-xl sm:text-2xl font-bold" :class="store.isVip ? 'theme-text' : 'text-slate-400'">
+              {{ store.isVip ? '已开通' : '未开通' }}
+            </span>
+            <span v-if="store.isVip" class="text-xs bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full border border-emerald-100 font-bold">
+              剩余 {{ store.vipDaysLeft }} 天
+            </span>
           </div>
         </div>
-        <a href="#/plan" class="theme-bg text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">续费 VIP</a>
+        <a href="#/plan" class="theme-bg text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:opacity-90 shadow-sm">
+          {{ store.isVip ? '续费 VIP' : '开通 VIP' }}
+        </a>
       </div>
 
-      <!-- 2. 我的定制监控 (完全与图一一致) -->
-      <div class="bg-white rounded-xl border shadow-sm p-5 space-y-3">
-        <div class="flex justify-between items-center border-b pb-2">
-          <div><div class="font-bold text-slate-800 text-base">我的定制监控</div><div class="text-xs text-slate-400">套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只 · 与通用独立</div></div>
-          <a href="#/plan" class="theme-bg text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ 添加标的</a>
+      <!-- 2. 我的定制监控 (卡片二，图一还原) -->
+      <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-5 sm:px-6 py-4 border-b flex justify-between items-center">
+          <div>
+            <div class="font-bold text-slate-800 text-base">我的定制监控</div>
+            <p class="text-[11px] text-slate-400 mt-0.5">套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只 · 与通用独立 · 不解锁通用图表</p>
+          </div>
+          <a href="#/plan" class="theme-bg text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:opacity-90">+ 添加标的</a>
         </div>
-        <div v-if="!customList.length" class="text-center py-6 text-slate-400 text-xs font-medium">暂无定制标的</div>
+        <div v-if="!customList.length" class="p-8 text-center text-slate-400 text-xs font-medium">暂无定制标的</div>
         <div v-else class="overflow-x-auto">
           <table class="w-full text-sm text-left whitespace-nowrap">
-            <thead class="bg-slate-50 text-xs text-slate-500 border-b"><tr><th class="p-2.5">代码/名称</th><th class="p-2.5">状态</th><th class="p-2.5">到期</th></tr></thead>
-            <tbody class="divide-y"><tr v-for="c in customList" :key="c.id"><td class="p-2.5 font-bold">{{ c.etf_code }} <span class="text-xs font-normal text-slate-400">{{ c.etf_name }}</span></td><td class="p-2.5 text-xs font-bold text-emerald-600">{{ c.status }}</td><td class="p-2.5 text-xs text-slate-400">{{ c.expire_at ? new Date(c.expire_at).toLocaleDateString() : '-' }}</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 3. 我的订单 (完全与图一一致) -->
-      <div class="bg-white rounded-xl border shadow-sm p-5 space-y-3">
-        <div class="font-bold text-slate-800 text-base border-b pb-2">我的订单</div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm whitespace-nowrap">
-            <thead class="bg-slate-50 text-xs text-slate-500 border-b font-bold">
-              <tr><th class="py-2.5 px-3">套餐</th><th class="py-2.5 px-3">金额</th><th class="py-2.5 px-3">类型</th><th class="py-2.5 px-3">获得 VIP</th><th class="py-2.5 px-3">状态</th><th class="py-2.5 px-3">时间</th></tr>
+            <thead class="bg-slate-50 text-xs text-slate-500 border-b">
+              <tr><th class="p-3">代码 / 名称</th><th class="p-3 text-center">状态</th><th class="p-3 text-center">到期</th></tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
-              <tr v-for="o in orders" :key="o.id">
-                <td class="py-3 px-3 font-bold">{{ o.plan_id }}</td>
-                <td class="py-3 px-3 font-mono font-bold">¥ {{ o.amount }}</td>
-                <td class="py-3 px-3 text-xs font-bold text-slate-500">{{ o.order_type==='custom_watchlist'?'定制':'通用' }}</td>
-                <td class="py-3 px-3 text-emerald-600 font-bold text-xs">{{ o.status==='approved' ? (o.vip_days_granted ? ('+'+o.vip_days_granted+'天') : '定制激活') : '-' }}</td>
-                <td class="py-3 px-3 font-bold text-xs">{{ o.status==='approved'?'已通过':'审核中' }}</td>
-                <td class="py-3 px-3 text-xs font-mono text-slate-400">{{ new Date(o.created_at).toLocaleDateString() }}</td>
+              <tr v-for="c in customList" :key="c.id">
+                <td class="p-3 font-bold text-slate-800">{{ c.etf_code }} <span class="text-xs font-normal text-slate-400 ml-1">{{ c.etf_name }}</span></td>
+                <td class="p-3 text-center font-bold text-xs text-emerald-600">{{ c.status === 'active' ? '监控中' : c.status }}</td>
+                <td class="p-3 text-center text-xs font-mono text-slate-400">{{ c.expire_at ? new Date(c.expire_at).toLocaleDateString() : '-' }}</td>
               </tr>
-              <tr v-if="!orders.length"><td colspan="6" class="text-center py-6 text-slate-400 text-xs font-medium">暂无订单</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- 4. 专属邀请码及奖励 (完全与图一一致) -->
-      <div class="bg-white rounded-xl border shadow-sm p-5 space-y-3">
-        <div class="font-bold text-slate-800 text-base border-b pb-2">专属邀请码及奖励</div>
-        <div class="bg-slate-50 p-4 rounded-xl flex justify-between items-center border border-slate-100">
-          <div><div class="text-xs text-slate-400 mb-0.5">您的专属邀请码</div><span class="font-mono text-2xl font-extrabold theme-text tracking-widest">{{ store.referralCode || '-' }}</span></div>
-          <div class="text-right text-xs theme-text font-medium">邀请与被邀请双方各送 VIP<br><span class="font-bold text-sm">邀请人 {{ settings.gift_inviter_days || 3 }} 天 · 被邀请人 {{ settings.gift_invitee_days || 2 }} 天</span></div>
+      <!-- 3. 我的订单 (卡片三，图一还原) -->
+      <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-5 sm:px-6 py-4 border-b font-bold text-slate-800 text-base">我的订单</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm whitespace-nowrap">
+            <thead class="bg-slate-50 text-xs text-slate-500 border-b font-bold">
+              <tr><th class="py-3 px-4">套餐</th><th class="py-3 px-4">金额</th><th class="py-3 px-4">类型</th><th class="py-3 px-4">获得 VIP</th><th class="py-3 px-4">状态</th><th class="py-3 px-4">时间</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <tr v-for="o in orders" :key="o.id">
+                <td class="py-3.5 px-4 font-bold">{{ o.plan_id }}</td>
+                <td class="py-3.5 px-4 font-mono font-bold">¥ {{ o.amount }}</td>
+                <td class="py-3.5 px-4 text-xs font-bold text-slate-500">{{ o.order_type === 'custom_watchlist' ? '定制' : '通用' }}</td>
+                <td class="py-3.5 px-4 text-emerald-600 font-bold text-xs">{{ o.status === 'approved' ? (o.vip_days_granted ? ('+' + o.vip_days_granted + '天') : '定制激活') : '-' }}</td>
+                <td class="py-3.5 px-4 font-bold text-xs">{{ o.status === 'approved' ? '已通过' : '审核中' }}</td>
+                <td class="py-3.5 px-4 text-xs font-mono text-slate-400">{{ new Date(o.created_at).toLocaleDateString() }}</td>
+              </tr>
+              <tr v-if="!orders.length"><td colspan="6" class="py-8 text-center text-slate-400 text-xs font-medium">暂无订单</td></tr>
+            </tbody>
+          </table>
         </div>
+      </div>
+
+      <!-- 4. 专属邀请码及奖励 (卡片四，图一还原) -->
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border space-y-4">
+        <div class="font-bold text-slate-800 text-base">专属邀请码及奖励</div>
+        <div class="bg-slate-50 p-4 rounded-xl flex justify-between items-center border border-slate-100">
+          <div><div class="text-xs text-slate-400 mb-1">您的专属邀请码</div><span class="font-mono text-2xl font-extrabold theme-text tracking-widest">{{ store.referralCode || '-' }}</span></div>
+          <div class="text-right text-xs theme-text font-medium leading-relaxed">
+            <div>邀请与被邀请双方各送 VIP</div>
+            <div class="text-sm font-bold mt-0.5">邀请人 {{ settings.gift_inviter_days || 3 }} 天 · 被邀请人 {{ settings.gift_invitee_days || 2 }} 天</div>
+          </div>
+        </div>
+
         <div class="text-sm font-bold text-slate-600 pt-1">我邀请的用户 ({{ invitees.length }})</div>
         <div v-if="!invitees.length" class="text-xs text-slate-400 py-4 text-center font-medium">暂无被邀请人</div>
         <div v-else class="overflow-x-auto">
@@ -601,19 +631,21 @@ const ProfileComp = {
         </div>
       </div>
 
-      <!-- 5. 修改账号密码 -->
-      <div class="bg-white rounded-xl border shadow-sm p-5 space-y-3 max-w-md">
-        <div class="font-bold text-slate-800 text-base border-b pb-2">修改账号密码</div>
-        <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码" class="w-full border px-3 py-2 rounded text-sm focus:theme-border outline-none">
-        <input v-model="pwdForm.newPassword" type="password" placeholder="新密码 (至少6位)" class="w-full border px-3 py-2 rounded text-sm focus:theme-border outline-none">
-        <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码" class="w-full border px-3 py-2 rounded text-sm focus:theme-border outline-none">
-        <button @click="changePassword" class="theme-bg text-white px-5 py-2.5 rounded-lg text-xs font-bold">确认修改</button>
+      <!-- 5. 修改账号密码 (卡片五) -->
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border">
+        <h3 class="font-bold text-slate-800 text-base mb-4">修改账号密码</h3>
+        <div class="space-y-3 max-w-md">
+          <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.newPassword" type="password" placeholder="新密码 (至少6位)" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <button @click="changePassword" class="theme-bg text-white px-5 py-2.5 rounded-lg text-xs font-bold shadow-sm hover:opacity-90">确认修改</button>
+        </div>
       </div>
     </div>
   `,
 };
 
-// 8. Plan 组件 (包含 promo_enabled 显隐控制与精确二维码生成)
+// 8. Plan 组件 (包含 promo_enabled 二维码下方优惠码及扫码支付)
 const PlanComp = {
   setup() {
     const plans = ref([]);
@@ -666,12 +698,12 @@ const PlanComp = {
   template: `
     <div class="max-w-5xl mx-auto space-y-6 select-none">
       <div class="flex gap-2 text-sm">
-        <button @click="planTab='shared'" class="px-5 py-2.5 rounded-lg border font-bold" :class="planTab==='shared'?'theme-bg text-white':'bg-white text-slate-600'">通用监控</button>
-        <button @click="planTab='custom'" class="px-5 py-2.5 rounded-lg border font-bold" :class="planTab==='custom'?'theme-bg text-white':'bg-white text-slate-600'">定制监控</button>
+        <button @click="planTab='shared'" class="px-5 py-2.5 rounded-lg border font-bold shadow-sm" :class="planTab==='shared'?'theme-bg text-white':'bg-white text-slate-600'">通用监控</button>
+        <button @click="planTab='custom'" class="px-5 py-2.5 rounded-lg border font-bold shadow-sm" :class="planTab==='custom'?'theme-bg text-white':'bg-white text-slate-600'">定制监控</button>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div v-for="p in displayPlans" :key="p.id" @click="selectPlan(p)" class="bg-white p-5 rounded-xl border-2 cursor-pointer transition-all" :class="topUpForm.planId===p.id?'theme-border shadow':'border-slate-100'">
+        <div v-for="p in displayPlans" :key="p.id" @click="selectPlan(p)" class="bg-white p-5 rounded-xl border-2 cursor-pointer transition-all shadow-sm" :class="topUpForm.planId===p.id?'theme-border ring-2 ring-[#4da6a0]/20':'border-slate-100'">
           <div class="font-bold text-slate-800">{{ p.name }}</div>
           <div class="text-3xl font-light text-slate-800 my-2">¥ {{ p.price }}</div>
           <button class="w-full py-2 rounded text-xs font-bold" :class="topUpForm.planId===p.id?'theme-bg text-white':'bg-slate-100'">{{ topUpForm.planId===p.id?'已选中':'选择套餐' }}</button>
@@ -686,7 +718,7 @@ const PlanComp = {
           <input v-model="payRegister.password" type="password" placeholder="密码 (至少6位)" class="w-full border px-3 py-2 rounded text-sm outline-none">
         </div>
 
-        <!-- 二维码与通道切换 -->
+        <!-- 金额与通道 -->
         <div class="text-center space-y-3">
           <div class="text-xs text-slate-400">精准应付金额</div>
           <div class="text-3xl font-extrabold text-red-500 font-mono">¥ {{ topUpForm.floatingAmount }}</div>
@@ -702,7 +734,7 @@ const PlanComp = {
           </div>
         </div>
 
-        <!-- 优惠码输入卡片 (放在二维码下方) -->
+        <!-- 优惠码输入卡片 (放在二维码下方，受 promo_enabled 开关控制) -->
         <div v-if="settings.promo_enabled === '1' || settings.promo_enabled === 1 || settings.promo_enabled === true" class="bg-slate-50 p-4 rounded-xl border">
           <label class="text-xs font-bold text-slate-600 block mb-2">优惠码 (选填)</label>
           <div class="flex gap-2">
