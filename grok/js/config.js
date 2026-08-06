@@ -17,3 +17,7 @@ export const PAGE_TITLES = {
   "#/tickets": "答疑留言",
   "#/docs": "使用说明",
 };
+
+export const VOTE_DEFAULT_MAX_PER_MONTH = 10;
+export const VOTE_DEFAULT_TOP_N = 50;
+export const VOTE_DEFAULT_LIST_LIMIT = 200;
