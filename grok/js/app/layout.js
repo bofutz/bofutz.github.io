@@ -270,6 +270,9 @@ export function useLayout({ currentRoute, navigate, publicSettings, customDraftI
         <div @click="navigate('#/plan')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/plan'}">
           <i class="fa-solid fa-bag-shopping w-6"></i> 购买套餐
         </div>
+        <div @click="navigate('#/vote')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/vote'}">
+            <i class="fa-solid fa-check-to-slot w-6"></i> 监控投票
+        </div>
         <div @click="requireLoginThen('#/tickets')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/tickets'}">
           <i class="fa-solid fa-headset w-6"></i> 答疑留言
         </div>
