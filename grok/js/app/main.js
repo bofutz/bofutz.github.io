@@ -20,6 +20,7 @@ import { ProfileView } from "./views/profile.js";
 import { PlanView } from "./views/plan.js";
 import { TicketsView } from "./views/tickets.js";
 import { DocsView } from "./views/docs.js";
+import { VoteView } from "./views/vote.js";   // 如果 vote.js 同时导出组件；否则下面用 composable 方式
 
 createApp({
   components: {
@@ -28,6 +29,7 @@ createApp({
     PlanView,
     TicketsView,
     DocsView,
+    VoteView,
   },
   setup() {
     // ========== 路由 ==========
@@ -59,6 +61,11 @@ createApp({
       social_xiaohongshu: "",
       social_gongzhonghao: "",
       social_kuaishou: "",
+      // 投票相关默认值（后台可覆盖）
+      vote_max_per_month: "10",
+      vote_top_n: "50",
+      vote_list_limit: "200",
+      vote_enabled: "1",
     });
 
     const fetchPublicSettings = async () => {
@@ -151,7 +158,6 @@ createApp({
       sessionStorage.setItem("pending_custom_items", JSON.stringify(items));
       layout.customEditorVisible.value = false;
       navigate("#/plan");
-      // plan 页会读取 pending_custom_items 并切到定制 tab
     };
 
     // ========== Layout ==========
@@ -166,9 +172,19 @@ createApp({
       confirmCustomAndPay,
     });
 
-    // 登录成功后的刷新钩子（各 view 可监听 isLoggedIn）
+    // ========== 监控投票 ==========
+    const vote = useVoteView({
+      isLoggedIn,
+      isVip,
+      openAuth: (...args) => layout.openAuth(...args),
+      publicSettings,
+      showToast: (msg) => alert(msg),
+    });
+
+    // 登录成功后的刷新钩子
     const onLoginSuccess = () => {
-      // 预留：后续可触发各模块 refresh
+      // 投票页登录后刷新「我的投票」
+      if (typeof vote.loadMyVotes === "function") vote.loadMyVotes();
     };
 
     // ========== 生命周期 ==========
@@ -209,6 +225,8 @@ createApp({
       // layout 透出
       ...layout,
       onLoginSuccess,
+      // 投票透出
+      ...vote,
       // 给子组件用的
       openAuth: layout.openAuth,
       openCustomEditor: layout.openCustomEditor,
@@ -220,7 +238,6 @@ createApp({
     <div class="flex w-full h-full" @click="closeDropdowns">
       <div class="flex-1 flex flex-col h-full overflow-hidden relative">
         <!-- 顶栏 -->
-        ${/* header 由 layout 提供，这里直接内联拼接 */ ""}
         <header class="h-14 sm:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-6 z-10 shrink-0">
           <div class="flex items-center gap-2 sm:gap-3">
             <button @click.stop="menuOpen = true" class="text-slate-500 hover:text-slate-700 p-2">
@@ -269,6 +286,12 @@ createApp({
               :custom-max-symbols="customMaxSymbols"
               :custom-symbol-count="customSymbolCount"
               :dedupe-custom-draft="dedupeCustomDraft"
+            />
+            <VoteView v-else-if="currentRoute === '#/vote'"
+              :public-settings="publicSettings"
+              :is-logged-in="isLoggedIn"
+              :is-vip="isVip"
+              :open-auth="openAuth"
             />
             <TicketsView v-else-if="currentRoute === '#/tickets'" :open-auth="openAuth" />
             <DocsView v-else-if="currentRoute === '#/docs'" :public-settings="publicSettings" />
@@ -347,8 +370,8 @@ createApp({
           <div @click="navigate('#/plan')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/plan'}">
             <i class="fa-solid fa-bag-shopping w-6"></i> 购买套餐
           </div>
-          <div @click="switchTab('vote')" class="nav-item flex items-center px-6 py-2.5" :class="{active: currentTab === 'vote'}">  
-          <i class="fa-solid fa-check-to-slot"></i> 监控投票
+          <div @click="navigate('#/vote')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/vote'}">
+            <i class="fa-solid fa-check-to-slot w-6"></i> 监控投票
           </div>
           <div @click="requireLoginThen('#/tickets')" class="nav-item block px-6 py-3.5 border-b border-slate-50" :class="{active: currentRoute==='#/tickets'}">
             <i class="fa-solid fa-headset w-6"></i> 答疑留言
