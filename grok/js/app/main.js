@@ -12,7 +12,7 @@ import {
   checkLoginState, clearLoginState, updateVipDays,
 } from "../auth.js";
 import { useLayout } from "./layout.js";
-import { useVoteView } from "./views/vote.js";
+import { VoteView } from "./views/vote.js";
 
 // ---------- Views ----------
 import { DashboardView } from "./views/dashboard.js";
@@ -172,20 +172,8 @@ createApp({
       confirmCustomAndPay,
     });
 
-    // ========== 监控投票 ==========
-    const vote = useVoteView({
-      isLoggedIn,
-      isVip,
-      openAuth: (...args) => layout.openAuth(...args),
-      publicSettings,
-      showToast: (msg) => alert(msg),
-    });
-
     // 登录成功后的刷新钩子
-    const onLoginSuccess = () => {
-      // 投票页登录后刷新「我的投票」
-      if (typeof vote.loadMyVotes === "function") vote.loadMyVotes();
-    };
+    const onLoginSuccess = () => { };
 
     // ========== 生命周期 ==========
     const onHashChange = () => {
@@ -225,8 +213,6 @@ createApp({
       // layout 透出
       ...layout,
       onLoginSuccess,
-      // 投票透出
-      ...vote,
       // 给子组件用的
       openAuth: layout.openAuth,
       openCustomEditor: layout.openCustomEditor,
