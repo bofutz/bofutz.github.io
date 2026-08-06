@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 前台购买套餐组件 (根据选中的分类决定购买哪种权限)
+ * 波幅探长 - 购买套餐组件 (修复：二维码渲染，优惠码置于二维码下方并受开关控制)
  * js/components/index/Plan.js
  */
 import { store } from "../../store.js";
@@ -20,7 +20,7 @@ export default {
       originalAmount: 18.8,
       floatingAmount: "18.82",
       txId: "",
-      orderType: "vip", // 'vip' (通用) | 'custom_watchlist' (定制)
+      orderType: "vip",
     });
 
     const promoInput = ref("");
@@ -38,7 +38,30 @@ export default {
       refCode: "",
     });
 
-    // 计算当前分类下展示的套餐：选通用展示 shared+both，选定制展示 custom+both
+    const isImageUrl = (url) => {
+      if (!url || typeof url !== "string") return false;
+      const u = url.trim().toLowerCase();
+      return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(u);
+    };
+
+    const linkToQrSrc = (url) => {
+      if (!url) return "";
+      return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(url.trim())}`;
+    };
+
+    // 智能解析当前的收款二维码地址 (支持图片直链与支付网址自动生成二维码)
+    const currentPayQrSrc = computed(() => {
+      const raw = payChannel.value === "wechat"
+        ? (store.state.publicSettings.wechat_qr_url || "")
+        : (store.state.publicSettings.alipay_qr_url || "");
+      
+      if (!raw || !String(raw).trim()) return "";
+      const url = String(raw).trim();
+      
+      // 如果是图片直链，直接展示图片；如果是支付网址/链接，生成二维码
+      return isImageUrl(url) ? url : linkToQrSrc(url);
+    });
+
     const displayPlans = computed(() => {
       if (planTab.value === "custom") {
         return plans.value.filter((p) => p.plan_type === "custom" || p.plan_type === "both");
@@ -71,14 +94,11 @@ export default {
       topUpForm.amount = Number(plan.price);
       topUpForm.originalAmount = Number(plan.price);
       topUpForm.floatingAmount = generateFloatingAmount(plan.price);
-      
-      // 核心依据：用户在哪个分类页签下选中购买，决定订单类型
       topUpForm.orderType = planTab.value === "custom" ? "custom_watchlist" : "vip";
       promoValid.value = false;
       promoMessage.value = "";
     };
 
-    // 切换分类页签时自动重置订单类型与选中套餐
     watch(planTab, () => {
       if (displayPlans.value.length > 0) {
         selectPlan(displayPlans.value[0]);
@@ -160,6 +180,7 @@ export default {
       showManualInput,
       submitLoading,
       payRegister,
+      currentPayQrSrc,
       selectPlan,
       applyPromo,
       submitOrder,
@@ -174,10 +195,12 @@ export default {
 
       <!-- 分类选项卡 -->
       <div class="flex gap-2 text-sm">
-        <button @click="planTab='shared'" class="px-5 py-2.5 rounded-lg border transition-all" :class="planTab==='shared'?'theme-bg text-white border-transparent font-bold shadow-sm':'bg-white text-slate-600 hover:bg-slate-50'">
+        <button @click="planTab='shared'" class="px-5 py-2.5 rounded-lg border transition-all"
+                :class="planTab==='shared'?'theme-bg text-white border-transparent font-bold shadow-sm':'bg-white text-slate-600 hover:bg-slate-50'">
           通用监控
         </button>
-        <button @click="planTab='custom'" class="px-5 py-2.5 rounded-lg border transition-all" :class="planTab==='custom'?'theme-bg text-white border-transparent font-bold shadow-sm':'bg-white text-slate-600 hover:bg-slate-50'">
+        <button @click="planTab='custom'" class="px-5 py-2.5 rounded-lg border transition-all"
+                :class="planTab==='custom'?'theme-bg text-white border-transparent font-bold shadow-sm':'bg-white text-slate-600 hover:bg-slate-50'">
           定制监控
         </button>
       </div>
@@ -200,45 +223,75 @@ export default {
             </div>
           </div>
 
-          <button class="w-full mt-5 py-2 rounded-lg text-xs font-bold transition-colors" :class="topUpForm.planId === plan.id ? 'theme-bg text-white' : 'bg-slate-100 text-slate-600'">
+          <button class="w-full mt-5 py-2 rounded-lg text-xs font-bold transition-colors"
+                  :class="topUpForm.planId === plan.id ? 'theme-bg text-white' : 'bg-slate-100 text-slate-600'">
             {{ topUpForm.planId === plan.id ? '已选中' : '选择套餐' }}
           </button>
         </div>
       </div>
 
-      <!-- 支付及单号提交卡片 -->
+      <!-- 支付及凭证提交卡片 -->
       <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 max-w-2xl mx-auto space-y-5">
-        <div v-if="settings.promo_enabled === '1' || settings.promo_enabled === 1 || settings.promo_enabled === true"
-             class="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
-          <label class="text-xs font-bold text-slate-600 mb-2 block">优惠码 (选填)</label>
-          <div class="flex gap-2">
-            <input v-model="promoInput" type="text" placeholder="输入优惠码" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
-            <button @click="applyPromo" :disabled="promoChecking" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">使用</button>
-          </div>
-          <p v-if="promoMessage" class="text-xs mt-2" :class="promoValid ? 'text-emerald-600' : 'text-red-500'">{{ promoMessage }}</p>
-        </div>
-
-        <div v-if="!store.isLoggedIn" class="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-3">
-          <div class="text-xs font-bold text-amber-800">未登录：支付成功后将自动注册账号</div>
-          <input v-model="payRegister.username" type="text" placeholder="账号 (不强制邮箱)" class="w-full px-3 py-2 border rounded-lg text-sm focus:theme-border outline-none">
-          <input v-model="payRegister.password" type="password" placeholder="密码 (至少6位)" class="w-full px-3 py-2 border rounded-lg text-sm focus:theme-border outline-none">
-        </div>
-
+        <!-- 金额与支付渠道 -->
         <div class="text-center">
-          <div class="text-xs text-slate-400 mb-1">精准应付金额</div>
-          <div class="text-3xl font-extrabold text-red-500 font-mono">¥ {{ topUpForm.floatingAmount }}</div>
+          <div class="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 px-3 py-1 rounded-full mb-3 border border-amber-200">
+            <i class="fa-solid fa-triangle-exclamation"></i> 请严格支付下方精准金额
+          </div>
+          <h3 class="text-lg font-bold text-slate-800">扫码精准支付</h3>
+          <div class="mt-2 flex items-baseline justify-center gap-1">
+            <span class="text-sm text-slate-500">需支付:</span>
+            <span class="text-3xl font-extrabold text-red-500 font-mono">¥ {{ topUpForm.floatingAmount }}</span>
+            <span v-if="promoValid && topUpForm.originalAmount" class="text-sm text-slate-400 line-through ml-1">¥ {{ topUpForm.originalAmount }}</span>
+          </div>
         </div>
 
         <div class="flex justify-center gap-2 text-xs">
-          <button @click="payChannel='alipay'" class="px-4 py-1.5 rounded-full border" :class="payChannel==='alipay'?'theme-bg text-white border-transparent font-bold':'bg-white'">支付宝</button>
-          <button @click="payChannel='wechat'" class="px-4 py-1.5 rounded-full border" :class="payChannel==='wechat'?'theme-bg text-white border-transparent font-bold':'bg-white'">微信支付</button>
+          <button @click="payChannel='alipay'" class="px-4 py-1.5 rounded-full border"
+                  :class="payChannel==='alipay'?'theme-bg text-white border-transparent font-bold':'bg-white'">支付宝</button>
+          <button @click="payChannel='wechat'" class="px-4 py-1.5 rounded-full border"
+                  :class="payChannel==='wechat'?'theme-bg text-white border-transparent font-bold':'bg-white'">微信支付</button>
         </div>
 
-        <div class="max-w-xs mx-auto text-center space-y-3">
-          <button @click="showManualInput = !showManualInput" class="text-xs text-slate-400 hover:text-slate-600">手动提交支付单号后 6 位</button>
+        <!-- 二维码渲染区 -->
+        <div class="flex flex-col items-center">
+          <div class="w-56 h-56 bg-slate-50 rounded-2xl p-3 border-2 border-dashed border-slate-200 mb-2 flex items-center justify-center shadow-inner">
+            <img v-if="currentPayQrSrc" :src="currentPayQrSrc" class="w-full h-full object-contain rounded-xl" alt="收款码">
+            <span v-else class="text-xs text-slate-400 text-center px-4 leading-relaxed">
+              请在后台设置<br><strong>{{ payChannel === 'alipay' ? '支付宝' : '微信' }}收款码 URL</strong><br>(支持图片直链或支付网址)
+            </span>
+          </div>
+          <div class="text-[11px] text-slate-400 text-center">长按保存二维码或扫码完成支付</div>
+        </div>
+
+        <!-- 【优化】优惠码区域移动至收款二维码下方，并受后台 promo_enabled 开关控制 -->
+        <div v-if="settings.promo_enabled === '1' || settings.promo_enabled === 1 || settings.promo_enabled === true"
+             class="border border-slate-100 rounded-xl p-4 bg-slate-50/60">
+          <label class="text-xs font-bold text-slate-600 mb-2 block">优惠码 (选填)</label>
+          <div class="flex gap-2">
+            <input v-model="promoInput" type="text" placeholder="输入优惠码" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none bg-white">
+            <button @click="applyPromo" :disabled="promoChecking" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">使用</button>
+          </div>
+          <p v-if="promoMessage" class="text-xs mt-2 font-medium" :class="promoValid ? 'text-emerald-600' : 'text-red-500'">{{ promoMessage }}</p>
+        </div>
+
+        <!-- 游客自动注册区域 -->
+        <div v-if="!store.isLoggedIn" class="bg-amber-50/60 border border-amber-100 rounded-xl p-4 space-y-3">
+          <div class="text-xs font-bold text-amber-800"><i class="fa-solid fa-user-plus mr-1"></i> 未登录：支付成功后将用下方账号自动注册</div>
+          <input v-model="payRegister.username" type="text" placeholder="设置登录账号 (不强制邮箱)" class="w-full px-3 py-2 border rounded-lg text-sm focus:theme-border outline-none bg-white">
+          <input v-model="payRegister.password" type="password" placeholder="设置密码 (至少 6 位)" class="w-full px-3 py-2 border rounded-lg text-sm focus:theme-border outline-none bg-white">
+          <input v-model="payRegister.refCode" type="text" placeholder="推荐码 (选填)" class="w-full px-3 py-2 border rounded-lg text-sm focus:theme-border outline-none bg-white">
+        </div>
+
+        <!-- 单号提交输入框 -->
+        <div class="max-w-xs mx-auto text-center space-y-3 pt-2">
+          <button @click="showManualInput = !showManualInput" class="text-xs text-slate-400 hover:theme-text underline">
+            {{ showManualInput ? '收起单号输入' : '手动提交支付单号后 6 位' }}
+          </button>
           <div v-if="showManualInput" class="space-y-2">
-            <input v-model="topUpForm.txId" type="text" maxlength="6" placeholder="后 6 位数字" class="w-full px-4 py-2 border rounded-lg text-center font-mono text-sm focus:theme-border outline-none">
-            <button @click="submitOrder" :disabled="submitLoading" class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold">提交审核</button>
+            <input v-model="topUpForm.txId" type="text" maxlength="6" placeholder="支付凭证后 6 位数字" class="w-full px-4 py-2 border rounded-lg text-center font-mono text-sm focus:theme-border outline-none">
+            <button @click="submitOrder" :disabled="submitLoading" class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50 shadow-sm">
+              {{ submitLoading ? '提交中...' : '提交凭证开通' }}
+            </button>
           </div>
         </div>
       </div>
