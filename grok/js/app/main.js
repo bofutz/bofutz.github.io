@@ -13,7 +13,7 @@ import {
 } from "../auth.js";
 import { useLayout } from "./layout.js"; 
 
-// ---------- Views ----------
+// ---------- Views ---------- 
 import { DashboardView } from "./views/dashboard.js";
 import { ProfileView } from "./views/profile.js";
 import { PlanView } from "./views/plan.js";
