@@ -132,3 +132,54 @@ export const getMobileStatusClass = (status) => {
   if (!status || status === "-" || status === "--") return "mobile-status-neutral";
   return String(status).includes("+") ? "mobile-status-up" : "mobile-status-down";
 };
+
+/** 纯代码提取（6位数字） */
+export function pureCode(code) {
+  const m = String(code || "").match(/\d{6}/);
+  return m ? m[0] : String(code || "").trim();
+}
+
+/** 当前自然月 key：YYYY-MM */
+export function currentMonthKey(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+/** 通过新浪/腾讯接口查询标的名称 */
+export async function lookupEtfName(code) {
+  const c = pureCode(code);
+  if (!/^\d{6}$/.test(c)) return "";
+
+  // 优先腾讯
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(`https://qt.gtimg.cn/q=s_${c}`, {
+      signal: ctrl.signal,
+      mode: "cors",
+    });
+    clearTimeout(t);
+    const text = await res.text();
+    const m = text.match(/="[^~]*~([^~]+)~/);
+    if (m && m[1] && m[1] !== "未知") return m[1].trim();
+  } catch (_) {}
+
+  // 回退新浪
+  try {
+    const prefix = c.startsWith("5") || c.startsWith("1") ? "sh" : "sz";
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(`https://hq.sinajs.cn/list=${prefix}${c}`, {
+      signal: ctrl.signal,
+      mode: "cors",
+      headers: { Referer: "https://finance.sina.com.cn" },
+    });
+    clearTimeout(t);
+    const text = await res.text();
+    const m = text.match(/="([^,]+),/);
+    if (m && m[1]) return m[1].trim();
+  } catch (_) {}
+
+  return "";
+}
