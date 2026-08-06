@@ -15,7 +15,7 @@ export const PAGE_TITLES = {
   "#/profile": "个人中心",
   "#/vote": "监控投票",
   "#/tickets": "答疑留言",
-  "#/docs": "使用说明",
+  "#/docs": "使用说明", 
 };
 
 export const VOTE_DEFAULT_MAX_PER_MONTH = 10;
