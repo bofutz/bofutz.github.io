@@ -15,6 +15,7 @@ import { CustomView } from "./views/custom.js";
 import { PromosView } from "./views/promos.js";
 import { SettingsView } from "./views/settings.js";
 import { TicketsView } from "./views/tickets.js";
+import { VoteView } from "./views/vote.js";   // 监控投票
 
 createApp({
   components: {
@@ -27,6 +28,7 @@ createApp({
     PromosView,
     SettingsView,
     TicketsView,
+    VoteView,
   },
   setup() {
     const layout = useAdminLayout();
@@ -121,6 +123,7 @@ createApp({
       stats,
       orders,
       tickets,
+      fetchTicketsLite,
     };
   },
 
@@ -208,6 +211,10 @@ createApp({
               :class="{active: currentTab==='custom'}">
               <i class="fa-solid fa-user-tag"></i>定制监控
             </div>
+            <div @click="switchTab('vote')" class="nav-item flex items-center px-6 py-2.5"
+              :class="{active: currentTab==='vote'}">
+              <i class="fa-solid fa-check-to-slot"></i>监控投票
+            </div>
             <div @click="switchTab('promos')" class="nav-item flex items-center px-6 py-2.5"
               :class="{active: currentTab==='promos'}">
               <i class="fa-solid fa-percent"></i>优惠码
@@ -248,6 +255,8 @@ createApp({
             <SharedView v-else-if="currentTab==='shared'"
               :fetch-admin="fetchAdmin" :show-toast="showToast" />
             <CustomView v-else-if="currentTab==='custom'"
+              :fetch-admin="fetchAdmin" :show-toast="showToast" />
+            <VoteView v-else-if="currentTab==='vote'"
               :fetch-admin="fetchAdmin" :show-toast="showToast" />
             <PromosView v-else-if="currentTab==='promos'"
               :fetch-admin="fetchAdmin" :show-toast="showToast" />
