@@ -12,7 +12,6 @@ import {
   checkLoginState, clearLoginState, updateVipDays,
 } from "../auth.js";
 import { useLayout } from "./layout.js";
-import { VoteView } from "./views/vote.js";
 
 // ---------- Views ----------
 import { DashboardView } from "./views/dashboard.js";
@@ -20,7 +19,7 @@ import { ProfileView } from "./views/profile.js";
 import { PlanView } from "./views/plan.js";
 import { TicketsView } from "./views/tickets.js";
 import { DocsView } from "./views/docs.js";
-import { VoteView } from "./views/vote.js";   // 如果 vote.js 同时导出组件；否则下面用 composable 方式
+import { VoteView } from "./views/vote.js";
 
 createApp({
   components: {
