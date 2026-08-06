@@ -12,6 +12,7 @@ import {
   checkLoginState, clearLoginState, updateVipDays,
 } from "../auth.js";
 import { useLayout } from "./layout.js";
+import { useVoteView } from "./views/vote.js";
 
 // ---------- Views ----------
 import { DashboardView } from "./views/dashboard.js";
