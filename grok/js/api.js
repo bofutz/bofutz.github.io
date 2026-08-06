@@ -44,3 +44,19 @@ export async function adminFetch(endpoint, adminSecret, options = {}) {
   }
   return res.json();
 }
+
+// ===== 监控投票 =====
+export async function fetchVoteList(limit = 200) {
+  return apiFetch(`/api/vote/list?limit=${limit}`);
+}
+
+export async function fetchMyVotes() {
+  return apiFetch("/api/vote/my");
+}
+
+export async function submitVote(payload) {
+  return apiFetch("/api/vote", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
