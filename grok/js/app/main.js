@@ -11,7 +11,7 @@ import {
   isLoggedIn, isVip, username, vipDaysLeft, referralCode,
   checkLoginState, clearLoginState, updateVipDays,
 } from "../auth.js";
-import { useLayout } from "./layout.js";
+import { useLayout } from "./layout.js"; 
 
 // ---------- Views ----------
 import { DashboardView } from "./views/dashboard.js";
