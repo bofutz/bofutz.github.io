@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 个人中心分块组件 (修复：股票代码自动识别名称 + 顺畅添加定制标的流程 + 订单明细增强)
+ * 波幅探长 - 个人中心分块组件 (彻底修复：提取正则下标与 GBK 显式解码)
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
@@ -24,7 +24,7 @@ export default {
     const foundName = ref("");
     const searchingName = ref(false);
     const searchError = ref("");
-    const draftSymbols = ref([]); // [{ code: '513500', name: '标普500' }]
+    const draftSymbols = ref([]);
 
     const pwdForm = reactive({
       oldPassword: "",
@@ -33,7 +33,7 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // 新浪/腾讯财经代码自动查股票/ETF中文名称函数
+    // 严谨修复：腾讯财经接口股票/ETF 代码自动查中文名称函数
     const fetchStockNameByCode = async (codeStr) => {
       const code = String(codeStr || "").trim().toUpperCase();
       if (!code) return "";
@@ -47,18 +47,38 @@ export default {
       
       try {
         const res = await fetch(`https://qt.gtimg.cn/q=s_${symbol}`);
-        const text = await res.text();
-        if (text && text.includes("~")) {
-          const parts = text.split("~");
-          if (parts.length > 1 && parts) {
-            return parts; // 返回中文标的名称
+        if (!res.ok) return "";
+        const buffer = await res.arrayBuffer();
+        
+        // 1. 显式使用 GBK 解码二进制 Buffer
+        let text = "";
+        try {
+          text = new TextDecoder("gbk").decode(buffer);
+        } catch (_) {
+          try {
+            text = new TextDecoder("gb2312").decode(buffer);
+          } catch (e) {
+            text = new TextDecoder("utf-8").decode(buffer);
           }
         }
-      } catch (_) {}
+
+        // 2. 正确匹配引号内的文本，并安全提取 index 1 中文名称
+        // 原始文本格式如: v_s_sz159326="51~高端装备ETF~159326~1.694~0.018~1.07~..."
+        const match = text.match(/"([^"]+)"/);
+        if (match && match) {
+          const content = match;
+          const parts = content.split("~");
+          if (parts.length > 1 && parts) {
+            return parts.trim(); // 完美提取纯中文名："高端装备ETF"
+          }
+        }
+      } catch (err) {
+        console.error("fetchStockNameByCode Error:", err);
+      }
       return "";
     };
 
-    // 输入代码实时查询名称 (防抖查询)
+    // 输入代码实时防抖查询名称
     let searchTimer = null;
     const onCodeInput = () => {
       foundName.value = "";
@@ -74,9 +94,9 @@ export default {
         if (name) {
           foundName.value = name;
         } else {
-          searchError.value = "未查询到对应名称，可手动添加";
+          searchError.value = "未识别到中文名称，确认后将直接使用代码";
         }
-      }, 400);
+      }, 350);
     };
 
     // 打开添加定制弹窗
@@ -334,7 +354,7 @@ export default {
         </div>
       </div>
 
-      <!-- 3. 我的订单 (卡片三：支持单号后6位与明细刷新) -->
+      <!-- 3. 我的订单 (卡片三) -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <div class="font-bold text-slate-700 text-base">我的订单</div>
@@ -401,7 +421,7 @@ export default {
           </div>
         </div>
 
-        <!-- 我邀请的用户列表 (完整明细) -->
+        <!-- 我邀请的用户列表 -->
         <div class="pt-2">
           <div class="text-sm font-bold text-slate-600 mb-2">
             我邀请的用户 <span class="text-xs text-slate-400 font-normal">({{ invitees.length }})</span>
@@ -458,9 +478,9 @@ export default {
           <div class="space-y-2">
             <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
             <div class="flex gap-2">
-              <input v-model="inputCode" @input="onCodeInput" placeholder="如 513500 / 600519" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
+              <input v-model="inputCode" @input="onCodeInput" placeholder="如 159326 / 513500 / 600519" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
               <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
-                {{ searchingName ? '查询中...' : '确认添加' }}
+                {{ searchingName ? '识别中...' : '确认添加' }}
               </button>
             </div>
             <p v-if="foundName" class="text-xs theme-text font-bold flex items-center gap-1 pt-1">
