@@ -207,7 +207,10 @@ export default {
     };
 
     // 使用原生的 Viewer.js 实现手机端随意缩放放大，自动感知图片数量并支持 < 与 > 翻页
+    // 多图时启用左右翻页，单图时完全禁用翻页按钮
     const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
+      if (!imgList || imgList.length === 0) return;
+
       const container = document.createElement("div");
       container.style.display = "none";
       imgList.forEach((item) => {
@@ -217,6 +220,8 @@ export default {
         container.appendChild(img);
       });
       document.body.appendChild(container);
+
+      const isMulti = imgList.length > 1;
 
       if (window.Viewer) {
         const viewer = new window.Viewer(container, {
@@ -232,15 +237,15 @@ export default {
           rotatable: false,
           scalable: false,
           transition: true,
-          loop: true, // 多图时开启无缝循环翻页
+          loop: isMulti, // 仅多图时开启循环翻页
           initialViewIndex: initialIndex,
           toolbar: {
             zoomIn: 1,
             zoomOut: 1,
             oneToOne: 1,
             reset: 1,
-            prev: 1, // 图表数量>1 时自动激活 < 按钮
-            next: 1, // 图表数量>1 时自动激活 > 按钮
+            prev: isMulti ? 1 : 0,  // 多图才显示左侧翻页
+            next: isMulti ? 1 : 0,  // 多图才显示右侧翻页
           },
         });
         viewer.show();
