@@ -1,1 +1,1131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>波幅探长 · 管理后台</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    [v-cloak]{display:none!important}
+    body{background:#f4f6f8;-webkit-tap-highlight-color:transparent}
+    .theme-bg{background-color:#4da6a0}
+    .theme-text{color:#4da6a0}
+    .theme-border{border-color:#4da6a0}
+    .custom-scrollbar::-webkit-scrollbar{width:6px;height:6px}
+    .custom-scrollbar::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+    .nav-item{transition:all .2s;color:#64748b;font-size:14px;cursor:pointer}
+    .nav-item i{width:24px;text-align:center;margin-right:8px;color:#94a3b8;font-size:16px}
+    .nav-item:hover:not(.active){color:#4da6a0}
+    .nav-item:hover:not(.active) i{color:#4da6a0}
+    .nav-item.active{background:#e2e8f0;color:#334155;border-left:3px solid #4da6a0;padding-left:21px;font-weight:500}
+    .nav-item.active i{color:#4da6a0}
+    .modal-overlay{background:rgba(0,0,0,.6);backdrop-filter:blur(2px)}
+    .toast-enter{animation:toastIn .25s ease}
+    @keyframes toastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+    .badge-pulse{animation:pulse 1.5s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+    input:focus,textarea:focus,select:focus{outline:none;border-color:#4da6a0;box-shadow:0 0 0 3px rgba(77,166,160,.15)}
+  </style>
+</head>
+<body class="text-slate-700 font-sans h-screen overflow-hidden select-none">
+<div id="admin-app" v-cloak class="h-full flex flex-col">
 
+  <div v-if="!isAuthenticated" class="fixed inset-0 z-50 bg-[#f4f6f8] flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-slate-200 text-center">
+      <div class="w-16 h-16 theme-bg rounded-2xl flex items-center justify-center mx-auto mb-4"><i class="fa-solid fa-shield-halved text-3xl text-white"></i></div>
+      <h2 class="text-xl font-bold text-slate-800 mb-1">管理后台安全验证</h2>
+      <p class="text-xs text-slate-400 mb-6">波幅探长 · Admin Console v2.1</p>
+      <input v-model="adminSecret" @keyup.enter="login" type="password" placeholder="请输入 Admin-Secret"
+        class="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg mb-4 text-center tracking-widest font-mono text-sm">
+      <button @click="login" :disabled="loading" class="w-full theme-bg text-white font-medium py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 flex justify-center items-center">
+        <i v-if="loading" class="fa-solid fa-spinner animate-spin mr-2"></i> 登 录
+      </button>
+      <p v-if="errorMsg" class="text-red-500 text-xs mt-3">{{ errorMsg }}</p>
+    </div>
+  </div>
+
+  <template v-else>
+    <header class="bg-white border-b border-slate-200 h-14 sm:h-16 shrink-0 flex items-center justify-between px-4 sm:px-6 z-20">
+      <div class="flex items-center gap-3">
+        <button @click="sidebarOpen=!sidebarOpen" class="sm:hidden text-slate-500 p-1.5"><i class="fa-solid fa-bars text-lg"></i></button>
+        <img src="logo.png" class="w-7 h-7 rounded-lg object-cover border border-slate-100" onerror="this.style.display='none'">
+        <h1 class="text-base sm:text-lg font-bold text-slate-800">波幅探长 <span class="text-[10px] sm:text-xs text-slate-400 font-normal ml-1 bg-slate-100 px-2 py-0.5 rounded">管理后台</span></h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <button @click="refreshAll" class="text-slate-400 hover:theme-text text-sm hidden sm:inline-flex items-center gap-1"><i class="fa-solid fa-rotate-right" :class="{'animate-spin':loading}"></i><span class="text-xs">刷新</span></button>
+        <button @click="logout" class="text-sm text-slate-500 hover:text-red-500"><i class="fa-solid fa-power-off mr-1"></i><span class="hidden sm:inline">退出</span></button>
+      </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden relative">
+      <div v-if="sidebarOpen" @click="sidebarOpen=false" class="fixed inset-0 bg-black/40 z-30 sm:hidden"></div>
+      <aside class="fixed sm:static inset-y-0 left-0 w-56 bg-white border-r border-slate-200 flex flex-col py-4 z-40 shadow-lg sm:shadow-sm shrink-0 transition-transform duration-300"
+        :class="sidebarOpen?'translate-x-0':'-translate-x-full sm:translate-x-0'">
+        <nav class="flex-1 space-y-0.5 overflow-y-auto custom-scrollbar">
+          <div @click="switchTab('dashboard')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='dashboard'}"><i class="fa-solid fa-chart-pie"></i>数据概览</div>
+          <div @click="switchTab('users')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='users'}"><i class="fa-solid fa-users"></i>用户管理</div>
+          <div @click="switchTab('orders')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='orders'}"><i class="fa-solid fa-file-invoice-dollar"></i>订单审核
+            <span v-if="pendingOrdersCount" class="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold badge-pulse">{{pendingOrdersCount}}</span>
+          </div>
+          <div @click="switchTab('plans')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='plans'}"><i class="fa-solid fa-tags"></i>套餐管理</div>
+          <div @click="switchTab('shared')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='shared'}"><i class="fa-solid fa-list"></i>通用监控</div>
+          <div @click="switchTab('custom')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='custom'}"><i class="fa-solid fa-user-tag"></i>定制监控</div>
+          <div @click="switchTab('promos')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='promos'}"><i class="fa-solid fa-percent"></i>优惠码</div>
+          <div @click="switchTab('settings')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='settings'}"><i class="fa-solid fa-gear"></i>系统设置</div>
+          <div @click="switchTab('tickets')" class="nav-item flex items-center px-6 py-2.5" :class="{active:currentTab==='tickets'}"><i class="fa-solid fa-headset"></i>答疑工单
+            <span v-if="pendingTicketsCount" class="ml-auto bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">{{pendingTicketsCount}}</span>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 bg-slate-50/50">
+        <div v-if="loading && isInitialLoad" class="h-full flex flex-col items-center justify-center text-slate-400">
+          <i class="fa-solid fa-circle-notch animate-spin text-3xl mb-3 theme-text"></i><p class="text-sm">读取云端数据中...</p>
+        </div>
+        <div v-else class="max-w-7xl mx-auto space-y-4">
+
+          <!-- 概览 -->
+          <div v-show="currentTab==='dashboard'" class="space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h2 class="text-xl font-bold text-slate-800">运营数据概览</h2>
+              <span class="text-xs text-slate-400">近 7 日新用户 {{stats.new_users_7d||0}} · 营收 ¥{{Number(stats.revenue_7d||0).toFixed(2)}}</span>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+                <div class="text-xs text-slate-400 mb-1">注册用户</div>
+                <div class="text-2xl font-bold">{{stats.users||0}}</div>
+                <div class="text-[11px] text-emerald-600 mt-1">通用VIP {{stats.vip_users||0}}</div>
+              </div>
+              <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+                <div class="text-xs text-slate-400 mb-1">待审订单</div>
+                <div class="text-2xl font-bold" :class="(stats.orders_pending||0)>0?'text-orange-500':''">{{stats.orders_pending||0}}</div>
+                <div class="text-[11px] text-slate-400 mt-1">累计营收 ¥{{Number(stats.revenue||0).toFixed(2)}}</div>
+              </div>
+              <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+                <div class="text-xs text-slate-400 mb-1">监控标的</div>
+                <div class="text-2xl font-bold">{{stats.shared_count||0}}</div>
+                <div class="text-[11px] text-slate-400 mt-1">定制活跃 {{stats.custom_active||0}}</div>
+              </div>
+              <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+                <div class="text-xs text-slate-400 mb-1">待回复工单</div>
+                <div class="text-2xl font-bold" :class="(stats.tickets_pending||0)>0?'text-orange-500':''">{{stats.tickets_pending||0}}</div>
+                <div class="text-[11px] text-slate-400 mt-1">已通过订单 {{stats.orders_approved||0}}</div>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border border-slate-100 p-5 shadow-sm">
+              <div class="text-sm font-medium text-slate-700 mb-3">快捷操作</div>
+              <div class="flex flex-wrap gap-2">
+                <button @click="switchTab('orders')" class="text-xs theme-bg text-white px-3 py-2 rounded-lg">审核订单 <span v-if="stats.orders_pending" class="bg-white/20 px-1.5 rounded">{{stats.orders_pending}}</span></button>
+                <button @click="switchTab('tickets')" class="text-xs bg-orange-50 text-orange-600 border border-orange-100 px-3 py-2 rounded-lg">处理工单</button>
+                <button @click="openBroadcast" class="text-xs bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-2 rounded-lg">一键广播</button>
+                <button @click="switchTab('shared')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">编辑通用列表</button>
+                <button @click="switchTab('plans')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">套餐（通用/定制）</button>
+                <button @click="switchTab('settings')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">赠送 / 收款码 / 社交</button>
+                <button @click="switchTab('promos')" class="text-xs bg-slate-100 px-3 py-2 rounded-lg">优惠码</button>
+              </div>
+            </div>
+            <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800">
+              <i class="fa-solid fa-lightbulb mr-1"></i>
+              新订单与答疑工单会通过 Telegram 提醒。支付自动开通可配置 Worker 环境变量 <code class="bg-white px-1 rounded">PAY_NOTIFY_SECRET</code> 并对接 V免签 notify → <code class="bg-white px-1 rounded">/api/pay/notify?key=密钥</code>。工单 TG 回复请配置 webhook 到 <code class="bg-white px-1 rounded">/api/tickets/tg-webhook</code>。
+            </div>
+          </div>
+
+          <!-- 用户 -->
+          <div v-show="currentTab==='users'" class="space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between gap-3">
+              <div><h2 class="text-xl font-bold">用户管理</h2><p class="text-xs text-slate-400">充天数 · 重置密码 · 删除均需谨慎操作</p></div>
+              <div class="flex flex-wrap gap-2">
+                <input v-model="userSearchQuery" placeholder="搜索邮箱/邀请码/IP" class="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white sm:w-48">
+                <button @click="openBatchCharge" class="text-sm bg-emerald-50 text-emerald-600 border border-emerald-100 px-3 py-2 rounded-lg">批量充天数</button>
+                <button @click="fetchUsers" class="text-sm bg-white border border-slate-200 px-3 py-2 rounded-lg"><i class="fa-solid fa-rotate-right"></i></button>
+              </div>
+            </div>
+            <div class="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+              <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-sm whitespace-nowrap">
+                  <thead class="bg-slate-50 text-slate-500 border-b">
+                    <tr>
+                      <th class="py-3 px-3 w-8"><input type="checkbox" @change="toggleSelectAllUsers" :checked="selectedUserIds.length&&selectedUserIds.length===filteredUsers.length"></th>
+                      <th class="py-3 px-4 text-left">ID/时间</th>
+                      <th class="py-3 px-4 text-left">账号</th>
+                      <th class="py-3 px-4 text-left">IP</th>
+                      <th class="py-3 px-4 text-left">通用VIP</th>
+                      <th class="py-3 px-4 text-left">邀请码</th>
+                      <th class="py-3 px-4 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-50">
+                    <tr v-for="u in filteredUsers" :key="u.id" class="hover:bg-slate-50">
+                      <td class="px-3"><input type="checkbox" :value="u.id" v-model="selectedUserIds"></td>
+                      <td class="py-3 px-4 text-xs text-slate-400">{{u.id}}<br>{{formatDate(u.created_at)}}</td>
+                      <td class="py-3 px-4 font-bold">{{u.username}}<div v-if="u.referred_by||u.ref_by" class="text-[10px] text-slate-400">邀请: {{u.referred_by||u.ref_by}}</div></td>
+                      <td class="py-3 px-4 font-mono text-xs">{{u.ip||u.register_ip||'-'}}</td>
+                      <td class="py-3 px-4" :class="(u.shared_vip_days||u.vip_days_left)>0?'text-emerald-500 font-bold':'text-slate-400'">{{u.shared_vip_days??u.vip_days_left??0}} 天</td>
+                      <td class="py-3 px-4 font-mono text-xs font-bold">{{u.referral_code||'-'}}</td>
+                      <td class="py-3 px-4 text-right space-x-1">
+                        <button @click="openChargeModal(u)" class="text-xs bg-emerald-50 text-emerald-600 px-2 py-1 rounded border border-emerald-100">充天数</button>
+                        <button @click="openResetPwd(u)" class="text-xs bg-amber-50 text-amber-600 px-2 py-1 rounded border border-amber-100">重置密码</button>
+                        <button @click="openDeleteUser(u)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded border border-red-100">删除</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!filteredUsers.length"><td colspan="7" class="py-10 text-center text-slate-400">暂无用户</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 订单 -->
+          <div v-show="currentTab==='orders'" class="space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between gap-3">
+              <h2 class="text-xl font-bold">订单审核</h2>
+              <div class="flex gap-2 flex-wrap">
+                <div class="flex bg-white border rounded-lg overflow-hidden text-xs">
+                  <button v-for="s in [{k:'all',t:'全部'},{k:'pending',t:'待审'},{k:'approved',t:'已通过'},{k:'cancelled',t:'已驳回'}]" :key="s.k"
+                    @click="orderStatusFilter=s.k" class="px-3 py-2 border-l first:border-0"
+                    :class="orderStatusFilter===s.k?'theme-bg text-white':'text-slate-600'">{{s.t}}</button>
+                </div>
+                <input v-model="orderSearchQuery" placeholder="账号/单号" class="px-3 py-2 border rounded-lg text-sm bg-white">
+                <button @click="fetchOrders" class="bg-white border px-3 py-2 rounded-lg text-sm"><i class="fa-solid fa-rotate-right"></i></button>
+              </div>
+            </div>
+            <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
+                  <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                    <th class="py-3 px-4 text-left">时间</th><th class="py-3 px-4 text-left">用户</th><th class="py-3 px-4 text-left">类型/套餐</th>
+                    <th class="py-3 px-4 text-left">金额</th><th class="py-3 px-4 text-left text-orange-500">凭证</th>
+                    <th class="py-3 px-4 text-left">发放</th><th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-right">操作</th>
+                  </tr></thead>
+                  <tbody class="divide-y">
+                    <tr v-for="o in filteredOrders" :key="o.id" class="hover:bg-slate-50">
+                      <td class="py-3 px-4 text-xs text-slate-400">{{formatDate(o.created_at)}}</td>
+                      <td class="py-3 px-4 font-bold">{{o.username||o.register_username||'-'}}</td>
+                      <td class="py-3 px-4">
+                        <span class="bg-slate-100 px-2 py-0.5 rounded text-xs">{{getPlanName(o.plan_id)}}</span>
+                        <span class="text-[10px] ml-1" :class="o.order_type==='custom_watchlist'?'text-purple-500':'text-slate-400'">{{o.order_type==='custom_watchlist'?'定制':'通用'}}</span>
+                        <span v-if="o.symbol_count>1" class="text-[10px] text-slate-400 ml-1">×{{o.symbol_count}}只</span>
+                        <span v-if="o.promo_code" class="text-[10px] text-orange-500 ml-1">{{o.promo_code}}</span>
+                      </td>
+                      <td class="py-3 px-4 font-bold">¥{{Number(o.amount||0).toFixed(2)}}
+                        <span v-if="o.original_amount&&Number(o.original_amount)!==Number(o.amount)" class="text-[10px] text-slate-400 line-through ml-1">¥{{Number(o.original_amount).toFixed(2)}}</span>
+                      </td>
+                      <td class="py-3 px-4 font-mono font-bold text-orange-500">{{o.tx_id_last6||'-'}}</td>
+                      <td class="py-3 px-4 text-xs">{{o.status==='approved'?(o.vip_days_granted?('+'+o.vip_days_granted+'天'):'定制激活'):'-'}}</td>
+                      <td class="py-3 px-4">
+                        <span v-if="o.status==='pending'" class="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">待审核</span>
+                        <span v-else-if="o.status==='approved'" class="text-xs bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full">已通过</span>
+                        <span v-else class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">已驳回</span>
+                      </td>
+                      <td class="py-3 px-4 text-right space-x-1" v-if="o.status==='pending'">
+                        <button @click="approveOrder(o)" class="theme-bg text-white text-xs px-3 py-1 rounded-lg">通过</button>
+                        <button @click="rejectOrder(o)" class="bg-slate-100 text-xs px-3 py-1 rounded-lg">驳回</button>
+                      </td>
+                      <td v-else class="py-3 px-4 text-right text-slate-300 text-xs">—</td>
+                    </tr>
+                    <tr v-if="!filteredOrders.length"><td colspan="8" class="py-10 text-center text-slate-400">暂无订单</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 套餐 -->
+          <div v-show="currentTab==='plans'" class="space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between gap-3">
+              <div>
+                <h2 class="text-xl font-bold">套餐管理</h2>
+                <p class="text-xs text-slate-400">通用与定制套餐独立配置。定制为「套餐总价」，含系统设置中的最多只数（默认 3 只），不按只数乘价。</p>
+              </div>
+              <div class="flex gap-2">
+                <div class="flex bg-white border rounded-lg overflow-hidden text-xs">
+                  <button v-for="s in [{k:'all',t:'全部'},{k:'shared',t:'通用'},{k:'custom',t:'定制'}]" :key="s.k"
+                    @click="planTypeFilter=s.k" class="px-3 py-2 border-l first:border-0"
+                    :class="planTypeFilter===s.k?'theme-bg text-white':'text-slate-600'">{{s.t}}</button>
+                </div>
+                <button @click="openPlanModal()" class="theme-bg text-white text-sm px-3 py-2 rounded-lg">新增套餐</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div v-for="p in filteredPlans" :key="p.id" class="bg-white border rounded-xl p-4 shadow-sm relative">
+                <span v-if="p.tag" class="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-bl">{{p.tag}}</span>
+                <div class="font-bold text-slate-800">{{p.name}}</div>
+                <div class="text-2xl font-light mt-1">¥{{p.price}} <span class="text-xs text-slate-400">{{(p.plan_type||'shared')==='custom'?'（套餐总价）':''}}</span></div>
+                <div class="text-xs text-slate-400 mt-1">{{p.days}} 天 · {{(p.plan_type||'shared')==='custom'?'定制':'通用'}} · 排序 {{p.sort_order||0}}</div>
+                <div class="mt-3 flex gap-2">
+                  <button @click="openPlanModal(p)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
+                  <button @click="deletePlan(p)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
+                  <span class="text-[10px] ml-auto self-center" :class="p.enabled?'text-emerald-500':'text-slate-400'">{{p.enabled?'启用':'停用'}}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 通用监控 -->
+          <div v-show="currentTab==='shared'" class="space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between gap-3">
+              <h2 class="text-xl font-bold">通用监控列表</h2>
+              <div class="flex gap-2">
+                <button @click="showBatchImport=true" class="text-sm bg-slate-100 px-3 py-2 rounded-lg">批量导入</button>
+                <button @click="openSharedModal()" class="theme-bg text-white text-sm px-3 py-2 rounded-lg">添加</button>
+                <button @click="fetchShared" class="bg-white border px-3 py-2 rounded-lg text-sm"><i class="fa-solid fa-rotate-right"></i></button>
+              </div>
+            </div>
+            <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                  <th class="py-3 px-4 text-left">代码</th><th class="py-3 px-4 text-left">名称</th>
+                  <th class="py-3 px-4 text-left">排序</th><th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-right">操作</th>
+                </tr></thead>
+                <tbody class="divide-y">
+                  <tr v-for="w in sharedList" :key="w.id" class="hover:bg-slate-50">
+                    <td class="py-3 px-4 font-mono font-bold">{{w.etf_code}}</td>
+                    <td class="py-3 px-4">{{w.etf_name}}</td>
+                    <td class="py-3 px-4">{{w.sort_order||0}}</td>
+                    <td class="py-3 px-4"><span :class="w.enabled?'text-emerald-500':'text-slate-400'">{{w.enabled?'启用':'停用'}}</span></td>
+                    <td class="py-3 px-4 text-right space-x-1">
+                      <button @click="openSharedModal(w)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
+                      <button @click="deleteShared(w)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
+                    </td>
+                  </tr>
+                  <tr v-if="!sharedList.length"><td colspan="5" class="py-10 text-center text-slate-400">暂无</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 定制监控 -->
+          <div v-show="currentTab==='custom'" class="space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between gap-3">
+              <h2 class="text-xl font-bold">定制监控</h2>
+              <button @click="fetchCustom" class="bg-white border px-3 py-2 rounded-lg text-sm"><i class="fa-solid fa-rotate-right"></i></button>
+            </div>
+            <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
+                  <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                    <th class="py-3 px-4 text-left">用户</th><th class="py-3 px-4 text-left">代码/名称</th>
+                    <th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-left">到期</th><th class="py-3 px-4 text-right">操作</th>
+                  </tr></thead>
+                  <tbody class="divide-y">
+                    <tr v-for="w in customList" :key="w.id" class="hover:bg-slate-50">
+                      <td class="py-3 px-4">{{w.username||w.user_id}}</td>
+                      <td class="py-3 px-4"><span class="font-mono font-bold">{{w.etf_code}}</span> <span class="text-xs text-slate-400">{{w.etf_name}}</span></td>
+                      <td class="py-3 px-4"><span :class="w.status==='active'?'text-emerald-500':(w.status==='pending'?'text-orange-500':'text-slate-400')">{{w.status}}</span></td>
+                      <td class="py-3 px-4 text-xs text-slate-400">{{w.expire_at?formatDate(w.expire_at):'-'}}</td>
+                      <td class="py-3 px-4 text-right space-x-1">
+                        <button @click="openCustomEdit(w)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
+                        <button @click="deleteCustom(w)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!customList.length"><td colspan="5" class="py-10 text-center text-slate-400">暂无</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 优惠码 -->
+          <div v-show="currentTab==='promos'" class="space-y-4">
+            <div class="flex justify-between gap-3">
+              <h2 class="text-xl font-bold">优惠码</h2>
+              <button @click="openPromoModal()" class="theme-bg text-white text-sm px-3 py-2 rounded-lg">新增</button>
+            </div>
+            <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
+                  <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                    <th class="py-3 px-4 text-left">代码</th><th class="py-3 px-4 text-left">名称</th><th class="py-3 px-4 text-left">折扣</th>
+                    <th class="py-3 px-4 text-left">有效期</th><th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-right">操作</th>
+                  </tr></thead>
+                  <tbody class="divide-y">
+                    <tr v-for="p in promos" :key="p.id" class="hover:bg-slate-50">
+                      <td class="py-3 px-4 font-mono font-bold">{{p.code}}</td>
+                      <td class="py-3 px-4">{{p.name||'-'}}</td>
+                      <td class="py-3 px-4">{{p.discount_type==='percent'? (p.discount_value+'%') : ('¥'+p.discount_value)}}</td>
+                      <td class="py-3 px-4 text-xs">{{formatDate(p.start_at)}} ~ {{formatDate(p.end_at)}}</td>
+                      <td class="py-3 px-4"><span :class="p.enabled?'text-emerald-500':'text-slate-400'">{{p.enabled?'启用':'停用'}}</span></td>
+                      <td class="py-3 px-4 text-right space-x-1">
+                        <button @click="openPromoModal(p)" class="text-xs bg-slate-100 px-2 py-1 rounded">编辑</button>
+                        <button @click="deletePromo(p)" class="text-xs bg-red-50 text-red-500 px-2 py-1 rounded">删除</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!promos.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 系统设置（重点改过文案） -->
+          <div v-show="currentTab==='settings'" class="space-y-4">
+            <div class="flex justify-between items-center">
+              <h2 class="text-xl font-bold">系统设置</h2>
+              <button @click="saveSettings" class="theme-bg text-white text-sm px-4 py-2 rounded-lg">保存设置</button>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div class="bg-white rounded-xl border p-5 space-y-3">
+                <div class="text-sm font-medium text-slate-700">注册 / 邀请赠送</div>
+                <div class="grid grid-cols-3 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">注册赠送天数</label>
+                    <input type="number" v-model.number="settingsForm.gift_register_days" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">邀请人赠送</label>
+                    <input type="number" v-model.number="settingsForm.gift_inviter_days" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">被邀请人额外</label>
+                    <input type="number" v-model.number="settingsForm.gift_invitee_days" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">免费图表 Top N</label>
+                    <input type="number" v-model.number="settingsForm.free_top_n_charts" class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">定制套餐最多只数</label>
+                    <input type="number" v-model.number="settingsForm.custom_max_symbols" min="1" max="20" class="w-full border px-3 py-2 rounded-lg text-sm">
+                    <p class="text-[11px] text-slate-400 mt-1">套餐总价含这么多只（如 3 = 18.8 元最多填 3 只），不是按只另计费</p>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">允许支付即注册</label>
+                  <select v-model="settingsForm.pay_register_enabled" class="w-full border px-3 py-2 rounded-lg text-sm">
+                    <option value="1">开启</option>
+                    <option value="0">关闭</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl border p-5 space-y-3">
+                <div class="text-sm font-medium text-slate-700">收款码（图片 URL 或支付链接）</div>
+                <p class="text-[11px] text-slate-400">填图片直链则直接显示；填支付链接则前台自动转二维码</p>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">支付宝</label>
+                  <input v-model="settingsForm.alipay_qr_url" placeholder="图片URL 或 支付链接" class="w-full border px-3 py-2 rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">微信</label>
+                  <input v-model="settingsForm.wechat_qr_url" placeholder="图片URL 或 支付链接" class="w-full border px-3 py-2 rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">默认支付通道</label>
+                  <select v-model="settingsForm.default_pay_channel" class="w-full border px-3 py-2 rounded-lg text-sm">
+                    <option value="alipay">支付宝</option>
+                    <option value="wechat">微信</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl border p-5 space-y-3 lg:col-span-2">
+                <div class="text-sm font-medium text-slate-700">前台 Footer 社交（留空则不显示）</div>
+                <p class="text-[11px] text-slate-400">填写主页/账号链接。前台：鼠标悬停显示二维码，点击进入链接。清空某一项即从前台移除。</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">抖音链接</label>
+                    <input v-model="settingsForm.social_douyin" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">视频号链接</label>
+                    <input v-model="settingsForm.social_shipinhao" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">小红书链接</label>
+                    <input v-model="settingsForm.social_xiaohongshu" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">公众号链接</label>
+                    <input v-model="settingsForm.social_gongzhonghao" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">快手链接</label>
+                    <input v-model="settingsForm.social_kuaishou" placeholder="https://..." class="w-full border px-3 py-2 rounded-lg text-sm">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 工单 -->
+          <div v-show="currentTab==='tickets'" class="space-y-4">
+            <div class="flex justify-between gap-3">
+              <h2 class="text-xl font-bold">答疑工单</h2>
+              <div class="flex gap-2">
+                <button @click="openBroadcast" class="text-sm bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-2 rounded-lg">一键广播</button>
+                <button @click="fetchTickets" class="bg-white border px-3 py-2 rounded-lg text-sm"><i class="fa-solid fa-rotate-right"></i></button>
+              </div>
+            </div>
+            <div class="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-50 text-slate-500 border-b"><tr>
+                    <th class="py-3 px-4 text-left">时间</th><th class="py-3 px-4 text-left">用户</th><th class="py-3 px-4 text-left">主题</th>
+                    <th class="py-3 px-4 text-left">级别</th><th class="py-3 px-4 text-left">状态</th><th class="py-3 px-4 text-right">操作</th>
+                  </tr></thead>
+                  <tbody class="divide-y">
+                    <tr v-for="t in tickets" :key="t.id" class="hover:bg-slate-50">
+                      <td class="py-3 px-4 text-xs text-slate-400">{{formatDate(t.created_at)}}</td>
+                      <td class="py-3 px-4 font-bold">{{t.username||'-'}}</td>
+                      <td class="py-3 px-4">{{t.subject}}</td>
+                      <td class="py-3 px-4 text-xs">{{t.level}}</td>
+                      <td class="py-3 px-4"><span :class="t.status==='pending'?'text-orange-500':'text-emerald-500'">{{t.status==='pending'?'待回复':'已回复'}}</span></td>
+                      <td class="py-3 px-4 text-right">
+                        <button @click="openReplyModal(t)" class="text-xs theme-bg text-white px-3 py-1 rounded-lg">回复</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!tickets.length"><td colspan="6" class="py-10 text-center text-slate-400">暂无工单</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </template>
+
+  <!-- Toast -->
+  <div class="fixed top-4 right-4 z-[200] space-y-2">
+    <div v-for="(t,i) in toasts" :key="i" class="toast-enter px-4 py-2 rounded-lg shadow text-sm text-white" :class="t.type==='error'?'bg-red-500':'bg-emerald-500'">{{t.msg}}</div>
+  </div>
+
+  <!-- 充天数 -->
+  <div v-if="chargeModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="chargeModalVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold">充天数 · {{chargeTarget?.username}}</h3>
+      <input type="number" v-model.number="chargeDays" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="天数（可为负）">
+      <div class="flex justify-end gap-2">
+        <button @click="chargeModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitCharge" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量充 -->
+  <div v-if="batchChargeVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="batchChargeVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold">批量充天数（{{selectedUserIds.length}} 人）</h3>
+      <input type="number" v-model.number="batchDays" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <div class="flex justify-end gap-2">
+        <button @click="batchChargeVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitBatchCharge" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 重置密码 -->
+  <div v-if="resetPwdVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="resetPwdVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold text-amber-600">重置密码 · {{resetTarget?.username}}</h3>
+      <p class="text-xs text-slate-400">请再次输入 Admin-Secret 确认</p>
+      <input type="password" v-model="resetConfirmSecret" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="Admin-Secret">
+      <div class="flex justify-end gap-2">
+        <button @click="resetPwdVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitResetPwd" class="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm">确认重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 删除用户 -->
+  <div v-if="deleteUserVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="deleteUserVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3">
+      <h3 class="font-bold text-red-600">删除用户 · {{deleteTarget?.username}}</h3>
+      <p class="text-xs text-slate-400">请再次输入 Admin-Secret 确认，不可恢复</p>
+      <input type="password" v-model="deleteConfirmSecret" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="Admin-Secret">
+      <div class="flex justify-end gap-2">
+        <button @click="deleteUserVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitDeleteUser" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 套餐弹窗 -->
+  <div v-if="planModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="planModalVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
+      <h3 class="font-bold">{{planForm.isEdit?'编辑套餐':'新增套餐'}}</h3>
+      <input v-model="planForm.name" placeholder="名称" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <div class="grid grid-cols-2 gap-2">
+        <input type="number" v-model.number="planForm.price" placeholder="价格" class="border px-3 py-2 rounded-lg text-sm">
+        <input type="number" v-model.number="planForm.days" placeholder="天数" class="border px-3 py-2 rounded-lg text-sm">
+      </div>
+      <select v-model="planForm.plan_type" class="w-full border px-3 py-2 rounded-lg text-sm">
+        <option value="shared">通用</option>
+        <option value="custom">定制（套餐总价）</option>
+      </select>
+      <input v-model="planForm.tag" placeholder="角标（选填）" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="number" v-model.number="planForm.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="planForm.enabled"> 启用</label>
+      <div class="flex justify-end gap-2">
+        <button @click="planModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitPlan" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通用监控弹窗 -->
+  <div v-if="sharedModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="sharedModalVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
+      <h3 class="font-bold">{{sharedForm.id?'编辑':'添加'}}通用标的</h3>
+      <input v-model="sharedForm.etf_code" placeholder="代码" class="w-full border px-3 py-2 rounded-lg text-sm font-mono">
+      <input v-model="sharedForm.etf_name" placeholder="名称" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="number" v-model.number="sharedForm.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="sharedForm.enabled"> 启用</label>
+      <div class="flex justify-end gap-2">
+        <button @click="sharedModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitShared" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量导入 -->
+  <div v-if="showBatchImport" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="showBatchImport=false">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
+      <h3 class="font-bold">批量导入通用标的</h3>
+      <p class="text-xs text-slate-400">每行：代码,名称（或仅代码）</p>
+      <textarea v-model="batchImportText" rows="8" class="w-full border px-3 py-2 rounded-lg text-sm font-mono"></textarea>
+      <div class="flex justify-end gap-2">
+        <button @click="showBatchImport=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitBatchImport" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">导入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 定制编辑 -->
+  <div v-if="customEditVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="customEditVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
+      <h3 class="font-bold">编辑定制</h3>
+      <input v-model="customEdit.etf_code" class="w-full border px-3 py-2 rounded-lg text-sm font-mono">
+      <input v-model="customEdit.etf_name" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <select v-model="customEdit.status" class="w-full border px-3 py-2 rounded-lg text-sm">
+        <option value="active">active</option>
+        <option value="pending">pending</option>
+        <option value="expired">expired</option>
+      </select>
+      <input type="datetime-local" v-model="customEdit.expireLocal" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <div class="flex justify-end gap-2">
+        <button @click="customEditVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitCustomEdit" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 优惠码弹窗 -->
+  <div v-if="promoModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="promoModalVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3 max-h-[90vh] overflow-y-auto">
+      <h3 class="font-bold">{{promoForm.id?'编辑':'新增'}}优惠码</h3>
+      <input v-model="promoForm.code" placeholder="代码" class="w-full border px-3 py-2 rounded-lg text-sm font-mono uppercase">
+      <input v-model="promoForm.name" placeholder="名称" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <select v-model="promoForm.discount_type" class="w-full border px-3 py-2 rounded-lg text-sm">
+        <option value="percent">百分比</option>
+        <option value="fixed">固定金额</option>
+      </select>
+      <input type="number" v-model.number="promoForm.discount_value" placeholder="折扣值" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="datetime-local" v-model="promoForm.startLocal" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="datetime-local" v-model="promoForm.endLocal" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="number" v-model.number="promoForm.max_uses" placeholder="总次数上限（空=不限）" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <input type="number" v-model.number="promoForm.max_per_user" placeholder="每用户次数" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="promoForm.enabled"> 启用</label>
+      <div class="flex justify-end gap-2">
+        <button @click="promoModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitPromo" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 回复工单 -->
+  <div v-if="replyModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="replyModalVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
+      <h3 class="font-bold">回复 · {{currentTicket?.subject}}</h3>
+      <p class="text-xs text-slate-500 whitespace-pre-wrap">{{currentTicket?.message}}</p>
+      <textarea v-model="replyMessage" rows="4" class="w-full border px-3 py-2 rounded-lg text-sm" placeholder="回复内容"></textarea>
+      <div class="flex justify-end gap-2">
+        <button @click="replyModalVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitReply" class="theme-bg text-white px-4 py-2 rounded-lg text-sm">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 广播 -->
+  <div v-if="broadcastVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="broadcastVisible=false">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
+      <h3 class="font-bold"><i class="fa-solid fa-bullhorn mr-1 text-indigo-500"></i>一键广播给全体会员</h3>
+      <p class="text-xs text-slate-400">将写入公告，并为每位用户生成一条「已回复」工单。</p>
+      <input v-model="broadcastForm.title" placeholder="标题（默认：系统通知）" class="w-full border px-3 py-2 rounded-lg text-sm">
+      <textarea v-model="broadcastForm.content" rows="5" placeholder="广播内容..." class="w-full border px-3 py-2 rounded-lg text-sm"></textarea>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="broadcastForm.also_tg"> 同时通知管理员 TG</label>
+      <div class="flex justify-end gap-2">
+        <button @click="broadcastVisible=false" class="px-4 py-2 text-sm text-slate-500">取消</button>
+        <button @click="submitBroadcast" :disabled="broadcastLoading" class="bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+          {{broadcastLoading?'发送中...':'确认广播'}}
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
+const API_BASE = "https://vip.hahagw.eu.org";
+
+createApp({
+  setup() {
+    const adminSecret = ref(localStorage.getItem('admin_secret') || '');
+    const isAuthenticated = ref(false);
+    const currentTab = ref('dashboard');
+    const loading = ref(false);
+    const isInitialLoad = ref(true);
+    const errorMsg = ref('');
+    const sidebarOpen = ref(false);
+    const toasts = ref([]);
+    const showToast = (msg, type = 'success') => {
+      toasts.value.push({ msg, type });
+      setTimeout(() => toasts.value.shift(), 2800);
+    };
+
+    const users = ref([]);
+    const orders = ref([]);
+    const plans = ref([]);
+    const tickets = ref([]);
+    const sharedList = ref([]);
+    const customList = ref([]);
+    const promos = ref([]);
+    const stats = ref({});
+    const userSearchQuery = ref('');
+    const orderSearchQuery = ref('');
+    const orderStatusFilter = ref('all');
+    const planTypeFilter = ref('all');
+    const selectedUserIds = ref([]);
+
+    const pendingOrdersCount = computed(() => (orders.value.filter(o => o.status === 'pending') || []).length);
+    const pendingTicketsCount = computed(() => (tickets.value.filter(t => t.status === 'pending') || []).length);
+
+    const filteredUsers = computed(() => {
+      let list = users.value;
+      if (userSearchQuery.value) {
+        const q = userSearchQuery.value.toLowerCase();
+        list = list.filter(u =>
+          (u.username || '').toLowerCase().includes(q) ||
+          (u.referral_code || '').toLowerCase().includes(q) ||
+          (u.ip || u.register_ip || '').includes(q)
+        );
+      }
+      return list;
+    });
+
+    const filteredOrders = computed(() => {
+      let list = orders.value;
+      if (orderStatusFilter.value !== 'all') list = list.filter(o => o.status === orderStatusFilter.value);
+      if (orderSearchQuery.value) {
+        const q = orderSearchQuery.value.toLowerCase();
+        list = list.filter(o =>
+          (o.username || '').toLowerCase().includes(q) ||
+          (o.tx_id_last6 || '').includes(q) ||
+          (o.register_username || '').toLowerCase().includes(q)
+        );
+      }
+      return list;
+    });
+
+    const filteredPlans = computed(() => {
+      if (planTypeFilter.value === 'all') return plans.value;
+      return plans.value.filter(p => (p.plan_type || 'shared') === planTypeFilter.value);
+    });
+
+    const fetchAdmin = async (endpoint, options = {}) => {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', 'Admin-Secret': adminSecret.value, ...options.headers },
+      });
+      if (res.status === 401) {
+        isAuthenticated.value = false;
+        localStorage.removeItem('admin_secret');
+        throw new Error('鉴权失败');
+      }
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); if (j.error) msg = j.error; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    };
+
+    const login = async () => {
+      if (!adminSecret.value) return;
+      loading.value = true; errorMsg.value = '';
+      try {
+        await fetchAdmin('/api/admin/plans');
+        isAuthenticated.value = true;
+        localStorage.setItem('admin_secret', adminSecret.value);
+        await refreshAll();
+      } catch (e) { errorMsg.value = e.message; }
+      finally { loading.value = false; isInitialLoad.value = false; }
+    };
+    const logout = () => { isAuthenticated.value = false; adminSecret.value = ''; localStorage.removeItem('admin_secret'); };
+
+    const switchTab = (tab) => {
+      currentTab.value = tab; sidebarOpen.value = false;
+      if (tab === 'users') fetchUsers();
+      else if (tab === 'orders') fetchOrders();
+      else if (tab === 'plans') fetchPlans();
+      else if (tab === 'shared') fetchShared();
+      else if (tab === 'custom') fetchCustom();
+      else if (tab === 'promos') fetchPromos();
+      else if (tab === 'settings') fetchSettings();
+      else if (tab === 'tickets') fetchTickets();
+      else if (tab === 'dashboard') fetchStats();
+    };
+
+    const refreshAll = async () => {
+      loading.value = true;
+      try {
+        await Promise.all([fetchStats(), fetchUsers(false), fetchOrders(false), fetchPlans(false), fetchTickets(false)]);
+      } finally { loading.value = false; isInitialLoad.value = false; }
+    };
+
+    const fetchStats = async () => {
+      try { const d = await fetchAdmin('/api/admin/stats'); if (d.success) stats.value = d.data || {}; } catch (_) {}
+    };
+    const fetchUsers = async (spin = true) => {
+      if (spin) loading.value = true;
+      try { const d = await fetchAdmin('/api/admin/users'); if (d.success) users.value = d.data || []; } catch (e) { showToast(e.message, 'error'); }
+      if (spin) loading.value = false;
+    };
+    const fetchOrders = async (spin = true) => {
+      if (spin) loading.value = true;
+      try { const d = await fetchAdmin('/api/admin/orders'); if (d.success) orders.value = d.data || []; } catch (e) { showToast(e.message, 'error'); }
+      if (spin) loading.value = false;
+    };
+    const fetchPlans = async () => {
+      try { const d = await fetchAdmin('/api/admin/plans'); if (d.success) plans.value = d.data || []; } catch (_) {}
+    };
+    const fetchTickets = async () => {
+      try { const d = await fetchAdmin('/api/admin/tickets'); if (d.success) tickets.value = d.data || []; } catch (_) {}
+    };
+    const fetchShared = async () => {
+      try { const d = await fetchAdmin('/api/admin/watchlist/shared'); if (d.success) sharedList.value = d.data || []; } catch (e) { showToast(e.message, 'error'); }
+    };
+    const fetchCustom = async () => {
+      try { const d = await fetchAdmin('/api/admin/watchlist/custom'); if (d.success) customList.value = d.data || []; } catch (e) { showToast(e.message, 'error'); }
+    };
+    const fetchPromos = async () => {
+      try { const d = await fetchAdmin('/api/admin/promos'); if (d.success) promos.value = d.data || []; } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const settingsForm = reactive({
+      gift_register_days: 1, gift_inviter_days: 3, gift_invitee_days: 2,
+      free_top_n_charts: 3, pay_register_enabled: '1', custom_max_symbols: 3,
+      alipay_qr_url: '', wechat_qr_url: '', default_pay_channel: 'alipay',
+      social_douyin: '', social_shipinhao: '', social_xiaohongshu: '',
+      social_gongzhonghao: '', social_kuaishou: '',
+    });
+    const fetchSettings = async () => {
+      try {
+        const d = await fetchAdmin('/api/admin/settings');
+        if (d.success && d.data) {
+          Object.keys(settingsForm).forEach(k => {
+            if (d.data[k] != null) {
+              settingsForm[k] = (k.includes('days') || k.includes('charts') || k.includes('symbols'))
+                ? Number(d.data[k]) : d.data[k];
+            }
+          });
+        }
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const saveSettings = async () => {
+      try {
+        await fetchAdmin('/api/admin/settings', { method: 'POST', body: JSON.stringify(settingsForm) });
+        showToast('设置已保存', 'success');
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const getPlanName = (id) => { const p = plans.value.find(x => x.id === id); return p ? p.name : id; };
+    const formatDate = (ts) => {
+      if (!ts) return '-';
+      const d = new Date(typeof ts === 'number' ? ts : ts);
+      if (isNaN(d.getTime())) return '-';
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+    const toLocalInput = (ts) => {
+      if (!ts) return '';
+      const d = new Date(ts);
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+
+    const chargeModalVisible = ref(false);
+    const chargeTarget = ref(null);
+    const chargeDays = ref(7);
+    const openChargeModal = (u) => { chargeTarget.value = u; chargeDays.value = 7; chargeModalVisible.value = true; };
+    const submitCharge = async () => {
+      try {
+        await fetchAdmin('/api/admin/users/charge', { method: 'POST', body: JSON.stringify({ user_id: chargeTarget.value.id, add_days: chargeDays.value }) });
+        showToast('已调整天数', 'success'); chargeModalVisible.value = false; fetchUsers(false);
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const batchChargeVisible = ref(false);
+    const batchDays = ref(7);
+    const openBatchCharge = () => {
+      if (!selectedUserIds.value.length) { showToast('请先勾选用户', 'error'); return; }
+      batchDays.value = 7; batchChargeVisible.value = true;
+    };
+    const submitBatchCharge = async () => {
+      try {
+        await fetchAdmin('/api/admin/users/batch_charge', { method: 'POST', body: JSON.stringify({ user_ids: selectedUserIds.value, add_days: batchDays.value }) });
+        showToast('批量充值完成', 'success'); batchChargeVisible.value = false; selectedUserIds.value = []; fetchUsers(false);
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const toggleSelectAllUsers = (e) => {
+      selectedUserIds.value = e.target.checked ? filteredUsers.value.map(u => u.id) : [];
+    };
+
+    const resetPwdVisible = ref(false);
+    const resetTarget = ref(null);
+    const resetConfirmSecret = ref('');
+    const openResetPwd = (u) => { resetTarget.value = u; resetConfirmSecret.value = ''; resetPwdVisible.value = true; };
+    const submitResetPwd = async () => {
+      try {
+        const d = await fetchAdmin('/api/admin/users/reset_password', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: resetTarget.value.id, admin_confirm: resetConfirmSecret.value }),
+        });
+        showToast(d.message || '已重置', 'success'); resetPwdVisible.value = false;
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const deleteUserVisible = ref(false);
+    const deleteTarget = ref(null);
+    const deleteConfirmSecret = ref('');
+    const openDeleteUser = (u) => { deleteTarget.value = u; deleteConfirmSecret.value = ''; deleteUserVisible.value = true; };
+    const submitDeleteUser = async () => {
+      try {
+        await fetchAdmin('/api/admin/users', { method: 'DELETE', body: JSON.stringify({ user_id: deleteTarget.value.id, admin_confirm: deleteConfirmSecret.value }) });
+        showToast('用户已删除', 'success'); deleteUserVisible.value = false; fetchUsers(false);
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const approveOrder = async (o) => {
+      if (!confirm(`通过订单？\n${o.username || o.register_username}\n${o.order_type === 'custom_watchlist' ? '将激活定制标的' : '将发放通用VIP'}`)) return;
+      try {
+        await fetchAdmin('/api/admin/orders/approve', { method: 'POST', body: JSON.stringify({ order_id: o.id, user_id: o.user_id }) });
+        showToast('已通过', 'success'); fetchOrders(false); fetchUsers(false); fetchStats();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const rejectOrder = async (o) => {
+      if (!confirm('确认驳回？')) return;
+      try {
+        await fetchAdmin('/api/admin/orders/reject', { method: 'POST', body: JSON.stringify({ order_id: o.id }) });
+        showToast('已驳回', 'success'); fetchOrders(false);
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const planModalVisible = ref(false);
+    const planForm = reactive({ id: '', name: '', price: 0, days: 0, tag: '', sort_order: 0, enabled: true, plan_type: 'shared', isEdit: false });
+    const openPlanModal = (p = null) => {
+      if (p) Object.assign(planForm, { ...p, enabled: !!p.enabled, plan_type: p.plan_type || 'shared', isEdit: true });
+      else Object.assign(planForm, { id: '', name: '', price: 0, days: 0, tag: '', sort_order: 0, enabled: true, plan_type: 'shared', isEdit: false });
+      planModalVisible.value = true;
+    };
+    const submitPlan = async () => {
+      try {
+        await fetchAdmin('/api/admin/plans', { method: 'POST', body: JSON.stringify(planForm) });
+        showToast('已保存', 'success'); planModalVisible.value = false; fetchPlans();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deletePlan = async (p) => {
+      if (!confirm(`删除套餐 ${p.name}？`)) return;
+      try {
+        await fetchAdmin('/api/admin/plans', { method: 'DELETE', body: JSON.stringify({ id: p.id }) });
+        showToast('已删除', 'success'); fetchPlans();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const sharedModalVisible = ref(false);
+    const sharedForm = reactive({ id: null, etf_code: '', etf_name: '', sort_order: 0, enabled: true, note: '' });
+    const openSharedModal = (w = null) => {
+      if (w) Object.assign(sharedForm, { id: w.id, etf_code: w.etf_code, etf_name: w.etf_name, sort_order: w.sort_order, enabled: !!w.enabled, note: w.note || '' });
+      else Object.assign(sharedForm, { id: null, etf_code: '', etf_name: '', sort_order: 0, enabled: true, note: '' });
+      sharedModalVisible.value = true;
+    };
+    const submitShared = async () => {
+      try {
+        await fetchAdmin('/api/admin/watchlist/shared', { method: 'POST', body: JSON.stringify(sharedForm) });
+        showToast('已保存', 'success'); sharedModalVisible.value = false; fetchShared();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deleteShared = async (w) => {
+      if (!confirm(`删除 ${w.etf_code}？`)) return;
+      try {
+        await fetchAdmin('/api/admin/watchlist/shared', { method: 'DELETE', body: JSON.stringify({ id: w.id }) });
+        showToast('已删除', 'success'); fetchShared();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const showBatchImport = ref(false);
+    const batchImportText = ref('');
+    const submitBatchImport = async () => {
+      const items = batchImportText.value.split('\n').map(line => {
+        const parts = line.split(/[,，\t]/).map(s => s.trim()).filter(Boolean);
+        if (!parts.length) return null;
+        return { etf_code: parts[0], etf_name: parts[1] || parts[0] };
+      }).filter(Boolean);
+      try {
+        const d = await fetchAdmin('/api/admin/watchlist/shared/batch', { method: 'POST', body: JSON.stringify({ items }) });
+        showToast(`新增 ${d.added}，跳过 ${d.skipped}`, 'success');
+        showBatchImport.value = false; batchImportText.value = ''; fetchShared();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const customEditVisible = ref(false);
+    const customEdit = reactive({ id: null, etf_code: '', etf_name: '', status: 'active', expireLocal: '' });
+    const openCustomEdit = (w) => {
+      Object.assign(customEdit, { id: w.id, etf_code: w.etf_code, etf_name: w.etf_name, status: w.status, expireLocal: toLocalInput(w.expire_at) });
+      customEditVisible.value = true;
+    };
+    const submitCustomEdit = async () => {
+      try {
+        const expire_at = customEdit.expireLocal ? new Date(customEdit.expireLocal).getTime() : null;
+        await fetchAdmin('/api/admin/watchlist/custom', {
+          method: 'POST',
+          body: JSON.stringify({ id: customEdit.id, etf_code: customEdit.etf_code, etf_name: customEdit.etf_name, status: customEdit.status, expire_at }),
+        });
+        showToast('已保存', 'success'); customEditVisible.value = false; fetchCustom();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deleteCustom = async (w) => {
+      if (!confirm('删除该定制？')) return;
+      try {
+        await fetchAdmin('/api/admin/watchlist/custom', { method: 'DELETE', body: JSON.stringify({ id: w.id }) });
+        showToast('已删除', 'success'); fetchCustom();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const promoModalVisible = ref(false);
+    const promoForm = reactive({
+      id: null, code: '', name: '', plan_id: '', discount_type: 'percent', discount_value: 10,
+      startLocal: '', endLocal: '', max_uses: null, max_per_user: 1, enabled: true,
+    });
+    const openPromoModal = (p = null) => {
+      if (p) {
+        Object.assign(promoForm, {
+          id: p.id, code: p.code, name: p.name || '', plan_id: p.plan_id || '',
+          discount_type: p.discount_type, discount_value: p.discount_value,
+          startLocal: toLocalInput(p.start_at), endLocal: toLocalInput(p.end_at),
+          max_uses: p.max_uses, max_per_user: p.max_per_user, enabled: !!p.enabled,
+        });
+      } else {
+        const now = Date.now();
+        Object.assign(promoForm, {
+          id: null, code: '', name: '', plan_id: '', discount_type: 'percent', discount_value: 10,
+          startLocal: toLocalInput(now), endLocal: toLocalInput(now + 7 * 86400000),
+          max_uses: null, max_per_user: 1, enabled: true,
+        });
+      }
+      promoModalVisible.value = true;
+    };
+    const submitPromo = async () => {
+      try {
+        await fetchAdmin('/api/admin/promos', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: promoForm.id, code: promoForm.code, name: promoForm.name,
+            plan_id: promoForm.plan_id || null, discount_type: promoForm.discount_type,
+            discount_value: promoForm.discount_value,
+            start_at: new Date(promoForm.startLocal).getTime(),
+            end_at: new Date(promoForm.endLocal).getTime(),
+            max_uses: promoForm.max_uses || null, max_per_user: promoForm.max_per_user, enabled: promoForm.enabled,
+          }),
+        });
+        showToast('已保存', 'success'); promoModalVisible.value = false; fetchPromos();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    const deletePromo = async (p) => {
+      if (!confirm(`删除 ${p.code}？`)) return;
+      try {
+        await fetchAdmin('/api/admin/promos', { method: 'DELETE', body: JSON.stringify({ id: p.id }) });
+        showToast('已删除', 'success'); fetchPromos();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const replyModalVisible = ref(false);
+    const currentTicket = ref(null);
+    const replyMessage = ref('');
+    const openReplyModal = (t) => { currentTicket.value = t; replyMessage.value = t.admin_reply || ''; replyModalVisible.value = true; };
+    const submitReply = async () => {
+      try {
+        await fetchAdmin('/api/admin/tickets/reply', { method: 'POST', body: JSON.stringify({ ticket_id: currentTicket.value.id, reply_message: replyMessage.value }) });
+        showToast('已回复', 'success'); replyModalVisible.value = false; fetchTickets();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const broadcastVisible = ref(false);
+    const broadcastLoading = ref(false);
+    const broadcastForm = reactive({ title: '', content: '', also_tg: true });
+    const openBroadcast = () => {
+      broadcastForm.title = '';
+      broadcastForm.content = '';
+      broadcastForm.also_tg = true;
+      broadcastVisible.value = true;
+    };
+    const submitBroadcast = async () => {
+      if (!broadcastForm.content.trim()) { showToast('请填写内容', 'error'); return; }
+      broadcastLoading.value = true;
+      try {
+        const d = await fetchAdmin('/api/admin/broadcast', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: broadcastForm.title || '系统通知',
+            content: broadcastForm.content.trim(),
+            also_tg: broadcastForm.also_tg,
+          }),
+        });
+        showToast(d.message || '广播成功', 'success');
+        broadcastVisible.value = false;
+        fetchTickets();
+      } catch (e) { showToast(e.message, 'error'); }
+      finally { broadcastLoading.value = false; }
+    };
+
+    let pollTimer = null;
+    onMounted(() => {
+      if (adminSecret.value) login();
+      pollTimer = setInterval(() => { if (isAuthenticated.value) { fetchOrders(false); fetchTickets(); fetchStats(); } }, 60000);
+    });
+    onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
+
+    return {
+      adminSecret, isAuthenticated, currentTab, loading, isInitialLoad, errorMsg, sidebarOpen,
+      login, logout, switchTab, refreshAll,
+      users, orders, plans, tickets, sharedList, customList, promos, stats,
+      userSearchQuery, orderSearchQuery, orderStatusFilter, planTypeFilter, selectedUserIds,
+      filteredUsers, filteredOrders, filteredPlans, pendingOrdersCount, pendingTicketsCount,
+      fetchUsers, fetchOrders, fetchPlans, fetchShared, fetchCustom, fetchPromos, fetchTickets,
+      getPlanName, formatDate, toasts,
+      chargeModalVisible, chargeTarget, chargeDays, openChargeModal, submitCharge,
+      batchChargeVisible, batchDays, openBatchCharge, submitBatchCharge, toggleSelectAllUsers,
+      resetPwdVisible, resetTarget, resetConfirmSecret, openResetPwd, submitResetPwd,
+      deleteUserVisible, deleteTarget, deleteConfirmSecret, openDeleteUser, submitDeleteUser,
+      approveOrder, rejectOrder,
+      planModalVisible, planForm, openPlanModal, submitPlan, deletePlan,
+      sharedModalVisible, sharedForm, openSharedModal, submitShared, deleteShared,
+      showBatchImport, batchImportText, submitBatchImport,
+      customEditVisible, customEdit, openCustomEdit, submitCustomEdit, deleteCustom,
+      promoModalVisible, promoForm, openPromoModal, submitPromo, deletePromo,
+      settingsForm, fetchSettings, saveSettings,
+      replyModalVisible, currentTicket, replyMessage, openReplyModal, submitReply,
+      broadcastVisible, broadcastLoading, broadcastForm, openBroadcast, submitBroadcast,
+    };
+  },
+}).mount('#admin-app');
+</script>
+</body>
+</html>
