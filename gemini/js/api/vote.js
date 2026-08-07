@@ -5,6 +5,15 @@
 import { request } from "./http.js";
 
 export const voteApi = {
+  // 【前台】获取票选批量初始数据
+  async batchSeedVotes(items) {
+  return request("/api/admin/vote/seed", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+},
+  
+  
   // 【前台】获取票选排行榜（支持搜索，最多200）
   async fetchRankings(keyword = "") {
     const query = keyword ? `?q=${encodeURIComponent(keyword)}` : "";
