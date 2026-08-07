@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 个人中心分块组件 (彻底修复：提取正则下标与 GBK 显式解码)
+ * 波幅探长 - 个人中心分块组件 (修复：彻底删除多余词，还原页面正常渲染)
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
@@ -33,7 +33,7 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // 严谨修复：腾讯财经接口股票/ETF 代码自动查中文名称函数
+    // 腾讯财经接口股票/ETF 代码自动查中文名称函数
     const fetchStockNameByCode = async (codeStr) => {
       const code = String(codeStr || "").trim().toUpperCase();
       if (!code) return "";
@@ -62,14 +62,14 @@ export default {
           }
         }
 
-        // 2. 正确匹配引号内的文本，并安全提取 index 1 中文名称
+        // 2. 正确匹配引号内的文本，并提取中文名称
         // 原始文本格式如: v_s_sz159326="51~高端装备ETF~159326~1.694~0.018~1.07~..."
         const match = text.match(/"([^"]+)"/);
         if (match && match) {
           const content = match;
           const parts = content.split("~");
           if (parts.length > 1 && parts) {
-            return parts.trim(); // 完美提取纯中文名："高端装备ETF"
+            return parts.trim(); // 提取纯中文名："高端装备ETF"
           }
         }
       } catch (err) {
