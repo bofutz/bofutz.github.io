@@ -4,7 +4,7 @@
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
-
+   
 const { ref, computed, onMounted } = Vue;
 
 export default {
