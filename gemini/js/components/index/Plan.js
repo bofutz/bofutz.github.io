@@ -249,10 +249,10 @@ export default {
         </div>
 
         <div class="flex justify-center gap-2 text-xs">
-          <button @click="payChannel='alipay'" class="px-4 py-1.5 rounded-full border"
-                  :class="payChannel==='alipay'?'theme-bg text-white border-transparent font-bold':'bg-white'">支付宝</button>
           <button @click="payChannel='wechat'" class="px-4 py-1.5 rounded-full border"
                   :class="payChannel==='wechat'?'theme-bg text-white border-transparent font-bold':'bg-white'">微信支付</button>
+          <button @click="payChannel='alipay'" class="px-4 py-1.5 rounded-full border"
+                  :class="payChannel==='alipay'?'theme-bg text-white border-transparent font-bold':'bg-white'">支付宝</button>
         </div>
 
         <!-- 二维码渲染区 -->
@@ -260,7 +260,7 @@ export default {
           <div class="w-56 h-56 bg-slate-50 rounded-2xl p-3 border-2 border-dashed border-slate-200 mb-2 flex items-center justify-center shadow-inner">
             <img v-if="currentPayQrSrc" :src="currentPayQrSrc" class="w-full h-full object-contain rounded-xl" alt="收款码">
             <span v-else class="text-xs text-slate-400 text-center px-4 leading-relaxed">
-              请在后台设置<br><strong>{{ payChannel === 'alipay' ? '支付宝' : '微信' }}收款码 URL</strong><br>(支持图片直链或支付网址)
+              请在后台设置<br><strong>{{ payChannel === 'alipay' ? '微信' : '支付宝' }}收款码 URL</strong><br>(支持图片直链或支付网址)
             </span>
           </div>
           <div class="text-[11px] text-slate-400 text-center">长按保存二维码或扫码完成支付</div>
