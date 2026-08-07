@@ -33,7 +33,7 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // 完全采用您 Chrome 插件 background.js 中的原版查名称算法 (GBK解码 + 正则精准截取)
+    // 完全采用 Chrome 插件 background.js 中的原版查名称算法 (GBK解码 + 正则精准截取)
     const fetchStockNameByCode = async (symbolStr) => {
       try {
         const codeMatch = String(symbolStr || "").match(/\d{6}/);
@@ -53,7 +53,7 @@ export default {
         
         // 用插件原版正则精准提取两个 ~ 之间的中文名称
         const match = text.match(/="[^~]+~([^~]+)/);
-        return match && match ? match.trim() : "";
+        return match ? match[1].trim() : "";
       } catch (err) {
         console.error("fetchName error:", err);
         return "";
