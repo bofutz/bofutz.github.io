@@ -2,7 +2,7 @@
  * 波幅探长 - 后台【数据概览】分块组件
  * js/components/admin/Dashboard.js
  */
-import { store } from "../../store.js";
+import { store } from "../../store.js"; 
 import { adminApi } from "../../api/admin.js";
 
 const { ref, reactive, onMounted } = Vue;
