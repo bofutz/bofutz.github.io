@@ -343,21 +343,24 @@ export default {
         <p>暂无相关行情数据</p>
       </div>
 
-      <!-- 看板表格 (所有列支持点击排序) -->
+      <!-- 看板表格 (表头单元格全端粘性吸顶固定) -->
       <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="overflow-x-auto custom-scrollbar">
           <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
-            <thead class="bg-slate-50 border-b border-slate-100 sticky top-0 z-30">
+            <thead class="bg-slate-50 border-b border-slate-100">
               <tr class="text-xs text-slate-600 font-bold select-none">
-                <th class="py-3 px-4 text-left etf-name-column sticky left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors" @click="handleSort('etf_name')">
+                <!-- 标的名称：双向固定 (垂直吸顶 top-0 + 水平固定 left-0)，层级 z-40 -->
+                <th class="py-3 px-4 text-left etf-name-column sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('etf_name')">
                   标的名称
                   <i v-if="sortColumn==='etf_name'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                 </th>
-                <th v-for="idx in 5" :key="idx" class="py-3 px-2 cursor-pointer hover:bg-slate-100 transition-colors" @click="handleSort('d'+(idx-1))">
+                <!-- 周一 ~ 周五：垂直吸顶 top-0 -->
+                <th v-for="idx in 5" :key="idx" class="py-3 px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('d'+(idx-1))">
                   周{{ ['一','二','三','四','五'][idx-1] }}
                   <i v-if="sortColumn==='d'+(idx-1)" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                 </th>
-                <th class="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors" @click="handleSort('week_status')">
+                <!-- 周线：垂直吸顶 top-0 -->
+                <th class="py-3 px-4 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('week_status')">
                   周线
                   <i v-if="sortColumn==='week_status'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                 </th>
