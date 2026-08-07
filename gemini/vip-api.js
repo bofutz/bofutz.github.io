@@ -1,12 +1,10 @@
 /**
- * 波幅探长 VIP API - Cloudflare Worker (整份最新版)
- * 已适配：
- * 1. 按购买分类发货 (买通用充通用 VIP，买定制激活定制监控)
- * 2. 优惠码后台开关控制 (promo_enabled)
- * 3. 监控投票榜单与后台管理
+ * 波幅探长 VIP API - Cloudflare Worker (完整对齐版)
+ * 已完整映射前台 + 后台所有功能
+ * 支持：通用VIP / 定制监控 / 票选监控 / 客服工单(含图片) / 优惠码 / 套餐 / 系统设置
  */
 
-const generateRandomString = (length) => {
+const generateRandomString = (length = 16) => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let result = "";
   for (let i = 0; i < length; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -45,19 +43,16 @@ function getTgConfig(env) {
   };
 }
 
-async function sendToTelegram(env, method, body) {
-  const { token } = getTgConfig(env);
-  if (!token) return null;
+async function sendToTelegram(env, text) {
+  const { token, chatId } = getTgConfig(env);
+  if (!token || !chatId) return null;
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
     });
-    return await res.json();
-  } catch (_) {
-    return null;
-  }
+  } catch (_) {}
 }
 
 function isEmail(s) {
@@ -67,7 +62,7 @@ function isEmail(s) {
 async function authenticateUser(request, env) {
   const authHeader = request.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
-  const token = authHeader.split(" ");
+  const token = authHeader.split(" ")[1];
   if (!token) return null;
   const session = await env.DB.prepare(
     "SELECT user_id FROM sessions WHERE token = ? AND expire_at > ?"
@@ -83,12 +78,13 @@ function checkAdmin(request, env) {
 
 async function initTables(env) {
   try {
+    // users
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
         password_hash TEXT,
-        vip_expire_at INTEGER,
+        vip_expire_at INTEGER DEFAULT 0,
         referral_code TEXT,
         referred_by TEXT,
         created_at INTEGER,
@@ -96,17 +92,19 @@ async function initTables(env) {
         vip_days_left INTEGER DEFAULT 0,
         balance REAL DEFAULT 0,
         shared_vip_days INTEGER DEFAULT 0
-      );
+      )
     `).run();
 
+    // sessions
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY,
         user_id INTEGER,
         expire_at INTEGER
-      );
+      )
     `).run();
 
+    // orders
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,9 +122,10 @@ async function initTables(env) {
         created_at INTEGER,
         approved_at INTEGER,
         vip_days_granted INTEGER DEFAULT 0
-      );
+      )
     `).run();
 
+    // vip_plans
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS vip_plans (
         id TEXT PRIMARY KEY,
@@ -138,9 +137,10 @@ async function initTables(env) {
         enabled INTEGER DEFAULT 1,
         plan_type TEXT DEFAULT 'both',
         created_at INTEGER
-      );
+      )
     `).run();
 
+    // promo_codes
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS promo_codes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,9 +152,10 @@ async function initTables(env) {
         end_at INTEGER,
         enabled INTEGER DEFAULT 1,
         created_at INTEGER
-      );
+      )
     `).run();
 
+    // watchlist_shared
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS watchlist_shared (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,9 +165,10 @@ async function initTables(env) {
         enabled INTEGER DEFAULT 1,
         created_at INTEGER,
         updated_at INTEGER
-      );
+      )
     `).run();
 
+    // watchlist_custom
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS watchlist_custom (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,24 +178,30 @@ async function initTables(env) {
         status TEXT DEFAULT 'pending',
         start_at INTEGER,
         expire_at INTEGER,
+        order_id INTEGER,
         created_at INTEGER,
         updated_at INTEGER
-      );
+      )
     `).run();
 
+    // tickets（支持图片 + 60天过期）
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS tickets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         subject TEXT,
-        level TEXT DEFAULT 'medium',
         message TEXT,
+        images TEXT DEFAULT '[]',
         status TEXT DEFAULT 'pending',
         admin_reply TEXT,
-        created_at INTEGER
-      );
+        reply_images TEXT DEFAULT '[]',
+        created_at INTEGER,
+        replied_at INTEGER,
+        expire_at INTEGER
+      )
     `).run();
 
+    // announcements
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS announcements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,9 +209,10 @@ async function initTables(env) {
         content TEXT,
         created_at INTEGER,
         created_by TEXT
-      );
+      )
     `).run();
 
+    // vote_records
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS vote_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -212,23 +221,25 @@ async function initTables(env) {
         etf_name TEXT,
         month_key TEXT,
         created_at INTEGER
-      );
+      )
     `).run();
 
+    // system_settings
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS system_settings (
         key TEXT PRIMARY KEY,
         value TEXT,
         updated_at INTEGER
-      );
+      )
     `).run();
 
+    // etf_charts
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS etf_charts (
         code TEXT PRIMARY KEY,
         chart_url TEXT,
         updated_at INTEGER
-      );
+      )
     `).run();
   } catch (e) {
     console.error("Init tables error:", e);
@@ -256,7 +267,7 @@ function getSharedVipDays(user) {
   return user.vip_days_left || 0;
 }
 
-// 订单核算发货逻辑
+// 订单审核发货核心逻辑
 async function approveOrderCore(env, order, opts = {}) {
   const now = Date.now();
   let targetUserId = opts.user_id || order.user_id;
@@ -266,6 +277,7 @@ async function approveOrderCore(env, order, opts = {}) {
 
   const isCustomOrder = order.order_type === "custom_watchlist";
 
+  // 游客支付即注册
   if (!targetUserId && order.register_username && order.register_password_hash) {
     const exists = await env.DB.prepare("SELECT id FROM users WHERE username=?").bind(order.register_username).first();
     if (exists) {
@@ -289,6 +301,7 @@ async function approveOrderCore(env, order, opts = {}) {
   ).bind(now, days, order.id).run();
 
   if (!isCustomOrder) {
+    // 通用 VIP
     await env.DB.prepare(
       `UPDATE users SET
         shared_vip_days = COALESCE(shared_vip_days, 0) + ?,
@@ -296,9 +309,11 @@ async function approveOrderCore(env, order, opts = {}) {
        WHERE id=?`
     ).bind(days, days, targetUserId).run();
   } else {
+    // 定制监控：激活该用户所有 pending 标的
     const expireAt = now + days * 86400000;
     await env.DB.prepare(
-      `UPDATE watchlist_custom SET status='active', start_at=?, expire_at=?, order_id=?, updated_at=?
+      `UPDATE watchlist_custom 
+       SET status='active', start_at=?, expire_at=?, order_id=?, updated_at=?
        WHERE user_id=? AND status='pending'`
     ).bind(now, expireAt, order.id, now, targetUserId).run();
   }
@@ -307,7 +322,7 @@ async function approveOrderCore(env, order, opts = {}) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
@@ -317,10 +332,13 @@ export default {
     const path = url.pathname;
 
     try {
+      // ==================== 公共接口 ====================
+
+      // 前台公共设置
       if (path === "/api/settings/public" && request.method === "GET") {
         const { results } = await env.DB.prepare("SELECT key, value FROM system_settings").all();
         const map = {};
-        (results || []).forEach((r) => { map[r.key] = r.value; });
+        (results || []).forEach((r) => (map[r.key] = r.value));
         return json({
           success: true,
           data: {
@@ -340,10 +358,10 @@ export default {
         });
       }
 
+      // 注册
       if (path === "/api/register" && request.method === "POST") {
         const { username, password, ref_code } = await request.json();
         if (!username || !password) return json({ error: "账号或密码不能为空" }, 400);
-        if (!isEmail(username)) return json({ error: "请输入有效的电子邮箱" }, 400);
         if (String(password).length < 6) return json({ error: "密码至少需要 6 位" }, 400);
 
         const existing = await env.DB.prepare("SELECT id FROM users WHERE username=?").bind(username.trim()).first();
@@ -376,6 +394,7 @@ export default {
         return json({ success: true, message: "注册成功", vip_days_gift: myShared });
       }
 
+      // 登录
       if (path === "/api/login" && request.method === "POST") {
         const { username, password } = await request.json();
         const hashedPassword = await hashPassword(password);
@@ -399,6 +418,26 @@ export default {
         });
       }
 
+      // 修改密码
+      if (path === "/api/user/change-password" && request.method === "POST") {
+        const userId = await authenticateUser(request, env);
+        if (!userId) return json({ error: "未登录" }, 401);
+        const { old_password, new_password } = await request.json();
+        if (!old_password || !new_password) return json({ error: "请填写完整" }, 400);
+        if (String(new_password).length < 6) return json({ error: "新密码至少 6 位" }, 400);
+
+        const oldHash = await hashPassword(old_password);
+        const user = await env.DB.prepare("SELECT id FROM users WHERE id=? AND password_hash=?").bind(userId, oldHash).first();
+        if (!user) return json({ error: "原密码错误" }, 400);
+
+        const newHash = await hashPassword(new_password);
+        await env.DB.prepare("UPDATE users SET password_hash=? WHERE id=?").bind(newHash, userId).run();
+        // 清除所有 session 强制重新登录
+        await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(userId).run();
+        return json({ success: true, message: "密码修改成功，请重新登录" });
+      }
+
+      // 图表权限
       if (path === "/api/etfs" && request.method === "GET") {
         const userId = await authenticateUser(request, env);
         let isVip = false;
@@ -424,11 +463,15 @@ export default {
         return json({ is_vip: isVip, shared_vip_days: sharedDays, charts: chartsData, chart_as_of });
       }
 
+      // 通用监控列表（前台）
       if (path === "/api/watchlist/shared" && request.method === "GET") {
-        const { results } = await env.DB.prepare("SELECT * FROM watchlist_shared WHERE enabled=1 ORDER BY sort_order ASC, id ASC").all();
+        const { results } = await env.DB.prepare(
+          "SELECT * FROM watchlist_shared WHERE enabled=1 ORDER BY sort_order ASC, id ASC"
+        ).all();
         return json({ success: true, data: results || [] });
       }
 
+      // 套餐列表
       if (path === "/api/plans" && request.method === "GET") {
         const type = url.searchParams.get("type");
         let sql = "SELECT * FROM vip_plans WHERE enabled=1";
@@ -443,12 +486,12 @@ export default {
         return json({ success: true, data: results || [] });
       }
 
+      // 优惠码校验
       if (path === "/api/promo/check" && request.method === "POST") {
         const promoEnabled = await getSetting(env, "promo_enabled", "1");
         if (promoEnabled === "0" || promoEnabled === "false") {
           return json({ success: false, error: "优惠码功能未开启" }, 400);
         }
-
         const { plan_id, promo_code } = await request.json();
         if (!plan_id) return json({ error: "缺少 plan_id" }, 400);
         const plan = await env.DB.prepare("SELECT * FROM vip_plans WHERE id=? AND enabled=1").bind(plan_id).first();
@@ -457,22 +500,33 @@ export default {
         const basePrice = Number(plan.price);
         let amount = basePrice;
         if (promo_code) {
-          const promo = await env.DB.prepare("SELECT * FROM promo_codes WHERE UPPER(code)=? AND enabled=1").bind(String(promo_code).toUpperCase()).first();
+          const promo = await env.DB.prepare(
+            "SELECT * FROM promo_codes WHERE UPPER(code)=? AND enabled=1"
+          ).bind(String(promo_code).toUpperCase()).first();
           if (promo) {
+            const now = Date.now();
+            if (promo.start_at && now < promo.start_at) return json({ success: false, error: "优惠码未到生效时间" });
+            if (promo.end_at && now > promo.end_at) return json({ success: false, error: "优惠码已过期" });
             if (promo.discount_type === "percent") {
               amount = Math.max(0.01, basePrice * (1 - Number(promo.discount_value) / 100));
             } else {
               amount = Math.max(0.01, basePrice - Number(promo.discount_value));
             }
+          } else {
+            return json({ success: false, error: "优惠码无效" });
           }
         }
         amount = Math.round(amount * 100) / 100;
         return json({ success: true, amount, original_amount: basePrice });
       }
 
+      // 提交订单（支持定制标的列表）
       if (path === "/api/orders" && request.method === "POST") {
         const body = await request.json();
-        const { plan_id, amount, tx_id_last6, promo_code, order_type, register_username, register_password } = body;
+        const {
+          plan_id, amount, tx_id_last6, promo_code, order_type,
+          register_username, register_password, custom_items = []
+        } = body;
 
         if (!plan_id || !tx_id_last6) return json({ error: "参数不完整" }, 400);
         if (!/^\d{6}$/.test(String(tx_id_last6))) return json({ error: "凭证须为6位数字" }, 400);
@@ -496,71 +550,121 @@ export default {
         const now = Date.now();
         const ins = await env.DB.prepare(
           `INSERT INTO orders (user_id, plan_id, amount, original_amount, tx_id_last6, status, order_type, symbol_count, promo_code, register_username, register_password_hash, created_at)
-           VALUES (?,?,?,?,?,'pending',?,1,?,?,?,?)`
-        ).bind(userId || null, plan_id, Number(amount) || plan.price, plan.price, String(tx_id_last6), isCustom ? "custom_watchlist" : "vip", promo_code ? String(promo_code).toUpperCase() : null, regName, registerHash, now).run();
+           VALUES (?,?,?,?,?,'pending',?,?,?,?,?,?)`
+        ).bind(
+          userId || null, plan_id, Number(amount) || plan.price, plan.price,
+          String(tx_id_last6), isCustom ? "custom_watchlist" : "vip",
+          Array.isArray(custom_items) ? custom_items.length : 1,
+          promo_code ? String(promo_code).toUpperCase() : null,
+          regName, registerHash, now
+        ).run();
 
-        return json({ success: true, message: "订单提交成功", order_id: ins?.meta?.last_row_id });
+        const orderId = ins?.meta?.last_row_id;
+
+        // 定制订单：写入 pending 标的
+        if (isCustom && Array.isArray(custom_items) && custom_items.length > 0 && userId) {
+          for (const item of custom_items) {
+            const code = String(item.etf_code || item.code || "").trim().toUpperCase();
+            if (!code) continue;
+            await env.DB.prepare(
+              `INSERT INTO watchlist_custom (user_id, etf_code, etf_name, status, created_at, updated_at)
+               VALUES (?, ?, ?, 'pending', ?, ?)`
+            ).bind(userId, code, item.etf_name || item.name || code, now, now).run();
+          }
+        }
+
+        // Telegram 通知
+        await sendToTelegram(env,
+          `🛒 <b>新订单待审核</b>\n类型: ${isCustom ? "定制监控" : "通用VIP"}\n金额: ¥${amount}\n凭证: ${tx_id_last6}\n用户: ${userId || regName || "游客"}`
+        );
+
+        return json({ success: true, message: "订单提交成功", order_id: orderId });
       }
 
+      // 用户订单列表
       if (path === "/api/user/orders" && request.method === "GET") {
         const userId = await authenticateUser(request, env);
         if (!userId) return json({ error: "未登录" }, 401);
-        const { results } = await env.DB.prepare("SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 100").bind(userId).all();
+        const { results } = await env.DB.prepare(
+          "SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 100"
+        ).bind(userId).all();
         return json({ success: true, data: results || [] });
       }
 
+      // 我的邀请人
       if (path === "/api/user/invitees" && request.method === "GET") {
         const userId = await authenticateUser(request, env);
         if (!userId) return json({ error: "未登录" }, 401);
         const me = await env.DB.prepare("SELECT referral_code FROM users WHERE id=?").bind(userId).first();
         if (!me?.referral_code) return json({ success: true, data: [] });
-        const { results } = await env.DB.prepare("SELECT id, username, created_at, shared_vip_days, vip_days_left FROM users WHERE referred_by=? ORDER BY created_at DESC").bind(me.referral_code).all();
+        const { results } = await env.DB.prepare(
+          "SELECT id, username, created_at, shared_vip_days, vip_days_left FROM users WHERE referred_by=? ORDER BY created_at DESC"
+        ).bind(me.referral_code).all();
         return json({ success: true, data: results || [] });
       }
 
+      // 用户定制监控列表
       if (path === "/api/user/watchlist/custom" && request.method === "GET") {
         const userId = await authenticateUser(request, env);
         if (!userId) return json({ error: "未登录" }, 401);
-        const { results } = await env.DB.prepare("SELECT * FROM watchlist_custom WHERE user_id=? ORDER BY created_at DESC").bind(userId).all();
+        const { results } = await env.DB.prepare(
+          "SELECT * FROM watchlist_custom WHERE user_id=? ORDER BY created_at DESC"
+        ).bind(userId).all();
         return json({ success: true, data: results || [] });
       }
 
+      // 用户删除自己的定制标的
+      if (path === "/api/user/watchlist/custom" && request.method === "DELETE") {
+        const userId = await authenticateUser(request, env);
+        if (!userId) return json({ error: "未登录" }, 401);
+        const { id } = await request.json();
+        await env.DB.prepare("DELETE FROM watchlist_custom WHERE id=? AND user_id=?").bind(id, userId).run();
+        return json({ success: true, message: "已移除" });
+      }
+
+      // ==================== 票选监控 ====================
+
+      // 排行榜（支持搜索，最多200）
       if (path === "/api/vote/rankings" && request.method === "GET") {
         const now = new Date();
         const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const q = url.searchParams.get("q") || "";
+        const q = (url.searchParams.get("q") || "").trim().toUpperCase();
 
-        let sql = `SELECT etf_code, etf_name, COUNT(*) as vote_count FROM vote_records WHERE month_key=?`;
-        const binds = [monthKey];
+        let sql = `
+          SELECT etf_code, etf_name, COUNT(*) as vote_count,
+                 ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM vote_records WHERE month_key=?), 1) as percentage
+          FROM vote_records WHERE month_key=?
+        `;
+        const binds = [monthKey, monthKey];
         if (q) {
           sql += ` AND (etf_code LIKE ? OR etf_name LIKE ?)`;
           binds.push(`%${q}%`, `%${q}%`);
         }
-        sql += ` GROUP BY etf_code ORDER BY vote_count DESC LIMIT 100`;
+        sql += ` GROUP BY etf_code ORDER BY vote_count DESC LIMIT 200`;
 
         const { results } = await env.DB.prepare(sql).bind(...binds).all();
-        const total = (results || []).reduce((acc, cur) => acc + cur.vote_count, 0) || 1;
-        const data = (results || []).map((r) => ({
-          ...r,
-          percentage: ((r.vote_count / total) * 100).toFixed(1),
-        }));
-
-        return json({ success: true, data });
+        return json({ success: true, data: results || [] });
       }
 
-      if (path === "/api/vote/my-status" && request.method === "GET") {
+      // 用户投票状态
+      if (path === "/api/vote/status" && request.method === "GET") {
         const userId = await authenticateUser(request, env);
-        if (!userId) return json({ error: "未登录" }, 401);
+        if (!userId) return json({ success: true, has_qualified: false, monthly_limit: 10, votes_used: 0, votes_remaining: 0, my_votes: [] });
+
+        const user = await env.DB.prepare("SELECT shared_vip_days, vip_days_left FROM users WHERE id=?").bind(userId).first();
+        const sharedDays = getSharedVipDays(user);
+        // 简单判定：有通用VIP天数即有资格（可按需改成月付判断）
+        const hasQualified = sharedDays > 0;
 
         const now = new Date();
         const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const user = await env.DB.prepare("SELECT shared_vip_days, vip_days_left FROM users WHERE id=?").bind(userId).first();
-        const hasQualified = (user?.shared_vip_days || user?.vip_days_left || 0) > 0;
-
-        const { results: myVotes } = await env.DB.prepare("SELECT id, etf_code, etf_name, created_at FROM vote_records WHERE user_id=? AND month_key=?").bind(userId, monthKey).all();
         const limit = await getSettingInt(env, "vote_monthly_limit", 10);
-        const used = (myVotes || []).length;
 
+        const { results: myVotes } = await env.DB.prepare(
+          "SELECT id, etf_code, etf_name, created_at FROM vote_records WHERE user_id=? AND month_key=? ORDER BY created_at DESC"
+        ).bind(userId, monthKey).all();
+
+        const used = (myVotes || []).length;
         return json({
           success: true,
           has_qualified: hasQualified,
@@ -571,54 +675,131 @@ export default {
         });
       }
 
+      // 提交投票
       if (path === "/api/vote/submit" && request.method === "POST") {
         const userId = await authenticateUser(request, env);
         if (!userId) return json({ error: "未登录" }, 401);
 
         const { etf_code, etf_name } = await request.json();
-        if (!etf_code) return json({ error: "缺少标的代码" }, 400);
+        if (!etf_code || !/^\d{6}$/.test(String(etf_code).trim())) return json({ error: "请输入正确的6位标的代码" }, 400);
+
+        const user = await env.DB.prepare("SELECT shared_vip_days, vip_days_left FROM users WHERE id=?").bind(userId).first();
+        if (getSharedVipDays(user) <= 0) return json({ error: "仅限月付及以上会员参与" }, 403);
 
         const now = new Date();
         const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
         const limit = await getSettingInt(env, "vote_monthly_limit", 10);
 
-        const count = await env.DB.prepare("SELECT COUNT(*) as c FROM vote_records WHERE user_id=? AND month_key=?").bind(userId, monthKey).first();
+        const count = await env.DB.prepare(
+          "SELECT COUNT(*) as c FROM vote_records WHERE user_id=? AND month_key=?"
+        ).bind(userId, monthKey).first();
         if (count && count.c >= limit) {
-          return json({ error: `您本月投票额度已满 (上限 ${limit} 只)` }, 400);
+          return json({ error: `您本月投票额度已满（上限 ${limit} 只）` }, 400);
         }
 
-        await env.DB.prepare("INSERT INTO vote_records (user_id, etf_code, etf_name, month_key, created_at) VALUES (?, ?, ?, ?, ?)").bind(userId, etf_code.trim().toUpperCase(), etf_name || etf_code, monthKey, Date.now()).run();
+        // 防重复
+        const exist = await env.DB.prepare(
+          "SELECT id FROM vote_records WHERE user_id=? AND etf_code=? AND month_key=?"
+        ).bind(userId, String(etf_code).trim().toUpperCase(), monthKey).first();
+        if (exist) return json({ error: "您本月已投票该标的" }, 400);
+
+        await env.DB.prepare(
+          "INSERT INTO vote_records (user_id, etf_code, etf_name, month_key, created_at) VALUES (?, ?, ?, ?, ?)"
+        ).bind(userId, String(etf_code).trim().toUpperCase(), etf_name || etf_code, monthKey, Date.now()).run();
+
         return json({ success: true, message: "投票成功" });
       }
 
+      // 撤销投票
+      if (path === "/api/vote/cancel" && request.method === "POST") {
+        const userId = await authenticateUser(request, env);
+        if (!userId) return json({ error: "未登录" }, 401);
+        const { vote_id } = await request.json();
+        await env.DB.prepare("DELETE FROM vote_records WHERE id=? AND user_id=?").bind(vote_id, userId).run();
+        return json({ success: true, message: "已撤销投票" });
+      }
+
+      // ==================== 客服工单 ====================
+
+      // 图片上传到 R2
+      if (path === "/api/tickets/upload" && request.method === "POST") {
+        const userId = await authenticateUser(request, env);
+        if (!userId) return json({ error: "未登录" }, 401);
+
+        const formData = await request.formData();
+        const file = formData.get("file");
+        if (!file || !file.size) return json({ error: "未选择文件" }, 400);
+        if (!file.type.startsWith("image/")) return json({ error: "仅支持图片" }, 400);
+        if (file.size > 5 * 1024 * 1024) return json({ error: "单张图片不能超过5MB" }, 400);
+
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const key = `tickets/${userId}/${Date.now()}_${generateRandomString(8)}.${ext}`;
+
+        await env.R2.put(key, file.stream(), {
+          httpMetadata: { contentType: file.type },
+        });
+
+        // 请根据你的 R2 公共访问域名修改这里
+        const publicBase = env.R2_PUBLIC_URL || "https://pub-973330e118204686a625fe51431d4336.r2.dev";
+        const url = `${publicBase}/${key}`;
+
+        return json({ success: true, url });
+      }
+
+      // 用户工单列表
       if (path === "/api/tickets" && request.method === "GET") {
         const userId = await authenticateUser(request, env);
         if (!userId) return json({ error: "未登录" }, 401);
-        const { results } = await env.DB.prepare("SELECT * FROM tickets WHERE user_id=? ORDER BY created_at DESC LIMIT 50").bind(userId).all();
-        return json({ success: true, data: results || [] });
+        const { results } = await env.DB.prepare(
+          "SELECT * FROM tickets WHERE user_id=? ORDER BY created_at DESC LIMIT 50"
+        ).bind(userId).all();
+
+        // 解析 images
+        const list = (results || []).map((t) => ({
+          ...t,
+          images: t.images ? JSON.parse(t.images) : [],
+          reply_images: t.reply_images ? JSON.parse(t.reply_images) : [],
+        }));
+        return json({ success: true, data: list });
       }
 
+      // 提交工单
       if (path === "/api/tickets" && request.method === "POST") {
         const userId = await authenticateUser(request, env);
         if (!userId) return json({ error: "未登录" }, 401);
-        const { subject, level, message } = await request.json();
-        if (!subject || !message) return json({ error: "请填写完整的主题和内容" }, 400);
+        const { subject, message, images = [] } = await request.json();
+        if (!subject || (!message && (!images || !images.length))) {
+          return json({ error: "请填写主题和内容（或上传图片）" }, 400);
+        }
 
-        await env.DB.prepare("INSERT INTO tickets (user_id, subject, level, message, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)")
-          .bind(userId, subject.trim(), level || "medium", message.trim(), Date.now()).run();
+        const now = Date.now();
+        const expireAt = now + 60 * 86400000; // 60天
+
+        await env.DB.prepare(
+          `INSERT INTO tickets (user_id, subject, message, images, status, created_at, expire_at)
+           VALUES (?, ?, ?, ?, 'pending', ?, ?)`
+        ).bind(
+          userId,
+          subject.trim(),
+          (message || "").trim(),
+          JSON.stringify(Array.isArray(images) ? images : []),
+          now,
+          expireAt
+        ).run();
+
+        await sendToTelegram(env,
+          `🎫 <b>新客服工单</b>\n用户ID: ${userId}\n主题: ${subject.trim()}`
+        );
+
         return json({ success: true, message: "工单提交成功" });
       }
 
-      if (path === "/api/announcements" && request.method === "GET") {
-        const { results } = await env.DB.prepare("SELECT * FROM announcements ORDER BY created_at DESC LIMIT 30").all();
-        return json({ success: true, data: results || [] });
-      }
-
-      // ==================== 管理后台 API (/api/admin/*) ====================
+      // ==================== 管理后台 ====================
 
       if (path.startsWith("/api/admin/")) {
         if (!checkAdmin(request, env)) return json({ error: "管理员鉴权失败" }, 401);
 
+        // 数据概览
         if (path === "/api/admin/stats" && request.method === "GET") {
           const users = await env.DB.prepare("SELECT COUNT(*) as c FROM users").first();
           const vip = await env.DB.prepare("SELECT COUNT(*) as c FROM users WHERE COALESCE(shared_vip_days, vip_days_left, 0) > 0").first();
@@ -649,8 +830,11 @@ export default {
           });
         }
 
+        // 用户管理
         if (path === "/api/admin/users" && request.method === "GET") {
-          const { results } = await env.DB.prepare("SELECT id, username, created_at, ip_address as ip, shared_vip_days, vip_days_left, referral_code, referred_by FROM users ORDER BY id DESC LIMIT 500").all();
+          const { results } = await env.DB.prepare(
+            "SELECT id, username, created_at, ip_address as ip, shared_vip_days, vip_days_left, referral_code, referred_by FROM users ORDER BY id DESC LIMIT 500"
+          ).all();
           return json({ success: true, data: results || [] });
         }
 
@@ -663,7 +847,9 @@ export default {
           } else {
             const days = parseInt(add_days, 10);
             if (isNaN(days) || days === 0) return json({ error: "请提供有效天数" }, 400);
-            await env.DB.prepare("UPDATE users SET shared_vip_days = MAX(0, COALESCE(shared_vip_days,0) + ?), vip_days_left = MAX(0, COALESCE(vip_days_left,0) + ?) WHERE id=?").bind(days, days, user_id).run();
+            await env.DB.prepare(
+              "UPDATE users SET shared_vip_days = MAX(0, COALESCE(shared_vip_days,0) + ?), vip_days_left = MAX(0, COALESCE(vip_days_left,0) + ?) WHERE id=?"
+            ).bind(days, days, user_id).run();
           }
           return json({ success: true, message: "VIP 天数已更新" });
         }
@@ -671,8 +857,14 @@ export default {
         if (path === "/api/admin/users/batch_charge" && request.method === "POST") {
           const { user_ids, add_days } = await request.json();
           const days = parseInt(add_days, 10);
-          if (!Array.isArray(user_ids) || !user_ids.length || isNaN(days) || days === 0) return json({ error: "参数无效" }, 400);
-          const stmts = user_ids.map((id) => env.DB.prepare("UPDATE users SET shared_vip_days = MAX(0, COALESCE(shared_vip_days,0) + ?), vip_days_left = MAX(0, COALESCE(vip_days_left,0) + ?) WHERE id=?").bind(days, days, id));
+          if (!Array.isArray(user_ids) || !user_ids.length || isNaN(days) || days === 0) {
+            return json({ error: "参数无效" }, 400);
+          }
+          const stmts = user_ids.map((id) =>
+            env.DB.prepare(
+              "UPDATE users SET shared_vip_days = MAX(0, COALESCE(shared_vip_days,0) + ?), vip_days_left = MAX(0, COALESCE(vip_days_left,0) + ?) WHERE id=?"
+            ).bind(days, days, id)
+          );
           await env.DB.batch(stmts);
           return json({ success: true, message: `已为 ${user_ids.length} 人调整 ${days} 天` });
         }
@@ -693,6 +885,7 @@ export default {
           return json({ success: true, message: "用户已删除" });
         }
 
+        // 订单管理
         if (path === "/api/admin/orders" && request.method === "GET") {
           const status = url.searchParams.get("status");
           let sql = `SELECT orders.*, users.username FROM orders LEFT JOIN users ON orders.user_id = users.id`;
@@ -723,6 +916,7 @@ export default {
           return json({ success: true, message: "订单已驳回" });
         }
 
+        // 通用监控管理
         if (path === "/api/admin/watchlist/shared") {
           if (request.method === "GET") {
             const { results } = await env.DB.prepare("SELECT * FROM watchlist_shared ORDER BY sort_order ASC, id ASC").all();
@@ -733,13 +927,14 @@ export default {
             const code = String(etf_code || "").trim().toUpperCase();
             const name = String(etf_name || code).trim();
             const ts = Date.now();
-
             if (id) {
-              await env.DB.prepare("UPDATE watchlist_shared SET etf_code=?, etf_name=?, sort_order=?, enabled=?, updated_at=? WHERE id=?")
-                .bind(code, name, sort_order || 0, enabled ? 1 : 0, ts, id).run();
+              await env.DB.prepare(
+                "UPDATE watchlist_shared SET etf_code=?, etf_name=?, sort_order=?, enabled=?, updated_at=? WHERE id=?"
+              ).bind(code, name, sort_order || 0, enabled ? 1 : 0, ts, id).run();
             } else {
-              await env.DB.prepare("INSERT OR REPLACE INTO watchlist_shared (etf_code, etf_name, sort_order, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-                .bind(code, name, sort_order || 0, enabled ? 1 : 0, ts, ts).run();
+              await env.DB.prepare(
+                "INSERT OR REPLACE INTO watchlist_shared (etf_code, etf_name, sort_order, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+              ).bind(code, name, sort_order || 0, enabled ? 1 : 0, ts, ts).run();
             }
             return json({ success: true });
           }
@@ -752,33 +947,36 @@ export default {
 
         if (path === "/api/admin/watchlist/shared/batch" && request.method === "POST") {
           const { items } = await request.json();
-          let added = 0;
-          let skipped = 0;
+          let added = 0, skipped = 0;
           const ts = Date.now();
           for (const item of items || []) {
             const code = String(item.etf_code || "").trim().toUpperCase();
             if (!code) continue;
             const exist = await env.DB.prepare("SELECT id FROM watchlist_shared WHERE etf_code=?").bind(code).first();
-            if (exist) {
-              skipped++;
-            } else {
-              await env.DB.prepare("INSERT INTO watchlist_shared (etf_code, etf_name, sort_order, enabled, created_at, updated_at) VALUES (?, ?, 0, 1, ?, ?)")
-                .bind(code, item.etf_name || code, ts, ts).run();
+            if (exist) skipped++;
+            else {
+              await env.DB.prepare(
+                "INSERT INTO watchlist_shared (etf_code, etf_name, sort_order, enabled, created_at, updated_at) VALUES (?, ?, 0, 1, ?, ?)"
+              ).bind(code, item.etf_name || code, ts, ts).run();
               added++;
             }
           }
           return json({ success: true, added, skipped });
         }
 
+        // 定制监控管理
         if (path === "/api/admin/watchlist/custom") {
           if (request.method === "GET") {
-            const { results } = await env.DB.prepare("SELECT w.*, u.username FROM watchlist_custom w LEFT JOIN users u ON w.user_id=u.id ORDER BY w.created_at DESC LIMIT 500").all();
+            const { results } = await env.DB.prepare(
+              "SELECT w.*, u.username FROM watchlist_custom w LEFT JOIN users u ON w.user_id=u.id ORDER BY w.created_at DESC LIMIT 500"
+            ).all();
             return json({ success: true, data: results || [] });
           }
           if (request.method === "POST") {
             const { id, etf_code, etf_name, status, expire_at } = await request.json();
-            await env.DB.prepare("UPDATE watchlist_custom SET etf_code=?, etf_name=?, status=?, expire_at=?, updated_at=? WHERE id=?")
-              .bind(etf_code, etf_name, status, expire_at, Date.now(), id).run();
+            await env.DB.prepare(
+              "UPDATE watchlist_custom SET etf_code=?, etf_name=?, status=?, expire_at=?, updated_at=? WHERE id=?"
+            ).bind(etf_code, etf_name, status, expire_at, Date.now(), id).run();
             return json({ success: true });
           }
           if (request.method === "DELETE") {
@@ -788,6 +986,7 @@ export default {
           }
         }
 
+        // 套餐管理
         if (path === "/api/admin/plans") {
           if (request.method === "GET") {
             const { results } = await env.DB.prepare("SELECT * FROM vip_plans ORDER BY sort_order ASC").all();
@@ -797,12 +996,14 @@ export default {
             const b = await request.json();
             const now = Date.now();
             if (b.isEdit || b.id) {
-              await env.DB.prepare("UPDATE vip_plans SET name=?, price=?, days=?, tag=?, sort_order=?, enabled=?, plan_type=? WHERE id=?")
-                .bind(b.name, Number(b.price), Number(b.days), b.tag || null, b.sort_order ?? 0, b.enabled ? 1 : 0, b.plan_type || "both", b.id).run();
+              await env.DB.prepare(
+                "UPDATE vip_plans SET name=?, price=?, days=?, tag=?, sort_order=?, enabled=?, plan_type=? WHERE id=?"
+              ).bind(b.name, Number(b.price), Number(b.days), b.tag || null, b.sort_order ?? 0, b.enabled ? 1 : 0, b.plan_type || "both", b.id).run();
             } else {
               const id = b.id || generateRandomString(8);
-              await env.DB.prepare("INSERT INTO vip_plans (id, name, price, days, tag, sort_order, enabled, plan_type, created_at) VALUES (?,?,?,?,?,?,?,?,?)")
-                .bind(id, b.name, Number(b.price), Number(b.days), b.tag || null, b.sort_order ?? 0, b.enabled !== false ? 1 : 0, b.plan_type || "both", now).run();
+              await env.DB.prepare(
+                "INSERT INTO vip_plans (id, name, price, days, tag, sort_order, enabled, plan_type, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+              ).bind(id, b.name, Number(b.price), Number(b.days), b.tag || null, b.sort_order ?? 0, b.enabled !== false ? 1 : 0, b.plan_type || "both", now).run();
             }
             return json({ success: true });
           }
@@ -813,6 +1014,36 @@ export default {
           }
         }
 
+       // 批量导入初始票选标的（系统种子）
+       if (path === "/api/admin/vote/seed" && request.method === "POST") {
+         const { items } = await request.json();
+         const now = new Date();
+         const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+         let added = 0, skipped = 0;
+
+         for (const item of items || []) {
+           const code = String(item.etf_code || "").trim().toUpperCase();
+           if (!/^\d{6}$/.test(code)) continue;
+
+           // 检查当月是否已存在
+           const exist = await env.DB.prepare(
+             "SELECT id FROM vote_records WHERE etf_code=? AND month_key=? LIMIT 1"
+           ).bind(code, monthKey).first();
+
+           if (exist) {
+             skipped++;
+           } else {
+             // 用 user_id = 0 作为系统种子票（不影响真实会员统计）
+             await env.DB.prepare(
+               "INSERT INTO vote_records (user_id, etf_code, etf_name, month_key, created_at) VALUES (0, ?, ?, ?, ?)"
+             ).bind(code, item.etf_name || code, monthKey, Date.now()).run();
+             added++;
+           }
+         }
+         return json({ success: true, added, skipped });
+       }
+
+        // 优惠码管理
         if (path === "/api/admin/promos") {
           if (request.method === "GET") {
             const { results } = await env.DB.prepare("SELECT * FROM promo_codes ORDER BY created_at DESC").all();
@@ -822,11 +1053,13 @@ export default {
             const b = await request.json();
             const code = String(b.code || "").trim().toUpperCase();
             if (b.id) {
-              await env.DB.prepare("UPDATE promo_codes SET code=?, name=?, discount_type=?, discount_value=?, start_at=?, end_at=?, enabled=? WHERE id=?")
-                .bind(code, b.name || null, b.discount_type, Number(b.discount_value), b.start_at, b.end_at, b.enabled ? 1 : 0, b.id).run();
+              await env.DB.prepare(
+                "UPDATE promo_codes SET code=?, name=?, discount_type=?, discount_value=?, start_at=?, end_at=?, enabled=? WHERE id=?"
+              ).bind(code, b.name || null, b.discount_type, Number(b.discount_value), b.start_at, b.end_at, b.enabled ? 1 : 0, b.id).run();
             } else {
-              await env.DB.prepare("INSERT INTO promo_codes (code, name, discount_type, discount_value, start_at, end_at, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-                .bind(code, b.name || null, b.discount_type, Number(b.discount_value), b.start_at, b.end_at, b.enabled ? 1 : 0, Date.now()).run();
+              await env.DB.prepare(
+                "INSERT INTO promo_codes (code, name, discount_type, discount_value, start_at, end_at, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+              ).bind(code, b.name || null, b.discount_type, Number(b.discount_value), b.start_at, b.end_at, b.enabled ? 1 : 0, Date.now()).run();
             }
             return json({ success: true });
           }
@@ -837,64 +1070,72 @@ export default {
           }
         }
 
+        // 系统设置
         if (path === "/api/admin/settings") {
           if (request.method === "GET") {
             const { results } = await env.DB.prepare("SELECT key, value FROM system_settings").all();
             const map = {};
-            (results || []).forEach((r) => { map[r.key] = r.value; });
+            (results || []).forEach((r) => (map[r.key] = r.value));
             return json({ success: true, data: map });
           }
           if (request.method === "POST") {
             const body = await request.json();
             const now = Date.now();
             for (const [key, value] of Object.entries(body || {})) {
-              await env.DB.prepare("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?,?,?)")
-                .bind(key, String(value), now).run();
+              await env.DB.prepare(
+                "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?,?,?)"
+              ).bind(key, String(value), now).run();
             }
             return json({ success: true, message: "设置已成功保存" });
           }
         }
 
+        // 客服工单管理
         if (path === "/api/admin/tickets" && request.method === "GET") {
-          const { results } = await env.DB.prepare("SELECT tickets.*, users.username FROM tickets LEFT JOIN users ON tickets.user_id=users.id ORDER BY tickets.created_at DESC LIMIT 200").all();
-          return json({ success: true, data: results || [] });
+          const { results } = await env.DB.prepare(
+            "SELECT tickets.*, users.username FROM tickets LEFT JOIN users ON tickets.user_id=users.id ORDER BY tickets.created_at DESC LIMIT 200"
+          ).all();
+          const list = (results || []).map((t) => ({
+            ...t,
+            images: t.images ? JSON.parse(t.images) : [],
+            reply_images: t.reply_images ? JSON.parse(t.reply_images) : [],
+          }));
+          return json({ success: true, data: list });
         }
 
         if (path === "/api/admin/tickets/reply" && request.method === "POST") {
           const { ticket_id, reply_message } = await request.json();
-          await env.DB.prepare("UPDATE tickets SET status='replied', admin_reply=? WHERE id=?")
-            .bind(reply_message.trim(), ticket_id).run();
+          await env.DB.prepare(
+            "UPDATE tickets SET status='replied', admin_reply=?, replied_at=? WHERE id=?"
+          ).bind(reply_message.trim(), Date.now(), ticket_id).run();
           return json({ success: true, message: "已成功回复" });
         }
 
+        // 全员广播
         if (path === "/api/admin/broadcast" && request.method === "POST") {
           const { title, content, also_tg } = await request.json();
           const now = Date.now();
-          await env.DB.prepare("INSERT INTO announcements (title, content, created_at, created_by) VALUES (?, ?, ?, 'admin')")
-            .bind(title || "系统通知", content.trim(), now).run();
+          await env.DB.prepare(
+            "INSERT INTO announcements (title, content, created_at, created_by) VALUES (?, ?, ?, 'admin')"
+          ).bind(title || "系统通知", content.trim(), now).run();
 
           if (also_tg) {
-            const { chatId } = getTgConfig(env);
-            if (chatId) {
-              await sendToTelegram(env, "sendMessage", {
-                chat_id: chatId,
-                text: `📢 [全员系统广播]\n标题: ${title}\n内容: ${content.trim()}`,
-              });
-            }
+            await sendToTelegram(env, `📢 <b>全员系统广播</b>\n标题: ${title || "系统通知"}\n内容: ${content.trim()}`);
           }
           return json({ success: true, message: "广播通知发布成功" });
         }
 
+        // 票选管理
         if (path === "/api/admin/vote/stats" && request.method === "GET") {
           const now = new Date();
           const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-
-          const totalInteractions = await env.DB.prepare("SELECT COUNT(*) as c FROM vote_records WHERE month_key=?").bind(monthKey).first();
+          const totalInteractions = await env.DB.prepare(
+            "SELECT COUNT(*) as c FROM vote_records WHERE month_key=?"
+          ).bind(monthKey).first();
           const { results } = await env.DB.prepare(`
             SELECT etf_code, etf_name, COUNT(*) as vote_count, COUNT(DISTINCT user_id) as voters_count
             FROM vote_records WHERE month_key=? GROUP BY etf_code ORDER BY vote_count DESC
           `).bind(monthKey).all();
-
           const limit = await getSettingInt(env, "vote_monthly_limit", 10);
           return json({
             success: true,
@@ -919,16 +1160,17 @@ export default {
           const limit = top_n || 50;
           const now = new Date();
           const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-
           const { results } = await env.DB.prepare(`
-            SELECT etf_code, etf_name FROM vote_records WHERE month_key=? GROUP BY etf_code ORDER BY COUNT(*) DESC LIMIT ?
+            SELECT etf_code, etf_name FROM vote_records WHERE month_key=?
+            GROUP BY etf_code ORDER BY COUNT(*) DESC LIMIT ?
           `).bind(monthKey, limit).all();
 
           let count = 0;
           const ts = Date.now();
           for (const item of results || []) {
-            await env.DB.prepare("INSERT OR REPLACE INTO watchlist_shared (etf_code, etf_name, sort_order, enabled, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)")
-              .bind(item.etf_code, item.etf_name || item.etf_code, count, ts, ts).run();
+            await env.DB.prepare(
+              "INSERT OR REPLACE INTO watchlist_shared (etf_code, etf_name, sort_order, enabled, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)"
+            ).bind(item.etf_code, item.etf_name || item.etf_code, count, ts, ts).run();
             count++;
           }
           return json({ success: true, count, message: `已将得票前 ${count} 名同步为通用监控` });
@@ -937,7 +1179,8 @@ export default {
 
       return new Response("Not Found", { status: 404, headers: corsHeaders });
     } catch (err) {
-      return json({ error: err.message }, 500);
+      console.error(err);
+      return json({ error: err.message || "服务器错误" }, 500);
     }
   },
 };
