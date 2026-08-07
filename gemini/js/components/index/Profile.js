@@ -6,7 +6,7 @@ import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
 import { planApi } from "../../api/plan.js";
 import { watchlistApi } from "../../api/watchlist.js";
-
+    
 const { ref, reactive, onMounted } = Vue;
 
 export default {
