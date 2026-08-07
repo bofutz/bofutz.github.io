@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 个人中心分块组件 (修复：彻底删除多余词，还原页面正常渲染)
+ * 波幅探长 - 个人中心分块组件 (语法彻底修正：删除多余关键词，恢复页面渲染)
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
@@ -33,7 +33,7 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // 腾讯财经接口股票/ETF 代码自动查中文名称函数
+    // 腾讯财经接口股票/ETF 代码自动查中文名称函数 (GBK 显式解码)
     const fetchStockNameByCode = async (codeStr) => {
       const code = String(codeStr || "").trim().toUpperCase();
       if (!code) return "";
@@ -50,7 +50,6 @@ export default {
         if (!res.ok) return "";
         const buffer = await res.arrayBuffer();
         
-        // 1. 显式使用 GBK 解码二进制 Buffer
         let text = "";
         try {
           text = new TextDecoder("gbk").decode(buffer);
@@ -62,8 +61,6 @@ export default {
           }
         }
 
-        // 2. 正确匹配引号内的文本，并提取中文名称
-        // 原始文本格式如: v_s_sz159326="51~高端装备ETF~159326~1.694~0.018~1.07~..."
         const match = text.match(/"([^"]+)"/);
         if (match && match) {
           const content = match;
@@ -116,7 +113,6 @@ export default {
         return;
       }
       
-      // 去重检查
       if (draftSymbols.value.some((s) => s.code === code)) {
         store.showToast("请勿重复添加相同代码", "error");
         return;
@@ -152,7 +148,6 @@ export default {
         return;
       }
       
-      // 储存草稿标的列表
       const formattedItems = draftSymbols.value.map((item) => ({
         etf_code: item.code,
         etf_name: item.name,
