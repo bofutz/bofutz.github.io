@@ -1,5 +1,6 @@
 /**
- * 波幅探长 - 个人中心分块组件 (彻底修复：清理第163行多余字符，解决全站白屏 + 完美整合插件原版查名)
+ * 波幅探长 - 个人中心分块组件
+ * 修复查名 + 支持保存草稿（带序号/时间）+ 跳转定制套餐页
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
@@ -33,7 +34,7 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // 完全采用 Chrome 插件 background.js 中的原版查名称算法 (GBK解码 + 正则精准截取)
+    // 完全采用 Chrome 插件 background.js 中的原版查名称算法
     const fetchStockNameByCode = async (symbolStr) => {
       try {
         const codeMatch = String(symbolStr || "").match(/\d{6}/);
@@ -46,12 +47,10 @@ export default {
         const resp = await fetch(tx_url);
         if (!resp.ok) return "";
         
-        // 提取二进制流，强制使用 GBK 解码
         const buffer = await resp.arrayBuffer();
         const decoder = new TextDecoder("gbk");
         const text = decoder.decode(buffer);
         
-        // 用插件原版正则精准提取两个 ~ 之间的中文名称
         const match = text.match(/="[^~]+~([^~]+)/);
         return match ? match[1].trim() : "";
       } catch (err) {
@@ -86,11 +85,21 @@ export default {
       inputCode.value = "";
       foundName.value = "";
       searchError.value = "";
-      draftSymbols.value = [];
+      // 可选：从 sessionStorage 恢复上次草稿
+      try {
+        const cached = sessionStorage.getItem("draft_custom_symbols");
+        if (cached) {
+          draftSymbols.value = JSON.parse(cached);
+        } else {
+          draftSymbols.value = [];
+        }
+      } catch {
+        draftSymbols.value = [];
+      }
       customModalVisible.value = true;
     };
 
-    // 确认添加单个标的至草稿
+    // 保存单个标的到草稿（带序号和时间）
     const confirmAddSingleSymbol = async () => {
       const code = inputCode.value.trim().toUpperCase();
       if (!code) {
@@ -98,7 +107,6 @@ export default {
         return;
       }
       
-      // 去重检查
       if (draftSymbols.value.some((s) => s.code === code)) {
         store.showToast("请勿重复添加相同代码", "error");
         return;
@@ -120,26 +128,38 @@ export default {
       draftSymbols.value.push({
         code,
         name: name || code,
+        addTime: Date.now(), // 记录添加时间
       });
+
+      // 持久化草稿，方便下次打开查看
+      sessionStorage.setItem("draft_custom_symbols", JSON.stringify(draftSymbols.value));
 
       inputCode.value = "";
       foundName.value = "";
       searchError.value = "";
     };
 
-    // 完成标的挑选，跳转至购买套餐页面结算
+    // 删除草稿中的某一项
+    const removeDraftSymbol = (index) => {
+      draftSymbols.value.splice(index, 1);
+      sessionStorage.setItem("draft_custom_symbols", JSON.stringify(draftSymbols.value));
+    };
+
+    // 完成标的挑选，跳转至购买「定制监控」套餐页面
     const goToBuyCustomPlan = () => {
       if (!draftSymbols.value.length) {
         store.showToast("请先输入并添加至少一只定制标的", "error");
         return;
       }
       
-      // 储存草稿标的列表
       const formattedItems = draftSymbols.value.map((item) => ({
         etf_code: item.code,
         etf_name: item.name,
       }));
       sessionStorage.setItem("pending_custom_items", JSON.stringify(formattedItems));
+      
+      // 关键 Plan 页面打开时强制切到「定制监控」标签
+      sessionStorage.setItem("prefer_plan_tab", "custom");
       
       customModalVisible.value = false;
       window.location.hash = "#/plan";
@@ -220,6 +240,15 @@ export default {
       return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
     };
 
+    // 草稿添加时间格式化
+    const formatAddTime = (ts) => {
+      if (!ts) return "";
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return "";
+      const p = (n) => String(n).padStart(2, "0");
+      return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+
     const formatStatus = (s) => {
       if (s === "approved") return "已通过";
       if (s === "pending") return "审核中";
@@ -251,18 +280,20 @@ export default {
       onCodeInput,
       openCustomModal,
       confirmAddSingleSymbol,
+      removeDraftSymbol,
       goToBuyCustomPlan,
       loadProfileData,
       removeCustomItem,
       changePassword,
       formatDateExact,
       formatDateShort,
+      formatAddTime,
       formatStatus,
     };
   },
   template: `
     <div class="max-w-4xl mx-auto space-y-5 select-none">
-      <!-- 1. VIP 权限顶栏 (卡片一) -->
+      <!-- 1. VIP 权限顶栏 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <div class="flex items-center justify-between gap-3">
           <div>
@@ -282,7 +313,7 @@ export default {
         </div>
       </div>
 
-      <!-- 2. 我的定制监控 (卡片二) -->
+      <!-- 2. 我的定制监控 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -336,7 +367,7 @@ export default {
         </div>
       </div>
 
-      <!-- 3. 我的订单 (卡片三) -->
+      <!-- 3. 我的订单 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <div class="font-bold text-slate-700 text-base">我的订单</div>
@@ -385,11 +416,10 @@ export default {
         </div>
       </div>
 
-      <!-- 4. 专属邀请码及奖励 (卡片四) -->
+      <!-- 4. 专属邀请码及奖励 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
         <div class="font-bold text-slate-700 text-base">专属邀请码及奖励</div>
         
-        <!-- 内置浅灰色框 -->
         <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
@@ -403,7 +433,6 @@ export default {
           </div>
         </div>
 
-        <!-- 我邀请的用户列表 -->
         <div class="pt-2">
           <div class="text-sm font-bold text-slate-600 mb-2">
             我邀请的用户 <span class="text-xs text-slate-400 font-normal">({{ invitees.length }})</span>
@@ -435,7 +464,7 @@ export default {
         </div>
       </div>
 
-      <!-- 5. 修改账号密码 (卡片五) -->
+      <!-- 5. 修改账号密码 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <h3 class="font-bold text-slate-700 text-base mb-4">修改账号密码</h3>
         <div class="space-y-3 max-w-md">
@@ -460,9 +489,9 @@ export default {
           <div class="space-y-2">
             <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
             <div class="flex gap-2">
-              <input v-model="inputCode" @input="onCodeInput" placeholder="如 563300 / 159326 / 513500" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
+              <input v-model="inputCode" @input="onCodeInput" placeholder="如：563300" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
               <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
-                {{ searchingName ? '识别中...' : '确认添加' }}
+                {{ searchingName ? '识别中...' : '保存' }}
               </button>
             </div>
             <p v-if="foundName" class="text-xs theme-text font-bold flex items-center gap-1 pt-1">
@@ -473,18 +502,26 @@ export default {
             </p>
           </div>
 
-          <!-- 已添加草稿列表 -->
+          <!-- 已添加草稿列表（带序号 + 添加时间） -->
           <div v-if="draftSymbols.length > 0" class="pt-2 border-t space-y-2">
             <div class="text-xs font-bold text-slate-600 flex justify-between items-center">
-              <span>已添加标的 ({{ draftSymbols.length }}/{{ settings.custom_max_symbols || 3 }})：</span>
+              <span>已保存标的 ({{ draftSymbols.length }}/{{ settings.custom_max_symbols || 3 }})：</span>
             </div>
-            <div class="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-              <div v-for="(sym, i) in draftSymbols" :key="i" class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg text-xs border">
-                <div>
-                  <span class="font-mono font-bold text-slate-800 mr-2">{{ sym.code }}</span>
-                  <span class="text-slate-600 font-medium">{{ sym.name }}</span>
+            <div class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+              <div v-for="(sym, i) in draftSymbols" :key="i" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-lg text-xs border">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">#{{ i + 1 }}</span>
+                    <span class="font-mono font-bold text-slate-800">{{ sym.code }}</span>
+                    <span class="text-slate-600 font-medium truncate">{{ sym.name }}</span>
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-0.5 pl-7">
+                    添加于 {{ formatAddTime(sym.addTime) }}
+                  </div>
                 </div>
-                <button @click="draftSymbols.splice(i, 1)" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-trash"></i></button>
+                <button @click="removeDraftSymbol(i)" class="text-slate-400 hover:text-red-500 ml-2 shrink-0">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
               </div>
             </div>
           </div>
