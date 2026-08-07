@@ -1,6 +1,6 @@
 /**
  * 波幅探长 - 后台【定制监控】分块组件 
- * js/components/admin/CustomWatch.js
+ * js/components/admin/CustomWatch.js 
  */
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
