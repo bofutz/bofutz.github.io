@@ -5,7 +5,7 @@
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
 
-const { ref, reactive, computed, onMounted } = Vue;
+const { ref, computed, onMounted } = Vue;
 
 export default {
   name: "Dashboard",
@@ -18,12 +18,6 @@ export default {
     const expandedRowKey = ref(null);
     const sortColumn = ref(null);
     const sortOrder = ref("desc");
-
-    // 全屏图表大图预览 Modal
-    const chartViewerVisible = ref(false);
-    const currentViewerTarget = reactive({ code: "", name: "" });
-    const currentViewerImages = ref([]); // [{ title: '日线图表', url: '...' }, { title: '半日线图表', url: '...' }]
-    const currentViewerIndex = ref(0);
 
     const isValidDate = (d) => d && typeof d === "string" && /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(d.trim());
     const parseYMD = (s) => (isValidDate(s) ? s.trim().split(/[-/]/).map((v) => parseInt(v, 10)) : [0, 0, 0]);
@@ -141,7 +135,7 @@ export default {
 
       let items = Object.values(etfMap);
 
-      // 1. 先按绝对值降序算出并【绝对锁死】 Top 3 免费标的 (不受后续列排序与搜索影响)
+      // 1. 先按绝对值降序算出并【绝对锁死】 Top 3 免费标的
       const sortedByAbs = [...items].sort((a, b) => {
         let latestIdx = 4;
         while (latestIdx >= 0) {
@@ -212,7 +206,49 @@ export default {
       return processedData.value.freeTop3Codes.includes(etfCode);
     };
 
-    // 点击日线图表：全屏黑色沉浸式大图查看 (包含日线 + 半日线，可通过 < 和 > 翻页)
+    // 使用原生的 Viewer.js 实现手机端随意缩放放大，并带 < 和 > 控制翻页
+    const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
+      const container = document.createElement("div");
+      container.style.display = "none";
+      imgList.forEach((item) => {
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.title;
+        container.appendChild(img);
+      });
+      document.body.appendChild(container);
+
+      if (window.Viewer) {
+        const viewer = new window.Viewer(container, {
+          hidden: () => {
+            viewer.destroy();
+            container.remove();
+          },
+          title: true,
+          navbar: false,
+          tooltip: true,
+          movable: true,
+          zoomable: true,
+          rotatable: false,
+          scalable: false,
+          transition: true,
+          initialViewIndex: initialIndex,
+          toolbar: {
+            zoomIn: 1,
+            zoomOut: 1,
+            oneToOne: 1,
+            reset: 1,
+            prev: 1, // 显示上一张按钮 <
+            next: 1, // 显示下一张按钮 >
+          },
+        });
+        viewer.show();
+      } else {
+        window.open(imgList[initialIndex]?.url, "_blank");
+      }
+    };
+
+    // 点击日线图表：在 Viewer.js 中同时载入【日线图表】与【半日线图表】，可用 < 和 > 翻页
     const openDailyChartViewer = (item) => {
       if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
@@ -220,17 +256,14 @@ export default {
         }
         return;
       }
-      currentViewerTarget.code = item.etf_code;
-      currentViewerTarget.name = item.etf_name || item.etf_code;
-      currentViewerImages.value = [
-        { title: "日线图表", url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png` },
-        { title: "半日线图表", url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png` }
+      const images = [
+        { title: `${item.etf_name} (${item.etf_code}) 日线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png` },
+        { title: `${item.etf_name} (${item.etf_code}) 半日线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png` },
       ];
-      currentViewerIndex.value = 0;
-      chartViewerVisible.value = true;
+      showViewerWithMultiImages(images, 0);
     };
 
-    // 点击周线图表：全屏单张图表查看
+    // 点击周线图表：单张周线图
     const openWeeklyChartViewer = (item) => {
       if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
@@ -238,24 +271,10 @@ export default {
         }
         return;
       }
-      currentViewerTarget.code = item.etf_code;
-      currentViewerTarget.name = item.etf_name || item.etf_code;
-      currentViewerImages.value = [
-        { title: "周线图表", url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_weekly.png` }
+      const images = [
+        { title: `${item.etf_name} (${item.etf_code}) 周线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_weekly.png` },
       ];
-      currentViewerIndex.value = 0;
-      chartViewerVisible.value = true;
-    };
-
-    // 翻页控制 (< 上一张 / > 下一张)
-    const prevViewerImage = () => {
-      if (currentViewerImages.value.length <= 1) return;
-      currentViewerIndex.value = (currentViewerIndex.value - 1 + currentViewerImages.value.length) % currentViewerImages.value.length;
-    };
-
-    const nextViewerImage = () => {
-      if (currentViewerImages.value.length <= 1) return;
-      currentViewerIndex.value = (currentViewerIndex.value + 1) % currentViewerImages.value.length;
+      showViewerWithMultiImages(images, 0);
     };
 
     const toggleRow = (item) => {
@@ -297,15 +316,9 @@ export default {
       processedData,
       latestDailyColIndex,
       expandedRowKey,
-      chartViewerVisible,
-      currentViewerTarget,
-      currentViewerImages,
-      currentViewerIndex,
       formatDateCN,
       openDailyChartViewer,
       openWeeklyChartViewer,
-      prevViewerImage,
-      nextViewerImage,
       toggleRow,
       getColorClass,
       getPastWeeks,
@@ -313,7 +326,7 @@ export default {
   },
   template: `
     <div class="max-w-7xl mx-auto space-y-3 sm:space-y-4 select-none">
-      <!-- 顶部保留精致搜索框 (彻底精简) -->
+      <!-- 顶部保留精致搜索框 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center w-full">
         <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3.5"></i>
         <input v-model="searchQuery" type="search" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
@@ -407,41 +420,6 @@ export default {
               </template>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <!-- 全屏图表大图预览 Overlay (包含带圆圈大号的 < 与 > 左右翻页按钮) -->
-      <div v-if="chartViewerVisible" class="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-6 select-none" @click.self="chartViewerVisible = false">
-        <!-- 顶部名称与关闭按钮 -->
-        <div class="absolute top-4 left-4 right-4 flex justify-between items-center text-white z-20">
-          <div class="flex items-center gap-2 bg-black/50 px-3.5 py-1.5 rounded-full backdrop-blur-md text-xs sm:text-sm font-medium">
-            <span class="font-bold">{{ currentViewerTarget.name }}</span>
-            <span class="text-slate-300 font-mono">({{ currentViewerTarget.code }})</span>
-            <span class="bg-white/20 px-2 py-0.5 rounded text-[11px] ml-1">{{ currentViewerImages[currentViewerIndex]?.title }}</span>
-          </div>
-          <button @click="chartViewerVisible = false" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center text-lg transition-colors">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </div>
-
-        <!-- 左翻页按钮 < -->
-        <button v-if="currentViewerImages.length > 1" @click.stop="prevViewerImage" class="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-all z-20 text-xl sm:text-2xl backdrop-blur-md shadow-2xl">
-          <i class="fa-solid fa-chevron-left"></i>
-        </button>
-
-        <!-- 当前大图 -->
-        <div class="max-w-full max-h-full flex items-center justify-center p-2">
-          <img :src="currentViewerImages[currentViewerIndex]?.url" class="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl transition-all duration-200" alt="图表">
-        </div>
-
-        <!-- 右翻页按钮 > -->
-        <button v-if="currentViewerImages.length > 1" @click.stop="nextViewerImage" class="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-all z-20 text-xl sm:text-2xl backdrop-blur-md shadow-2xl">
-          <i class="fa-solid fa-chevron-right"></i>
-        </button>
-
-        <!-- 底部页码提示 (1 / 2) -->
-        <div v-if="currentViewerImages.length > 1" class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white/80 text-xs px-3.5 py-1 rounded-full backdrop-blur-md font-mono">
-          {{ currentViewerIndex + 1 }} / {{ currentViewerImages.length }}
         </div>
       </div>
     </div>
