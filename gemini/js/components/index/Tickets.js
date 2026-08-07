@@ -191,7 +191,7 @@ export default {
         <div>
           <h2 class="text-2xl font-bold text-slate-800">客服工单</h2>
           <p class="text-xs text-slate-400 mt-1">
-            内容与图片保留 60 天自动删除 · 同步支持 Telegram 机器人互动
+            内容与图片保留 60 天自动删除
           </p>
         </div>
         <button
@@ -200,15 +200,6 @@ export default {
         >
           {{ showForm ? '取消' : '新建工单' }}
         </button>
-      </div>
-
-      <!-- Telegram 提示 -->
-      <div class="bg-sky-50 border border-sky-100 rounded-xl px-4 py-3 text-xs text-sky-800 flex items-start gap-2">
-        <i class="fa-brands fa-telegram text-sky-500 mt-0.5"></i>
-        <div>
-          所有工单交流均可通过 <strong>Telegram 机器人</strong> 实时接收与回复。
-          绑定后可直接在 TG 中查看进度、补充截图。
-        </div>
       </div>
 
       <!-- 新建工单表单 -->
