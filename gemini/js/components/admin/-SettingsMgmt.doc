@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 后台【系统设置】分块组件
+ * 波幅探长 - 后台【系统设置】组件
  * js/components/admin/SettingsMgmt.js
  */
 import { store } from "../../store.js";
@@ -16,6 +16,7 @@ export default {
       gift_invitee_days: 2,
       free_top_n_charts: 3,
       pay_register_enabled: "1",
+      promo_enabled: "1",
       custom_max_symbols: 3,
       vote_monthly_limit: 10,
       alipay_qr_url: "",
@@ -69,7 +70,7 @@ export default {
       <div class="flex justify-between items-center">
         <div>
           <h2 class="text-xl font-bold text-slate-800">系统设置</h2>
-          <p class="text-xs text-slate-400 mt-1">控制全网赠送规则、收款码、社交媒体链接与权限上限</p>
+          <p class="text-xs text-slate-400 mt-1">控制全网赠送规则、默认收款码、优惠码显隐与权限上限</p>
         </div>
         <button @click="saveSettings" class="theme-bg text-white text-sm px-5 py-2 rounded-lg font-bold hover:opacity-90 shadow-sm">保存全局设置</button>
       </div>
@@ -107,24 +108,39 @@ export default {
               <input type="number" v-model.number="settingsForm.vote_monthly_limit" class="w-full border px-3 py-2 rounded-lg text-sm font-mono focus:theme-border outline-none">
             </div>
           </div>
+
+          <div class="pt-2 border-t border-slate-50">
+            <label class="text-xs text-slate-500 mb-1 block font-bold">优惠码功能显示开关</label>
+            <select v-model="settingsForm.promo_enabled" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none font-medium">
+              <option value="1">开启 (购买套餐界面展示优惠码输入框)</option>
+              <option value="0">关闭 (购买套餐界面完全隐藏优惠码卡片)</option>
+            </select>
+          </div>
         </div>
 
-        <!-- 收款码配置 -->
+        <!-- 收款码与默认通道配置 -->
         <div class="bg-white rounded-xl border border-slate-100 p-5 space-y-3.5 shadow-sm">
-          <div class="text-sm font-bold text-slate-700 border-b pb-2">精准支付与收款码 (直链或支付链接)</div>
+          <div class="text-sm font-bold text-slate-700 border-b pb-2">精准支付与默认收款码</div>
           <div>
-            <label class="text-xs text-slate-500 mb-1 block">支付宝收款码 URL</label>
+            <label class="text-xs text-slate-500 mb-1 block">默认支付通道</label>
+            <select v-model="settingsForm.default_pay_channel" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none font-medium">
+              <option value="alipay">支付宝 (优先显示)</option>
+              <option value="wechat">微信支付 (优先显示)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 mb-1 block">支付宝收款码 URL / 二维码链接</label>
             <input v-model="settingsForm.alipay_qr_url" placeholder="图片直链或支付链接" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
           </div>
           <div>
-            <label class="text-xs text-slate-500 mb-1 block">微信收款码 URL</label>
+            <label class="text-xs text-slate-500 mb-1 block">微信收款码 URL / 二维码链接</label>
             <input v-model="settingsForm.wechat_qr_url" placeholder="图片直链或支付链接" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
           </div>
         </div>
 
         <!-- 前台 Footer 社交链接 -->
         <div class="bg-white rounded-xl border border-slate-100 p-5 space-y-3.5 shadow-sm lg:col-span-2">
-          <div class="text-sm font-bold text-slate-700 border-b pb-2">前台 Footer 社交链接 (留空则前台不展示)</div>
+          <div class="text-sm font-bold text-slate-700 border-b pb-2">前台 Footer 社交链接</div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="text-xs text-slate-500 mb-1 block">抖音主页链接</label>
