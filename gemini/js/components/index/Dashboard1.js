@@ -5,7 +5,7 @@
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
 
-const { ref, reactive, computed, onMounted } = Vue;
+const { ref, computed, onMounted } = Vue;
 
 export default {
   name: "Dashboard",
@@ -16,14 +16,8 @@ export default {
     
     const searchQuery = ref("");
     const expandedRowKey = ref(null);
-
-    // 日线图表弹窗 (含日线与半日线切换)
-    const dailyChartModalVisible = ref(false);
-    const currentChartTarget = reactive({
-      code: "",
-      name: "",
-      activeTab: "daily", // 'daily' | 'half_day'
-    });
+    const sortColumn = ref(null);
+    const sortOrder = ref("desc");
 
     const isValidDate = (d) => d && typeof d === "string" && /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(d.trim());
     const parseYMD = (s) => (isValidDate(s) ? s.trim().split(/[-/]/).map((v) => parseInt(v, 10)) : [0, 0, 0]);
@@ -50,7 +44,7 @@ export default {
       return days;
     };
 
-    // 自动获取最新数据所在的周一 (无需下拉菜单选择历史周)
+    // 自动获取最新数据所在的周一
     const latestMonday = computed(() => {
       const validDates = [...new Set(allData.value.filter((i) => (i.day_status || i.week_status) && isValidDate(i.date)).map((i) => i.date))].sort();
       if (!validDates.length) return "";
@@ -59,7 +53,7 @@ export default {
       return wDays.length ? wDays[0] : "";
     });
 
-    // 计算最新的日线数据列索引 (只有最新的日线数据列显示图表 Icon)
+    // 计算最新的日线数据列索引 (仅在最新列显示 Icon)
     const latestDailyColIndex = computed(() => {
       if (!latestMonday.value) return -1;
       const weekDays = getWeekDays(latestMonday.value);
@@ -83,7 +77,18 @@ export default {
       return match ? parseFloat(match[0]) : -9999;
     };
 
-    // 提取 Past 4 周的历史数据行 (展开 4 行数据)
+    // 排序逻辑
+    const handleSort = (column) => {
+      if (sortColumn.value === column) {
+        if (sortOrder.value === "desc") sortOrder.value = "asc";
+        else { sortColumn.value = null; sortOrder.value = "desc"; }
+      } else {
+        sortColumn.value = column;
+        sortOrder.value = "desc";
+      }
+    };
+
+    // 提取 Past 4 周的历史数据行
     const getPastWeeks = (etf_code) => {
       if (!latestMonday.value) return [];
       const pastData = allData.value.filter((item) => item.etf_code === etf_code && (item.day_status || item.week_status));
@@ -93,7 +98,7 @@ export default {
         const wDays = getWeekDays(item.date);
         if (!wDays.length) return;
         const monday = wDays[0];
-        if (monday === latestMonday.value) return; // 排除当前最新周
+        if (monday === latestMonday.value) return;
         if (!weekMap[monday]) weekMap[monday] = { monday, days: [null, null, null, null, null], week_status: null };
         const idx = wDays.indexOf(item.date);
         if (idx !== -1) weekMap[monday].days[idx] = item;
@@ -102,7 +107,7 @@ export default {
       return Object.values(weekMap).sort((a, b) => b.monday.localeCompare(a.monday)).slice(0, 4);
     };
 
-    // 处理数据、锁定 Top3 免费标的
+    // 处理数据、锁定 Top3 免费标的、支持全列排序
     const processedData = computed(() => {
       if (!latestMonday.value) return { list: [], freeTop3Codes: [], weekDays: [] };
       const weekDays = getWeekDays(latestMonday.value);
@@ -130,8 +135,8 @@ export default {
 
       let items = Object.values(etfMap);
 
-      // 根据最新有效数据绝对值降序排列
-      items.sort((a, b) => {
+      // 1. 先按绝对值降序算出并【绝对锁死】 Top 3 免费标的
+      const sortedByAbs = [...items].sort((a, b) => {
         let latestIdx = 4;
         while (latestIdx >= 0) {
           const hasData = items.some((i) => i.days[latestIdx]?.day_status && i.days[latestIdx].day_status !== "-");
@@ -145,11 +150,47 @@ export default {
         }
         return 0;
       });
+      const freeTop3Codes = sortedByAbs.slice(0, 3).map((i) => i.etf_code);
 
-      // 提取并绝对锁定 Top 3 免费标的代码
-      const freeTop3Codes = items.slice(0, 3).map((i) => i.etf_code);
+      // 2. 根据用户点击的列头进行自由排序
+      items.sort((a, b) => {
+        if (sortColumn.value) {
+          if (sortColumn.value === "etf_name") {
+            const cmp = (a.etf_name || "").localeCompare(b.etf_name || "", "zh-CN");
+            return sortOrder.value === "asc" ? cmp : -cmp;
+          }
+          if (sortColumn.value.startsWith("d")) {
+            const idx = parseInt(sortColumn.value.substring(1), 10);
+            const valA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
+            const valB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
+            if (valA === -9999 && valB !== -9999) return 1;
+            if (valB === -9999 && valA !== -9999) return -1;
+            return sortOrder.value === "desc" ? valB - valA : valA - valB;
+          }
+          if (sortColumn.value === "week_status") {
+            const valA = getStatusVal(a.week_status), valB = getStatusVal(b.week_status);
+            if (valA === -9999 && valB !== -9999) return 1;
+            if (valB === -9999 && valA !== -9999) return -1;
+            return sortOrder.value === "desc" ? valB - valA : valA - valB;
+          }
+        } else {
+          // 默认按最新列绝对值降序
+          let latestIdx = 4;
+          while (latestIdx >= 0) {
+            const hasData = items.some((i) => i.days[latestIdx]?.day_status && i.days[latestIdx].day_status !== "-");
+            if (hasData) break;
+            latestIdx--;
+          }
+          if (latestIdx >= 0) {
+            const valA = a.days[latestIdx]?.day_status ? Math.abs(getStatusVal(a.days[latestIdx].day_status)) : -9999;
+            const valB = b.days[latestIdx]?.day_status ? Math.abs(getStatusVal(b.days[latestIdx].day_status)) : -9999;
+            return valB - valA;
+          }
+        }
+        return 0;
+      });
 
-      // 关键字搜索过滤
+      // 3. 关键字搜索过滤
       if (searchQuery.value) {
         const q = searchQuery.value.toLowerCase().trim();
         items = items.filter(
@@ -160,56 +201,80 @@ export default {
       return { list: items, freeTop3Codes, weekDays };
     });
 
-    // 检查是否有权看图 (Top 3 免费或 VIP)
     const canViewChart = (etfCode) => {
       if (store.state.isVip) return true;
       return processedData.value.freeTop3Codes.includes(etfCode);
     };
 
-    // 打开日线/半日线图表弹窗
-    const openDailyChartModal = (item) => {
-      if (!canViewChart(item.etf_code)) {
-        if (confirm("此为 VIP 专属图表 (Top 3 标的免费查看)。\n是否去开通通用 VIP？")) {
-          window.location.hash = "#/plan";
-        }
-        return;
-      }
-      currentChartTarget.code = item.etf_code;
-      currentChartTarget.name = item.etf_name || item.etf_code;
-      currentChartTarget.activeTab = "daily";
-      dailyChartModalVisible.value = true;
-    };
+    // 使用原生的 Viewer.js 实现手机端随意缩放放大，并带 < 和 > 控制翻页
+    const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
+      const container = document.createElement("div");
+      container.style.display = "none";
+      imgList.forEach((item) => {
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.title;
+        container.appendChild(img);
+      });
+      document.body.appendChild(container);
 
-    // 切换弹窗中的日线 / 半日线图表 (用于左右箭头 < 和 > 切换)
-    const toggleChartTab = () => {
-      currentChartTarget.activeTab = currentChartTarget.activeTab === "daily" ? "half_day" : "daily";
-    };
-
-    // 打开周线图表
-    const openWeeklyChart = (item) => {
-      if (!canViewChart(item.etf_code)) {
-        if (confirm("此为 VIP 专属图表 (Top 3 标的免费查看)。\n是否去开通通用 VIP？")) {
-          window.location.hash = "#/plan";
-        }
-        return;
-      }
-      const imgUrl = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_weekly.png`;
-      showViewerImage(imgUrl);
-    };
-
-    const showViewerImage = (url) => {
       if (window.Viewer) {
-        const img = new Image();
-        img.src = url;
-        const viewer = new window.Viewer(img, {
-          hidden: () => viewer.destroy(),
-          title: false,
+        const viewer = new window.Viewer(container, {
+          hidden: () => {
+            viewer.destroy();
+            container.remove();
+          },
+          title: true,
           navbar: false,
+          tooltip: true,
+          movable: true,
+          zoomable: true,
+          rotatable: false,
+          scalable: false,
+          transition: true,
+          initialViewIndex: initialIndex,
+          toolbar: {
+            zoomIn: 1,
+            zoomOut: 1,
+            oneToOne: 1,
+            reset: 1,
+            prev: 1, // 显示上一张按钮 <
+            next: 1, // 显示下一张按钮 >
+          },
         });
         viewer.show();
       } else {
-        window.open(url, "_blank");
+        window.open(imgList[initialIndex]?.url, "_blank");
       }
+    };
+
+    // 点击日线图表：在 Viewer.js 中同时载入【日线图表】与【半日线图表】，可用 < 和 > 翻页
+    const openDailyChartViewer = (item) => {
+      if (!canViewChart(item.etf_code)) {
+        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
+          window.location.hash = "#/plan";
+        }
+        return;
+      }
+      const images = [
+        { title: `${item.etf_name} (${item.etf_code}) 日线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png` },
+        { title: `${item.etf_name} (${item.etf_code}) 半日线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png` },
+      ];
+      showViewerWithMultiImages(images, 0);
+    };
+
+    // 点击周线图表：单张周线图
+    const openWeeklyChartViewer = (item) => {
+      if (!canViewChart(item.etf_code)) {
+        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
+          window.location.hash = "#/plan";
+        }
+        return;
+      }
+      const images = [
+        { title: `${item.etf_name} (${item.etf_code}) 周线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_weekly.png` },
+      ];
+      showViewerWithMultiImages(images, 0);
     };
 
     const toggleRow = (item) => {
@@ -245,16 +310,15 @@ export default {
     return {
       loading,
       searchQuery,
+      sortColumn,
+      sortOrder,
+      handleSort,
       processedData,
       latestDailyColIndex,
       expandedRowKey,
-      dailyChartModalVisible,
-      currentChartTarget,
       formatDateCN,
-      openDailyChartModal,
-      toggleChartTab,
-      openWeeklyChart,
-      showViewerImage,
+      openDailyChartViewer,
+      openWeeklyChartViewer,
       toggleRow,
       getColorClass,
       getPastWeeks,
@@ -262,7 +326,7 @@ export default {
   },
   template: `
     <div class="max-w-7xl mx-auto space-y-3 sm:space-y-4 select-none">
-      <!-- 顶部保留精致搜索框 (完全移除历史展开下拉菜单，极大减少空间占用) -->
+      <!-- 顶部保留精致搜索框 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center w-full">
         <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3.5"></i>
         <input v-model="searchQuery" type="search" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
@@ -279,15 +343,24 @@ export default {
         <p>暂无相关行情数据</p>
       </div>
 
-      <!-- 看板表格 -->
+      <!-- 看板表格 (所有列支持点击排序) -->
       <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="overflow-x-auto custom-scrollbar">
           <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
             <thead class="bg-slate-50 border-b border-slate-100 sticky top-0 z-30">
               <tr class="text-xs text-slate-600 font-bold select-none">
-                <th class="py-3 px-4 text-left etf-name-column sticky left-0 bg-slate-50 z-40">标的名称</th>
-                <th v-for="idx in 5" :key="idx" class="py-3 px-2">周{{ ['一','二','三','四','五'][idx-1] }}</th>
-                <th class="py-3 px-4">周线</th>
+                <th class="py-3 px-4 text-left etf-name-column sticky left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors" @click="handleSort('etf_name')">
+                  标的名称
+                  <i v-if="sortColumn==='etf_name'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
+                </th>
+                <th v-for="idx in 5" :key="idx" class="py-3 px-2 cursor-pointer hover:bg-slate-100 transition-colors" @click="handleSort('d'+(idx-1))">
+                  周{{ ['一','二','三','四','五'][idx-1] }}
+                  <i v-if="sortColumn==='d'+(idx-1)" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
+                </th>
+                <th class="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors" @click="handleSort('week_status')">
+                  周线
+                  <i v-if="sortColumn==='week_status'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50 text-sm">
@@ -308,24 +381,24 @@ export default {
                     </div>
                   </td>
                   
-                  <!-- 日线 5 天数据列 (仅在最新数据列展示图表 Icon；悬停显示格式为 X月X日) -->
+                  <!-- 日线 5 天数据列 (悬停显示 X月X日；仅最新有效日线列显示 Icon) -->
                   <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
                     <div class="flex items-center justify-center gap-1" :title="formatDateCN(item.days[idx-1]?.date)">
                       <span>{{ item.days[idx-1]?.day_status || '-' }}</span>
                       <i v-if="idx - 1 === latestDailyColIndex"
                          class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
                          :title="formatDateCN(item.days[idx-1]?.date)"
-                         @click.stop="openDailyChartModal(item)"></i>
+                         @click.stop="openDailyChartViewer(item)"></i>
                     </div>
                   </td>
 
-                  <!-- 周线数据列 (Icon 始终保留；悬停显示对应最新交易日日期 X月X日) -->
+                  <!-- 周线数据列 (Icon 始终保留；悬停显示对应交易日日期 X月X日) -->
                   <td class="p-3 font-medium" :class="getColorClass(item.week_status)">
                     <div class="flex items-center justify-center gap-1" :title="formatDateCN(processedData.weekDays)">
                       <span>{{ item.week_status || '-' }}</span>
                       <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
                          :title="formatDateCN(processedData.weekDays)"
-                         @click.stop="openWeeklyChart(item)"></i>
+                         @click.stop="openWeeklyChartViewer(item)"></i>
                     </div>
                   </td>
                 </tr>
@@ -347,44 +420,6 @@ export default {
               </template>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <!-- 日线/半日线图表弹窗 (带左箭头 < 与 右箭头 > 切换控制) -->
-      <div v-if="dailyChartModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="dailyChartModalVisible = false">
-        <div class="bg-white rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl p-6 space-y-4">
-          <div class="flex justify-between items-center border-b pb-3">
-            <h3 class="font-bold text-slate-800">{{ currentChartTarget.name }} ({{ currentChartTarget.code }}) - 图表分析</h3>
-            <button @click="dailyChartModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-          </div>
-
-          <!-- 日线 / 半日线 选项卡切换 -->
-          <div class="flex gap-2">
-            <button @click="currentChartTarget.activeTab = 'daily'" class="flex-1 py-2 rounded-lg text-xs font-bold border transition-colors"
-                    :class="currentChartTarget.activeTab === 'daily' ? 'theme-bg text-white border-transparent' : 'bg-slate-50 text-slate-600'">
-              日线图表
-            </button>
-            <button @click="currentChartTarget.activeTab = 'half_day'" class="flex-1 py-2 rounded-lg text-xs font-bold border transition-colors"
-                    :class="currentChartTarget.activeTab === 'half_day' ? 'theme-bg text-white border-transparent' : 'bg-slate-50 text-slate-600'">
-              半日线图表
-            </button>
-          </div>
-
-          <!-- 图表预览区 (两侧包含 < 与 > 切换按钮) -->
-          <div class="relative bg-slate-50 rounded-xl p-2 min-h-[300px] flex items-center justify-center border border-slate-100 group">
-            <!-- 左切换按钮 < -->
-            <button @click.stop="toggleChartTab" class="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-slate-800/60 hover:bg-slate-800 text-white flex items-center justify-center transition-all shadow-md z-10 text-sm">
-              <i class="fa-solid fa-chevron-left"></i>
-            </button>
-
-            <img :src="'https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/' + currentChartTarget.code + '_' + currentChartTarget.activeTab + '.png'"
-                 class="max-w-full h-auto rounded cursor-pointer" alt="图表" @click="showViewerImage($event.target.src)">
-
-            <!-- 右切换按钮 > -->
-            <button @click.stop="toggleChartTab" class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-slate-800/60 hover:bg-slate-800 text-white flex items-center justify-center transition-all shadow-md z-10 text-sm">
-              <i class="fa-solid fa-chevron-right"></i>
-            </button>
-          </div>
         </div>
       </div>
     </div>
