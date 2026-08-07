@@ -1,429 +1,512 @@
 /**
- * 波幅探长 - 数据看板分块组件
- * js/components/index/Dashboard.js
+ * 波幅探长 - 个人中心分块组件 (修复：支持 GBK 显式解码，彻底解决腾讯接口中文乱码)
+ * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
-import { etfApi } from "../../api/etf.js";
+import { authApi } from "../../api/auth.js";
+import { planApi } from "../../api/plan.js";
+import { watchlistApi } from "../../api/watchlist.js";
 
-const { ref, computed, onMounted } = Vue;
+const { ref, reactive, onMounted } = Vue;
 
 export default {
-  name: "Dashboard",
+  name: "Profile",
   setup() {
+    const orders = ref([]);
+    const invitees = ref([]);
+    const customList = ref([]);
     const loading = ref(false);
-    const allData = ref([]);
-    const chartsMap = ref({});
-    
-    const searchQuery = ref("");
-    const expandedRowKey = ref(null);
-    const sortColumn = ref(null);
-    const sortOrder = ref("desc");
+    const inviteeLoading = ref(false);
 
-    const isValidDate = (d) => d && typeof d === "string" && /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(d.trim());
-    const parseYMD = (s) => (isValidDate(s) ? s.trim().split(/[-/]/).map((v) => parseInt(v, 10)) : [0, 0, 0]);
+    // 添加定制标的弹窗状态
+    const customModalVisible = ref(false);
+    const inputCode = ref("");
+    const foundName = ref("");
+    const searchingName = ref(false);
+    const searchError = ref("");
+    const draftSymbols = ref([]);
 
-    // 格式化日期为 "X月X日"
-    const formatDateCN = (dateStr) => {
-      if (!dateStr || !isValidDate(dateStr)) return "";
-      const [y, m, d] = parseYMD(dateStr);
-      return `${m}月${d}日`;
-    };
-
-    const getWeekDays = (dateStr) => {
-      const [y, m, d] = parseYMD(dateStr);
-      if (!y) return [];
-      const dateObj = new Date(y, m - 1, d);
-      const day = dateObj.getDay();
-      const offset = day === 0 ? -6 : 1 - day;
-      const monday = new Date(y, m - 1, d + offset);
-      const days = [];
-      for (let i = 0; i < 5; i++) {
-        const temp = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-        days.push(`${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, "0")}-${String(temp.getDate()).padStart(2, "0")}`);
-      }
-      return days;
-    };
-
-    // 自动获取最新数据所在的周一
-    const latestMonday = computed(() => {
-      const validDates = [...new Set(allData.value.filter((i) => (i.day_status || i.week_status) && isValidDate(i.date)).map((i) => i.date))].sort();
-      if (!validDates.length) return "";
-      const lastDate = validDates[validDates.length - 1];
-      const wDays = getWeekDays(lastDate);
-      return wDays.length ? wDays[0] : "";
+    const pwdForm = reactive({
+      oldPassword: "",
+      newPassword: "",
+      confirmPassword: "",
     });
+    const pwdLoading = ref(false);
 
-    // 计算最新的日线数据列索引 (仅在最新列显示 Icon)
-    const latestDailyColIndex = computed(() => {
-      if (!latestMonday.value) return -1;
-      const weekDays = getWeekDays(latestMonday.value);
-      let lastIdx = -1;
-      for (let idx = 4; idx >= 0; idx--) {
-        const dateStr = weekDays[idx];
-        const hasData = allData.value.some(
-          (i) => i.date === dateStr && i.day_status && i.day_status !== "-" && i.day_status !== "--"
-        );
-        if (hasData) {
-          lastIdx = idx;
-          break;
-        }
+    // 新浪/腾讯财经代码自动查股票/ETF中文名称 (使用 TextDecoder GBK 解码解决乱码)
+    const fetchStockNameByCode = async (codeStr) => {
+      const code = String(codeStr || "").trim().toUpperCase();
+      if (!code) return "";
+      let symbol = code;
+      if (/^\d{6}$/.test(code)) {
+        if (/^(5|6|9)/.test(code)) symbol = `sh${code}`;
+        else symbol = `sz${code}`;
+      } else if (/^\d{5}$/.test(code)) {
+        symbol = `hk${code}`;
       }
-      return lastIdx;
-    });
-
-    const getStatusVal = (str) => {
-      if (!str || typeof str !== "string" || str === "-" || str === "--") return -9999;
-      const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
-      return match ? parseFloat(match[0]) : -9999;
-    };
-
-    // 排序逻辑
-    const handleSort = (column) => {
-      if (sortColumn.value === column) {
-        if (sortOrder.value === "desc") sortOrder.value = "asc";
-        else { sortColumn.value = null; sortOrder.value = "desc"; }
-      } else {
-        sortColumn.value = column;
-        sortOrder.value = "desc";
-      }
-    };
-
-    // 提取 Past 4 周的历史数据行
-    const getPastWeeks = (etf_code) => {
-      if (!latestMonday.value) return [];
-      const pastData = allData.value.filter((item) => item.etf_code === etf_code && (item.day_status || item.week_status));
-      const weekMap = {};
-      pastData.forEach((item) => {
-        if (!item.date || !isValidDate(item.date)) return;
-        const wDays = getWeekDays(item.date);
-        if (!wDays.length) return;
-        const monday = wDays[0];
-        if (monday === latestMonday.value) return;
-        if (!weekMap[monday]) weekMap[monday] = { monday, days: [null, null, null, null, null], week_status: null };
-        const idx = wDays.indexOf(item.date);
-        if (idx !== -1) weekMap[monday].days[idx] = item;
-        if (item.week_status && item.week_status !== "-" && item.week_status !== "--") weekMap[monday].week_status = item.week_status;
-      });
-      return Object.values(weekMap).sort((a, b) => b.monday.localeCompare(a.monday)).slice(0, 4);
-    };
-
-    // 处理数据、锁定 Top3 免费标的、支持全列排序
-    const processedData = computed(() => {
-      if (!latestMonday.value) return { list: [], freeTop3Codes: [], weekDays: [] };
-      const weekDays = getWeekDays(latestMonday.value);
-      if (weekDays.length < 5) return { list: [], freeTop3Codes: [], weekDays: [] };
-
-      const etfMap = {};
-      allData.value.forEach((item) => {
-        if (!item.date) return;
-        const idx = weekDays.indexOf(item.date);
-        if (idx !== -1) {
-          if (!etfMap[item.etf_code]) {
-            etfMap[item.etf_code] = {
-              etf_code: item.etf_code,
-              etf_name: item.etf_name,
-              days: [null, null, null, null, null],
-              week_status: null,
-            };
-          }
-          etfMap[item.etf_code].days[idx] = item;
-          if (item.week_status && item.week_status !== "-" && item.week_status !== "--") {
-            etfMap[item.etf_code].week_status = item.week_status;
-          }
-        }
-      });
-
-      let items = Object.values(etfMap);
-
-      // 1. 先按绝对值降序算出并【绝对锁死】 Top 3 免费标的
-      const sortedByAbs = [...items].sort((a, b) => {
-        let latestIdx = 4;
-        while (latestIdx >= 0) {
-          const hasData = items.some((i) => i.days[latestIdx]?.day_status && i.days[latestIdx].day_status !== "-");
-          if (hasData) break;
-          latestIdx--;
-        }
-        if (latestIdx >= 0) {
-          const valA = a.days[latestIdx]?.day_status ? Math.abs(getStatusVal(a.days[latestIdx].day_status)) : -9999;
-          const valB = b.days[latestIdx]?.day_status ? Math.abs(getStatusVal(b.days[latestIdx].day_status)) : -9999;
-          return valB - valA;
-        }
-        return 0;
-      });
-      const freeTop3Codes = sortedByAbs.slice(0, 3).map((i) => i.etf_code);
-
-      // 2. 根据用户点击的列头进行自由排序
-      items.sort((a, b) => {
-        if (sortColumn.value) {
-          if (sortColumn.value === "etf_name") {
-            const cmp = (a.etf_name || "").localeCompare(b.etf_name || "", "zh-CN");
-            return sortOrder.value === "asc" ? cmp : -cmp;
-          }
-          if (sortColumn.value.startsWith("d")) {
-            const idx = parseInt(sortColumn.value.substring(1), 10);
-            const valA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
-            const valB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
-            if (valA === -9999 && valB !== -9999) return 1;
-            if (valB === -9999 && valA !== -9999) return -1;
-            return sortOrder.value === "desc" ? valB - valA : valA - valB;
-          }
-          if (sortColumn.value === "week_status") {
-            const valA = getStatusVal(a.week_status), valB = getStatusVal(b.week_status);
-            if (valA === -9999 && valB !== -9999) return 1;
-            if (valB === -9999 && valA !== -9999) return -1;
-            return sortOrder.value === "desc" ? valB - valA : valA - valB;
-          }
-        } else {
-          // 默认按最新列绝对值降序
-          let latestIdx = 4;
-          while (latestIdx >= 0) {
-            const hasData = items.some((i) => i.days[latestIdx]?.day_status && i.days[latestIdx].day_status !== "-");
-            if (hasData) break;
-            latestIdx--;
-          }
-          if (latestIdx >= 0) {
-            const valA = a.days[latestIdx]?.day_status ? Math.abs(getStatusVal(a.days[latestIdx].day_status)) : -9999;
-            const valB = b.days[latestIdx]?.day_status ? Math.abs(getStatusVal(b.days[latestIdx].day_status)) : -9999;
-            return valB - valA;
-          }
-        }
-        return 0;
-      });
-
-      // 3. 关键字搜索过滤
-      if (searchQuery.value) {
-        const q = searchQuery.value.toLowerCase().trim();
-        items = items.filter(
-          (i) => (i.etf_name && i.etf_name.toLowerCase().includes(q)) || (i.etf_code && i.etf_code.toLowerCase().includes(q))
-        );
-      }
-
-      return { list: items, freeTop3Codes, weekDays };
-    });
-
-    const canViewChart = (etfCode) => {
-      if (store.state.isVip) return true;
-      return processedData.value.freeTop3Codes.includes(etfCode);
-    };
-
-    // 使用原生的 Viewer.js 实现手机端随意缩放放大，自动感知图片数量并支持 < 与 > 翻页
-    const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
-      const container = document.createElement("div");
-      container.style.display = "none";
-      imgList.forEach((item) => {
-        const img = document.createElement("img");
-        img.src = item.url;
-        img.alt = item.title;
-        container.appendChild(img);
-      });
-      document.body.appendChild(container);
-
-      if (window.Viewer) {
-        const viewer = new window.Viewer(container, {
-          hidden: () => {
-            viewer.destroy();
-            container.remove();
-          },
-          title: true,
-          navbar: false,
-          tooltip: true,
-          movable: true,
-          zoomable: true,
-          rotatable: false,
-          scalable: false,
-          transition: true,
-          loop: true, // 多图时开启无缝循环翻页
-          initialViewIndex: initialIndex,
-          toolbar: {
-            zoomIn: 1,
-            zoomOut: 1,
-            oneToOne: 1,
-            reset: 1,
-            prev: 1, // 图表数量>1 时自动激活 < 按钮
-            next: 1, // 图表数量>1 时自动激活 > 按钮
-          },
-        });
-        viewer.show();
-      } else {
-        window.open(imgList[initialIndex]?.url, "_blank");
-      }
-    };
-
-    // 点击日线图表：在 Viewer.js 中载入【日线图表】与【半日线图表】，自动识别数量并可用 < 和 > 翻页
-    const openDailyChartViewer = (item) => {
-      if (!canViewChart(item.etf_code)) {
-        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
-          window.location.hash = "#/plan";
-        }
-        return;
-      }
-      const images = [
-        { title: `${item.etf_name} (${item.etf_code}) 日线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png` },
-        { title: `${item.etf_name} (${item.etf_code}) 半日线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png` },
-      ];
-      showViewerWithMultiImages(images, 0);
-    };
-
-    // 点击周线图表：只有 1 张周线图（Viewer.js 自动识别仅 1 张图，翻页按钮自动禁用）
-    const openWeeklyChartViewer = (item) => {
-      if (!canViewChart(item.etf_code)) {
-        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
-          window.location.hash = "#/plan";
-        }
-        return;
-      }
-      const images = [
-        { title: `${item.etf_name} (${item.etf_code}) 周线图表`, url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_weekly.png` },
-      ];
-      showViewerWithMultiImages(images, 0);
-    };
-
-    const toggleRow = (item) => {
-      expandedRowKey.value = expandedRowKey.value === item.etf_code ? null : item.etf_code;
-    };
-
-    const getColorClass = (status) => {
-      if (!status || status === "-" || status === "--") return "text-slate-300";
-      return status.includes("+") ? "text-red-500" : "text-emerald-500";
-    };
-
-    const initData = async () => {
-      loading.value = true;
+      
       try {
-        const [data, chartsRes] = await Promise.all([
-          etfApi.fetchEtfRawData().catch(() => []),
-          etfApi.fetchChartsMap().catch(() => ({})),
+        const res = await fetch(`https://qt.gtimg.cn/q=s_${symbol}`);
+        if (!res.ok) return "";
+        const buffer = await res.arrayBuffer();
+        
+        // 显式使用 GBK 解码腾讯财经接口返回的 Buffer，彻底解决中文乱码
+        let text = "";
+        try {
+          text = new TextDecoder("gbk").decode(buffer);
+        } catch (_) {
+          text = new TextDecoder("gb2312").decode(buffer);
+        }
+
+        // 精准匹配引号内的数据，如 v_s_sz159326="51~高端装备ETF~159326~..."
+        const match = text.match(/"([^"]+)"/);
+        if (match && match) {
+          const parts = match.split("~");
+          if (parts.length > 1 && parts) {
+            return parts.trim(); // 准确提取中文名称，例如 "高端装备ETF"
+          }
+        }
+      } catch (_) {}
+      return "";
+    };
+
+    // 输入代码实时防抖查询名称
+    let searchTimer = null;
+    const onCodeInput = () => {
+      foundName.value = "";
+      searchError.value = "";
+      if (searchTimer) clearTimeout(searchTimer);
+      const code = inputCode.value.trim();
+      if (!code) return;
+
+      searchTimer = setTimeout(async () => {
+        searchingName.value = true;
+        const name = await fetchStockNameByCode(code);
+        searchingName.value = false;
+        if (name) {
+          foundName.value = name;
+        } else {
+          searchError.value = "未识别到中文名称，确认后将直接使用代码";
+        }
+      }, 350);
+    };
+
+    // 打开添加定制弹窗
+    const openCustomModal = () => {
+      inputCode.value = "";
+      foundName.value = "";
+      searchError.value = "";
+      draftSymbols.value = [];
+      customModalVisible.value = true;
+    };
+
+    // 确认添加单个标的至草稿
+    const confirmAddSingleSymbol = async () => {
+      const code = inputCode.value.trim().toUpperCase();
+      if (!code) {
+        store.showToast("请输入标的代码", "error");
+        return;
+      }
+      
+      // 去重检查
+      if (draftSymbols.value.some((s) => s.code === code)) {
+        store.showToast("请勿重复添加相同代码", "error");
+        return;
+      }
+
+      const maxLimit = parseInt(store.state.publicSettings.custom_max_symbols || 3, 10);
+      if (draftSymbols.value.length >= maxLimit) {
+        store.showToast(`定制套餐最多添加 ${maxLimit} 只标的`, "error");
+        return;
+      }
+
+      let name = foundName.value;
+      if (!name) {
+        searchingName.value = true;
+        name = await fetchStockNameByCode(code);
+        searchingName.value = false;
+      }
+
+      draftSymbols.value.push({
+        code,
+        name: name || code,
+      });
+
+      inputCode.value = "";
+      foundName.value = "";
+      searchError.value = "";
+    };
+
+    // 完成标的挑选，跳转至购买套餐页面结算
+    const goToBuyCustomPlan = () => {
+      if (!draftSymbols.value.length) {
+        store.showToast("请先输入并添加至少一只定制标的", "error");
+        return;
+      }
+      
+      // 储存草稿标的列表
+      const formattedItems = draftSymbols.value.map((item) => ({
+        etf_code: item.code,
+        etf_name: item.name,
+      }));
+      sessionStorage.setItem("pending_custom_items", JSON.stringify(formattedItems));
+      
+      customModalVisible.value = false;
+      window.location.hash = "#/plan";
+    };
+
+    // 加载个人中心关联数据
+    const loadProfileData = async () => {
+      loading.value = true;
+      inviteeLoading.value = true;
+      try {
+        const [ordersRes, inviteesRes, customRes] = await Promise.all([
+          planApi.fetchUserOrders().catch(() => ({ data: [] })),
+          authApi.getInvitees().catch(() => ({ data: [] })),
+          watchlistApi.fetchUserCustomWatchlist().catch(() => ({ data: [] })),
         ]);
 
-        if (Array.isArray(data)) allData.value = data;
-        chartsMap.value = chartsRes.charts || {};
+        orders.value = ordersRes.data || [];
+        invitees.value = inviteesRes.data || [];
+        customList.value = customRes.data || [];
+      } catch (err) {
+        store.showToast(err.message, "error");
+      } font-medium
+      finally {
+        loading.value = false;
+        inviteeLoading.value = false;
+      }
+    };
+
+    const removeCustomItem = async (item) => {
+      if (!confirm(`确认移除定制标的 ${item.etf_code}？`)) return;
+      try {
+        await watchlistApi.removeCustomItem(item.id);
+        store.showToast("已成功移除");
+        await loadProfileData();
+      } catch (err) {
+        store.showToast(err.message, "error");
+      }
+    };
+
+    const changePassword = async () => {
+      if (!pwdForm.oldPassword || !pwdForm.newPassword) {
+        store.showToast("请输入原密码和新密码", "error");
+        return;
+      }
+      if (pwdForm.newPassword.length < 6) {
+        store.showToast("新密码至少需 6 位", "error");
+        return;
+      }
+      if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+        store.showToast("两次输入的密码不一致", "error");
+        return;
+      }
+      pwdLoading.value = true;
+      try {
+        await authApi.changePassword(pwdForm.oldPassword, pwdForm.newPassword);
+        store.showToast("密码修改成功，请重新登录");
+        store.clearUserState();
+        window.location.hash = "#/";
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
-        loading.value = false;
+        pwdLoading.value = false;
       }
     };
 
+    const formatDateExact = (ts) => {
+      if (!ts) return "-";
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return "-";
+      const p = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+
+    const formatDateShort = (ts) => {
+      if (!ts) return "-";
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return "-";
+      const p = (n) => String(n).padStart(2, "0");
+      return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    };
+
+    const formatStatus = (s) => {
+      if (s === "approved") return "已通过";
+      if (s === "pending") return "审核中";
+      return "已取消";
+    };
+
     onMounted(() => {
-      initData();
+      if (store.state.isLoggedIn) {
+        loadProfileData();
+      }
     });
 
     return {
+      store: store.state,
+      settings: store.state.publicSettings,
+      orders,
+      invitees,
+      customList,
       loading,
-      searchQuery,
-      sortColumn,
-      sortOrder,
-      handleSort,
-      processedData,
-      latestDailyColIndex,
-      expandedRowKey,
-      formatDateCN,
-      openDailyChartViewer,
-      openWeeklyChartViewer,
-      toggleRow,
-      getColorClass,
-      getPastWeeks,
+      inviteeLoading,
+      customModalVisible,
+      inputCode,
+      foundName,
+      searchingName,
+      searchError,
+      draftSymbols,
+      pwdForm,
+      pwdLoading,
+      onCodeInput,
+      openCustomModal,
+      confirmAddSingleSymbol,
+      goToBuyCustomPlan,
+      loadProfileData,
+      removeCustomItem,
+      changePassword,
+      formatDateExact,
+      formatDateShort,
+      formatStatus,
     };
   },
   template: `
-    <div class="max-w-7xl mx-auto space-y-3 sm:space-y-4 select-none">
-      <!-- 顶部保留精致搜索框 -->
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center w-full">
-        <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3.5"></i>
-        <input v-model="searchQuery" type="search" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
+    <div class="max-w-4xl mx-auto space-y-5 select-none">
+      <!-- 1. VIP 权限顶栏 (卡片一) -->
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs text-slate-400 mb-1">通用监控 VIP 权限</div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xl sm:text-2xl font-bold" :class="store.isVip ? 'theme-text' : 'text-slate-400'">
+                {{ store.isVip ? '已开通' : '未开通' }}
+              </span>
+              <span v-if="store.isVip" class="text-xs bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full border border-emerald-100 font-bold">
+                剩余 {{ store.vipDaysLeft }} 天
+              </span>
+            </div>
+          </div>
+          <a href="#/plan" class="theme-bg text-white px-5 sm:px-6 py-2 sm:py-2.5 rounded-lg text-sm font-bold shadow-sm shrink-0 hover:opacity-90">
+            {{ store.isVip ? '续费 VIP' : '开通 VIP' }}
+          </a>
+        </div>
       </div>
 
-      <!-- 加载与空状态 -->
-      <div v-if="loading" class="text-center py-12 text-slate-400">
-        <i class="fa-solid fa-spinner animate-spin text-2xl theme-text"></i>
-        <p class="mt-2 text-sm">读取云端数据中...</p>
-      </div>
+      <!-- 2. 我的定制监控 (卡片二) -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div class="font-bold text-slate-700 text-base">我的定制监控</div>
+            <p class="text-[11px] text-slate-400 mt-0.5">
+              套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只 · 与通用独立 · 不解锁通用图表
+            </p>
+          </div>
+          <button @click="openCustomModal" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg self-start font-bold hover:opacity-90">
+            <i class="fa-solid fa-plus mr-1"></i>添加标的
+          </button>
+        </div>
 
-      <div v-else-if="!processedData.list.length" class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
-        <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-40"></i>
-        <p>暂无相关行情数据</p>
-      </div>
-
-      <!-- 看板表格 (表头单元格全端粘性吸顶固定) -->
-      <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-        <div class="overflow-x-auto custom-scrollbar">
-          <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
-            <thead class="bg-slate-50 border-b border-slate-100">
-              <tr class="text-xs text-slate-600 font-bold select-none">
-                <!-- 标的名称：双向固定 (垂直吸顶 top-0 + 水平固定 left-0)，层级 z-40 -->
-                <th class="py-3 px-4 text-left etf-name-column sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('etf_name')">
-                  标的名称
-                  <i v-if="sortColumn==='etf_name'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
-                </th>
-                <!-- 周一 ~ 周五：垂直吸顶 top-0 -->
-                <th v-for="idx in 5" :key="idx" class="py-3 px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('d'+(idx-1))">
-                  周{{ ['一','二','三','四','五'][idx-1] }}
-                  <i v-if="sortColumn==='d'+(idx-1)" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
-                </th>
-                <!-- 周线：垂直吸顶 top-0 -->
-                <th class="py-3 px-4 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('week_status')">
-                  周线
-                  <i v-if="sortColumn==='week_status'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
-                </th>
+        <div v-if="loading" class="p-8 text-center text-slate-400 text-sm">
+          <i class="fa-solid fa-circle-notch animate-spin theme-text mr-2"></i>加载中...
+        </div>
+        <div v-else-if="!customList.length" class="p-10 text-center text-sm text-slate-400 font-medium">
+          暂无定制标的
+        </div>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-sm whitespace-nowrap text-left">
+            <thead class="bg-slate-50 text-xs text-slate-500 border-b">
+              <tr>
+                <th class="py-2.5 px-4">代码 / 名称</th>
+                <th class="py-2.5 px-3 text-center">状态</th>
+                <th class="py-2.5 px-3 text-center">到期</th>
+                <th class="py-2.5 px-4 text-right">操作</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-50 text-sm">
-              <template v-for="item in processedData.list" :key="item.etf_code">
-                <!-- 主数据行 -->
-                <tr class="hover:bg-[#4da6a0]/5 transition-colors group cursor-pointer" @click="toggleRow(item)">
-                  <td class="p-3 text-left relative sticky left-0 bg-white group-hover:bg-[#f6faf9] z-10 etf-name-column">
-                    <div v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="absolute left-0 top-0 bottom-0 w-1 theme-bg"></div>
-                    <div class="flex items-center justify-between">
-                      <div>
-                        <div class="font-bold text-slate-800 group-hover:theme-text flex items-center gap-1">
-                          {{ item.etf_name }}
-                          <span v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.2 rounded font-bold">免费</span>
-                        </div>
-                        <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
-                      </div>
-                      <i class="fa-solid text-[10px] text-slate-300 mr-2" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
-                    </div>
-                  </td>
-                  
-                  <!-- 日线 5 天数据列 (悬停显示 X月X日；仅最新有效日线列显示 Icon) -->
-                  <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
-                    <div class="flex items-center justify-center gap-1" :title="formatDateCN(item.days[idx-1]?.date)">
-                      <span>{{ item.days[idx-1]?.day_status || '-' }}</span>
-                      <i v-if="idx - 1 === latestDailyColIndex"
-                         class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
-                         :title="formatDateCN(item.days[idx-1]?.date)"
-                         @click.stop="openDailyChartViewer(item)"></i>
-                    </div>
-                  </td>
-
-                  <!-- 周线数据列 (Icon 始终保留；悬停显示对应交易日日期 X月X日) -->
-                  <td class="p-3 font-medium" :class="getColorClass(item.week_status)">
-                    <div class="flex items-center justify-center gap-1" :title="formatDateCN(processedData.weekDays)">
-                      <span>{{ item.week_status || '-' }}</span>
-                      <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
-                         :title="formatDateCN(processedData.weekDays)"
-                         @click.stop="openWeeklyChartViewer(item)"></i>
-                    </div>
-                  </td>
-                </tr>
-
-                <!-- 点击展开 4 周历史数据行 -->
-                <template v-if="expandedRowKey === item.etf_code">
-                  <tr v-for="week in getPastWeeks(item.etf_code)" :key="week.monday" class="bg-slate-50/80 border-b border-dashed border-slate-100 text-xs">
-                    <td class="p-2.5 text-left sticky left-0 bg-slate-50/90 z-10 font-mono text-slate-400 pl-6">
-                      <i class="fa-regular fa-clock mr-1"></i>{{ week.monday }}
-                    </td>
-                    <td v-for="idx in 5" :key="idx" class="p-2.5 font-medium" :class="getColorClass(week.days[idx-1]?.day_status)" :title="formatDateCN(week.days[idx-1]?.date)">
-                      {{ week.days[idx-1]?.day_status || '-' }}
-                    </td>
-                    <td class="p-2.5 font-medium" :class="getColorClass(week.week_status)">
-                      {{ week.week_status || '-' }}
-                    </td>
-                  </tr>
-                </template>
-              </template>
+            <tbody class="divide-y divide-slate-50">
+              <tr v-for="item in customList" :key="item.id">
+                <td class="py-3 px-4">
+                  <div class="font-mono font-bold text-slate-800">{{ item.etf_code }}</div>
+                  <div class="text-xs text-slate-500">{{ item.etf_name }}</div>
+                </td>
+                <td class="py-3 px-3 text-center">
+                  <span class="text-xs px-2.5 py-0.5 rounded-full font-bold"
+                        :class="item.status==='active'?'bg-emerald-50 text-emerald-600':(item.status==='pending'?'bg-orange-50 text-orange-600':'bg-slate-100 text-slate-400')">
+                    {{ item.status==='active'?'监控中':(item.status==='pending'?'待支付':item.status) }}
+                  </span>
+                </td>
+                <td class="py-3 px-3 text-center text-xs font-mono text-slate-400">
+                  {{ item.expire_at ? formatDateShort(item.expire_at) : '-' }}
+                </td>
+                <td class="py-3 px-4 text-right">
+                  <button @click="removeCustomItem(item)" class="text-xs text-slate-400 hover:text-red-500">移除</button>
+                </td>
+              </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 3. 我的订单 (卡片三) -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+          <div class="font-bold text-slate-700 text-base">我的订单</div>
+          <button @click="loadProfileData" class="text-xs text-slate-400 hover:theme-text">
+            <i class="fa-solid fa-rotate-right mr-1"></i>刷新列表
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm whitespace-nowrap">
+            <thead class="bg-slate-50 text-xs text-slate-500 border-b font-bold">
+              <tr>
+                <th class="py-3 px-4">凭证(后6位)</th>
+                <th class="py-3 px-4">套餐/类型</th>
+                <th class="py-3 px-4">实付金额</th>
+                <th class="py-3 px-4">获得 VIP</th>
+                <th class="py-3 px-4">状态</th>
+                <th class="py-3 px-4">提交时间</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <tr v-for="order in orders" :key="order.id" class="hover:bg-slate-50">
+                <td class="py-3.5 px-4 font-mono font-bold text-slate-700">
+                  {{ order.tx_id_last6 ? ('****' + order.tx_id_last6) : '-' }}
+                </td>
+                <td class="py-3.5 px-4 font-medium text-slate-800">
+                  <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-bold">{{ order.plan_id }}</span>
+                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'custom_watchlist' ? '定制' : '通用' }})</span>
+                  <span v-if="order.promo_code" class="text-[10px] text-orange-500 ml-1 font-bold">{{ order.promo_code }}</span>
+                </td>
+                <td class="py-3.5 px-4 font-bold font-mono text-red-500">¥ {{ order.amount }}</td>
+                <td class="py-3.5 px-4 text-emerald-600 font-bold text-xs">
+                  {{ order.status === 'approved' ? (order.vip_days_granted ? ('+' + order.vip_days_granted + '天') : (order.order_type === 'custom_watchlist' ? '定制激活' : '-')) : '-' }}
+                </td>
+                <td class="py-3.5 px-4 font-bold text-xs">
+                  <span :class="order.status === 'approved' ? 'text-emerald-600' : (order.status === 'pending' ? 'text-orange-500' : 'text-slate-400')">
+                    {{ formatStatus(order.status) }}
+                  </span>
+                </td>
+                <td class="py-3.5 px-4 text-xs font-mono text-slate-400">{{ formatDateExact(order.created_at) }}</td>
+              </tr>
+              <tr v-if="!orders.length">
+                <td colspan="6" class="py-10 text-center text-slate-400 text-sm font-medium">暂无订单数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 4. 专属邀请码及奖励 (卡片四) -->
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
+        <div class="font-bold text-slate-700 text-base">专属邀请码及奖励</div>
+        
+        <!-- 内置浅灰色框 -->
+        <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
+            <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '-' }}</span>
+          </div>
+          <div class="sm:text-right text-xs theme-text font-medium leading-relaxed">
+            <div>邀请与被邀请双方各送 VIP</div>
+            <div class="text-sm font-bold mt-0.5">
+              邀请人 {{ settings.gift_inviter_days || 3 }} 天 · 被邀请人 {{ settings.gift_invitee_days || 2 }} 天
+            </div>
+          </div>
+        </div>
+
+        <!-- 我邀请的用户列表 -->
+        <div class="pt-2">
+          <div class="text-sm font-bold text-slate-600 mb-2">
+            我邀请的用户 <span class="text-xs text-slate-400 font-normal">({{ invitees.length }})</span>
+          </div>
+          <div v-if="inviteeLoading" class="text-xs text-slate-400 py-2">加载中...</div>
+          <div v-else-if="!invitees.length" class="text-xs text-slate-400 py-6 text-center font-medium">
+            暂无被邀请人
+          </div>
+          <div v-else class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs text-slate-400 border-b">
+                <tr>
+                  <th class="py-2 px-3">注册账号</th>
+                  <th class="py-2 px-3">注册时间</th>
+                  <th class="py-2 px-3">当前 VIP 天数</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-50">
+                <tr v-for="inv in invitees" :key="inv.id">
+                  <td class="py-2.5 px-3 font-medium text-slate-800">{{ inv.username }}</td>
+                  <td class="py-2.5 px-3 text-xs font-mono text-slate-400">{{ formatDateExact(inv.created_at) }}</td>
+                  <td class="py-2.5 px-3 font-bold" :class="inv.vip_days_left > 0 ? 'text-emerald-600' : 'text-slate-400'">
+                    {{ inv.vip_days_left }} 天
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. 修改账号密码 (卡片五) -->
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
+        <h3 class="font-bold text-slate-700 text-base mb-4">修改账号密码</h3>
+        <div class="space-y-3 max-w-md">
+          <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.newPassword" type="password" placeholder="新密码(至少6位)" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <button @click="changePassword" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 hover:opacity-90 shadow-sm">
+            {{ pwdLoading ? '保存中...' : '确认修改' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 添加定制标的对话框 Modal -->
+      <div v-if="customModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4 select-none" @click.self="customModalVisible = false">
+        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl space-y-4 p-6">
+          <div class="flex justify-between items-center border-b pb-3">
+            <h3 class="font-bold text-slate-800 text-base">添加定制监控标的</h3>
+            <button @click="customModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+          </div>
+
+          <!-- 单个标的输入区 -->
+          <div class="space-y-2">
+            <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
+            <div class="flex gap-2">
+              <input v-model="inputCode" @input="onCodeInput" placeholder="如 159326 / 513500 / 600519" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
+              <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
+                {{ searchingName ? '识别中...' : '确认添加' }}
+              </button>
+            </div>
+            <p v-if="foundName" class="text-xs theme-text font-bold flex items-center gap-1 pt-1">
+              <i class="fa-solid fa-circle-check"></i> 已识别标的：{{ foundName }}
+            </p>
+            <p v-else-if="searchError" class="text-xs text-amber-600 font-medium pt-1">
+              {{ searchError }}
+            </p>
+          </div>
+
+          <!-- 已添加草稿列表 -->
+          <div v-if="draftSymbols.length > 0" class="pt-2 border-t space-y-2">
+            <div class="text-xs font-bold text-slate-600 flex justify-between items-center">
+              <span>已添加标的 ({{ draftSymbols.length }}/{{ settings.custom_max_symbols || 3 }})：</span>
+            </div>
+            <div class="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+              <div v-for="(sym, i) in draftSymbols" :key="i" class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg text-xs border">
+                <div>
+                  <span class="font-mono font-bold text-slate-800 mr-2">{{ sym.code }}</span>
+                  <span class="text-slate-600 font-medium">{{ sym.name }}</span>
+                </div>
+                <button @click="draftSymbols.splice(i, 1)" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部操作与去购买按钮 -->
+          <div class="pt-3 border-t flex flex-col gap-2">
+            <button @click="goToBuyCustomPlan" :disabled="draftSymbols.length === 0" class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50 shadow-sm flex items-center justify-center gap-1">
+              <i class="fa-solid fa-cart-shopping"></i> 购买“定制监控”套餐
+            </button>
+            <p class="text-[11px] text-slate-400 text-center">套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只标的</p>
+          </div>
         </div>
       </div>
     </div>
