@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 个人中心分块组件 (彻底修复：清除多余误落字符，语法100%校验合格 + 融合插件原版查名)
+ * 波幅探长 - 个人中心分块组件 (彻底修复：清理第163行多余字符，解决全站白屏 + 完美整合插件原版查名)
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
@@ -33,7 +33,7 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // 采用 Chrome 插件原版查名称算法 (GBK解码 + 插件原版正则精准截取)
+    // 完全采用您 Chrome 插件 background.js 中的原版查名称算法 (GBK解码 + 正则精准截取)
     const fetchStockNameByCode = async (symbolStr) => {
       try {
         const codeMatch = String(symbolStr || "").match(/\d{6}/);
