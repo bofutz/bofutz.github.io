@@ -206,7 +206,7 @@ export default {
       return processedData.value.freeTop3Codes.includes(etfCode);
     };
 
-    // 使用原生的 Viewer.js 实现手机端随意缩放放大，并带 < 和 > 控制翻页
+    // 使用原生的 Viewer.js 实现手机端随意缩放放大，自动感知图片数量并支持 < 与 > 翻页
     const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
       const container = document.createElement("div");
       container.style.display = "none";
@@ -232,14 +232,15 @@ export default {
           rotatable: false,
           scalable: false,
           transition: true,
+          loop: true, // 多图时开启无缝循环翻页
           initialViewIndex: initialIndex,
           toolbar: {
             zoomIn: 1,
             zoomOut: 1,
             oneToOne: 1,
             reset: 1,
-            prev: 1, // 显示上一张按钮 <
-            next: 1, // 显示下一张按钮 >
+            prev: 1, // 图表数量>1 时自动激活 < 按钮
+            next: 1, // 图表数量>1 时自动激活 > 按钮
           },
         });
         viewer.show();
@@ -248,7 +249,7 @@ export default {
       }
     };
 
-    // 点击日线图表：在 Viewer.js 中同时载入【日线图表】与【半日线图表】，可用 < 和 > 翻页
+    // 点击日线图表：在 Viewer.js 中载入【日线图表】与【半日线图表】，自动识别数量并可用 < 和 > 翻页
     const openDailyChartViewer = (item) => {
       if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
@@ -263,7 +264,7 @@ export default {
       showViewerWithMultiImages(images, 0);
     };
 
-    // 点击周线图表：单张周线图
+    // 点击周线图表：只有 1 张周线图（Viewer.js 自动识别仅 1 张图，翻页按钮自动禁用）
     const openWeeklyChartViewer = (item) => {
       if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
