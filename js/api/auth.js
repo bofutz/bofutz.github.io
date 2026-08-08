@@ -30,6 +30,11 @@ export const authApi = {
     });
   },
 
+  // 获取当前登录用户信息（含最新 VIP 天数）
+  async getMe() {
+    return request("/api/user/me");
+  },
+  
   // 发送邮箱验证码
   async sendEmailCode(email, turnstileToken) {
     return request(`${CONFIG.MAIL_API_BASE}/api/send-code`, {
