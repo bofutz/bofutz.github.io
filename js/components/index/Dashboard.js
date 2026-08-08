@@ -1,11 +1,12 @@
 /**
- * 波幅探长 - 数据看板分块组件
+ * 波幅探长 - 数据看板
  * js/components/index/Dashboard.js
  *
- * 修复：
- * 1. 日线 Viewer 仅载入真实存在的图片；单图不显示翻页
- * 2. 本周尚无周线数据时，回退显示上一完整周的 week_status
- * 3. 日线 / 周线各自按最新数据锁定 TOP3 免费图表
+ * 规则：
+ * - 出现新数据 → 按该数据绝对值排序 → 锁定前 3 为免费；再有新数据则重新排序锁定
+ * - 日线：以最新有 day_status 的那一列为准
+ * - 周线：本周尚无 week_status 时，回退上一完整周的 week_status 参与展示与排序基准判断
+ * - 免费 TOP3 始终跟「当前认定的最新数据」走（日线优先；若最新完整数据是周线则用周线）
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -32,7 +33,7 @@ export default {
 
     const formatDateCN = (dateStr) => {
       if (!dateStr || !isValidDate(dateStr)) return "";
-      const [y, m, d] = parseYMD(dateStr);
+      const [, m, d] = parseYMD(dateStr);
       return `${m}月${d}日`;
     };
 
@@ -45,11 +46,7 @@ export default {
       const monday = new Date(y, m - 1, d + offset);
       const days = [];
       for (let i = 0; i < 5; i++) {
-        const temp = new Date(
-          monday.getFullYear(),
-          monday.getMonth(),
-          monday.getDate() + i
-        );
+        const temp = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
         days.push(
           `${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, "0")}-${String(
             temp.getDate()
@@ -59,7 +56,22 @@ export default {
       return days;
     };
 
-    // 自动获取最新数据所在的周一
+    const shiftMonday = (mondayStr, weeksBack) => {
+      const [y, m, d] = parseYMD(mondayStr);
+      if (!y) return "";
+      const dt = new Date(y, m - 1, d - weeksBack * 7);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+        dt.getDate()
+      ).padStart(2, "0")}`;
+    };
+
+    const getStatusVal = (str) => {
+      if (!str || typeof str !== "string" || str === "-" || str === "--") return -9999;
+      const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
+      return match ? parseFloat(match[0]) : -9999;
+    };
+
+    // 主表锚定：最新有数据的日期所在周的周一
     const latestMonday = computed(() => {
       const validDates = [
         ...new Set(
@@ -69,38 +81,27 @@ export default {
         ),
       ].sort();
       if (!validDates.length) return "";
-      const lastDate = validDates[validDates.length - 1];
-      const wDays = getWeekDays(lastDate);
+      const wDays = getWeekDays(validDates[validDates.length - 1]);
       return wDays.length ? wDays[0] : "";
     });
 
-    // 最新有日线数据的列索引（仅该列显示图表 Icon）
+    // 最新有日线数据的列索引（图标只出现在这一列）
     const latestDailyColIndex = computed(() => {
       if (!latestMonday.value) return -1;
       const weekDays = getWeekDays(latestMonday.value);
-      let lastIdx = -1;
       for (let idx = 4; idx >= 0; idx--) {
         const dateStr = weekDays[idx];
-        const hasData = allData.value.some(
+        const has = allData.value.some(
           (i) =>
             i.date === dateStr &&
             i.day_status &&
             i.day_status !== "-" &&
             i.day_status !== "--"
         );
-        if (hasData) {
-          lastIdx = idx;
-          break;
-        }
+        if (has) return idx;
       }
-      return lastIdx;
+      return -1;
     });
-
-    const getStatusVal = (str) => {
-      if (!str || typeof str !== "string" || str === "-" || str === "--") return -9999;
-      const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
-      return match ? parseFloat(match[0]) : -9999;
-    };
 
     const handleSort = (column) => {
       if (sortColumn.value === column) {
@@ -115,7 +116,164 @@ export default {
       }
     };
 
-    // 展开行：Past 4 周历史
+    const findWeekStatusForMonday = (etfCode, mondayStr) => {
+      if (!mondayStr) return null;
+      const days = getWeekDays(mondayStr);
+      for (const item of allData.value) {
+        if (item.etf_code !== etfCode) continue;
+        if (!item.date || !days.includes(item.date)) continue;
+        if (item.week_status && item.week_status !== "-" && item.week_status !== "--") {
+          return item.week_status;
+        }
+      }
+      return null;
+    };
+
+    // 是否「当前周」已出现任意 week_status（新周线已出）
+    const hasCurrentWeekStatus = (etfMap) =>
+      Object.values(etfMap).some((r) => r.week_status_from === "current");
+
+    /**
+     * 认定「最新数据」用于默认排序 + 免费 TOP3：
+     * - 若本周已有 week_status（新周线已出）且不比最新日线更旧 → 用周线绝对值
+     * - 否则用最新日线列绝对值
+     * 有新数据进来后，本计算自动重跑，TOP3 跟随变化
+     */
+    const processedData = computed(() => {
+      const empty = {
+        list: [],
+        freeTop3Codes: [],
+        weekDays: [],
+        weekStatusMonday: "",
+        rankBy: "daily", // 'daily' | 'weekly'
+        rankDailyIdx: -1,
+      };
+      if (!latestMonday.value) return empty;
+
+      const weekDays = getWeekDays(latestMonday.value);
+      if (weekDays.length < 5) return empty;
+
+      const prevMonday = shiftMonday(latestMonday.value, 1);
+
+      // 组装本周行
+      const etfMap = {};
+      allData.value.forEach((item) => {
+        if (!item.date) return;
+        const idx = weekDays.indexOf(item.date);
+        if (idx === -1) return;
+        if (!etfMap[item.etf_code]) {
+          etfMap[item.etf_code] = {
+            etf_code: item.etf_code,
+            etf_name: item.etf_name,
+            days: [null, null, null, null, null],
+            week_status: null,
+            week_status_from: null,
+          };
+        }
+        etfMap[item.etf_code].days[idx] = item;
+        if (item.week_status && item.week_status !== "-" && item.week_status !== "--") {
+          etfMap[item.etf_code].week_status = item.week_status;
+          etfMap[item.etf_code].week_status_from = "current";
+        }
+      });
+
+      // 本周无周线 → 回退上一完整周
+      Object.values(etfMap).forEach((row) => {
+        if (!row.week_status) {
+          const prev = findWeekStatusForMonday(row.etf_code, prevMonday);
+          if (prev) {
+            row.week_status = prev;
+            row.week_status_from = "prev";
+          }
+        }
+      });
+
+      const weekStatusMonday = hasCurrentWeekStatus(etfMap)
+        ? latestMonday.value
+        : prevMonday;
+
+      let items = Object.values(etfMap);
+
+      // 最新日线列
+      let latestIdx = 4;
+      while (latestIdx >= 0) {
+        const has = items.some(
+          (i) => i.days[latestIdx]?.day_status && i.days[latestIdx].day_status !== "-"
+        );
+        if (has) break;
+        latestIdx--;
+      }
+
+      // 新周线已出 → 用周线绝对值作为「最新数据」；否则用最新日线
+      const useWeeklyRank = hasCurrentWeekStatus(etfMap);
+      const rankBy = useWeeklyRank ? "weekly" : "daily";
+
+      const absRankVal = (row) => {
+        if (useWeeklyRank) {
+          return row.week_status ? Math.abs(getStatusVal(row.week_status)) : -9999;
+        }
+        if (latestIdx < 0) return -9999;
+        const s = row.days[latestIdx]?.day_status;
+        return s && s !== "-" ? Math.abs(getStatusVal(s)) : -9999;
+      };
+
+      // 免费 TOP3 = 按最新数据绝对值排序的前 3
+      const sortedByAbs = [...items].sort((a, b) => absRankVal(b) - absRankVal(a));
+      const freeTop3Codes = sortedByAbs
+        .filter((i) => absRankVal(i) > -9999)
+        .slice(0, 3)
+        .map((i) => i.etf_code);
+
+      // 列表排序：用户点列头则按列；否则按「最新数据」绝对值降序
+      items.sort((a, b) => {
+        if (sortColumn.value) {
+          if (sortColumn.value === "etf_name") {
+            const cmp = (a.etf_name || "").localeCompare(b.etf_name || "", "zh-CN");
+            return sortOrder.value === "asc" ? cmp : -cmp;
+          }
+          if (sortColumn.value.startsWith("d")) {
+            const idx = parseInt(sortColumn.value.substring(1), 10);
+            const valA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
+            const valB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
+            if (valA === -9999 && valB !== -9999) return 1;
+            if (valB === -9999 && valA !== -9999) return -1;
+            return sortOrder.value === "desc" ? valB - valA : valA - valB;
+          }
+          if (sortColumn.value === "week_status") {
+            const valA = getStatusVal(a.week_status);
+            const valB = getStatusVal(b.week_status);
+            if (valA === -9999 && valB !== -9999) return 1;
+            if (valB === -9999 && valA !== -9999) return -1;
+            return sortOrder.value === "desc" ? valB - valA : valA - valB;
+          }
+        }
+        return absRankVal(b) - absRankVal(a);
+      });
+
+      if (searchQuery.value) {
+        const q = searchQuery.value.toLowerCase().trim();
+        items = items.filter(
+          (i) =>
+            (i.etf_name && i.etf_name.toLowerCase().includes(q)) ||
+            (i.etf_code && i.etf_code.toLowerCase().includes(q))
+        );
+      }
+
+      return {
+        list: items,
+        freeTop3Codes,
+        weekDays,
+        weekStatusMonday,
+        rankBy,
+        rankDailyIdx: latestIdx,
+      };
+    });
+
+    const canViewChart = (etfCode) => {
+      if (store.state.isVip) return true;
+      return processedData.value.freeTop3Codes.includes(etfCode);
+    };
+
     const getPastWeeks = (etf_code) => {
       if (!latestMonday.value) return [];
       const pastData = allData.value.filter(
@@ -146,196 +304,6 @@ export default {
         .slice(0, 4);
     };
 
-    // 某周一往前推 n 周
-    const shiftMonday = (mondayStr, weeksBack) => {
-      const [y, m, d] = parseYMD(mondayStr);
-      if (!y) return "";
-      const dt = new Date(y, m - 1, d - weeksBack * 7);
-      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
-        dt.getDate()
-      ).padStart(2, "0")}`;
-    };
-
-    // 从 allData 取某只 ETF 在指定那一周的 week_status
-    const findWeekStatusForMonday = (etfCode, mondayStr) => {
-      if (!mondayStr) return null;
-      const days = getWeekDays(mondayStr);
-      for (const item of allData.value) {
-        if (item.etf_code !== etfCode) continue;
-        if (!item.date || !days.includes(item.date)) continue;
-        if (item.week_status && item.week_status !== "-" && item.week_status !== "--") {
-          return item.week_status;
-        }
-      }
-      return null;
-    };
-
-    // 主表数据：日线 TOP3 + 周线 TOP3；本周无周线则回退上一完整周
-    const processedData = computed(() => {
-      if (!latestMonday.value) {
-        return {
-          list: [],
-          freeTop3Daily: [],
-          freeTop3Weekly: [],
-          freeTop3Codes: [],
-          weekDays: [],
-          weekStatusMonday: "",
-        };
-      }
-      const weekDays = getWeekDays(latestMonday.value);
-      if (weekDays.length < 5) {
-        return {
-          list: [],
-          freeTop3Daily: [],
-          freeTop3Weekly: [],
-          freeTop3Codes: [],
-          weekDays: [],
-          weekStatusMonday: "",
-        };
-      }
-
-      const prevMonday = shiftMonday(latestMonday.value, 1);
-
-      const etfMap = {};
-      allData.value.forEach((item) => {
-        if (!item.date) return;
-        const idx = weekDays.indexOf(item.date);
-        if (idx !== -1) {
-          if (!etfMap[item.etf_code]) {
-            etfMap[item.etf_code] = {
-              etf_code: item.etf_code,
-              etf_name: item.etf_name,
-              days: [null, null, null, null, null],
-              week_status: null,
-              week_status_from: null, // 'current' | 'prev'
-            };
-          }
-          etfMap[item.etf_code].days[idx] = item;
-          if (item.week_status && item.week_status !== "-" && item.week_status !== "--") {
-            etfMap[item.etf_code].week_status = item.week_status;
-            etfMap[item.etf_code].week_status_from = "current";
-          }
-        }
-      });
-
-      let anyCurrentWeekStatus = false;
-      Object.values(etfMap).forEach((row) => {
-        if (row.week_status) anyCurrentWeekStatus = true;
-      });
-
-      const weekStatusMonday = anyCurrentWeekStatus ? latestMonday.value : prevMonday;
-
-      Object.values(etfMap).forEach((row) => {
-        if (!row.week_status) {
-          const prev = findWeekStatusForMonday(row.etf_code, prevMonday);
-          if (prev) {
-            row.week_status = prev;
-            row.week_status_from = "prev";
-          }
-        }
-      });
-
-      let items = Object.values(etfMap);
-
-      // 日线 TOP3：最新有数据的日线列 |涨跌|
-      let latestIdx = 4;
-      while (latestIdx >= 0) {
-        const hasData = items.some(
-          (i) => i.days[latestIdx]?.day_status && i.days[latestIdx].day_status !== "-"
-        );
-        if (hasData) break;
-        latestIdx--;
-      }
-      const sortedByDailyAbs = [...items].sort((a, b) => {
-        if (latestIdx < 0) return 0;
-        const valA = a.days[latestIdx]?.day_status
-          ? Math.abs(getStatusVal(a.days[latestIdx].day_status))
-          : -9999;
-        const valB = b.days[latestIdx]?.day_status
-          ? Math.abs(getStatusVal(b.days[latestIdx].day_status))
-          : -9999;
-        return valB - valA;
-      });
-      const freeTop3Daily = sortedByDailyAbs.slice(0, 3).map((i) => i.etf_code);
-
-      // 周线 TOP3：本周或回退上周的 week_status |涨跌|
-      const sortedByWeeklyAbs = [...items].sort((a, b) => {
-        const valA = a.week_status ? Math.abs(getStatusVal(a.week_status)) : -9999;
-        const valB = b.week_status ? Math.abs(getStatusVal(b.week_status)) : -9999;
-        return valB - valA;
-      });
-      const freeTop3Weekly = sortedByWeeklyAbs
-        .filter((i) => i.week_status)
-        .slice(0, 3)
-        .map((i) => i.etf_code);
-
-      // 名称旁「免费」角标沿用日线 TOP3
-      const freeTop3Codes = freeTop3Daily;
-
-      // 列头排序
-      items.sort((a, b) => {
-        if (sortColumn.value) {
-          if (sortColumn.value === "etf_name") {
-            const cmp = (a.etf_name || "").localeCompare(b.etf_name || "", "zh-CN");
-            return sortOrder.value === "asc" ? cmp : -cmp;
-          }
-          if (sortColumn.value.startsWith("d")) {
-            const idx = parseInt(sortColumn.value.substring(1), 10);
-            const valA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
-            const valB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
-            if (valA === -9999 && valB !== -9999) return 1;
-            if (valB === -9999 && valA !== -9999) return -1;
-            return sortOrder.value === "desc" ? valB - valA : valA - valB;
-          }
-          if (sortColumn.value === "week_status") {
-            const valA = getStatusVal(a.week_status);
-            const valB = getStatusVal(b.week_status);
-            if (valA === -9999 && valB !== -9999) return 1;
-            if (valB === -9999 && valA !== -9999) return -1;
-            return sortOrder.value === "desc" ? valB - valA : valA - valB;
-          }
-        } else if (latestIdx >= 0) {
-          const valA = a.days[latestIdx]?.day_status
-            ? Math.abs(getStatusVal(a.days[latestIdx].day_status))
-            : -9999;
-          const valB = b.days[latestIdx]?.day_status
-            ? Math.abs(getStatusVal(b.days[latestIdx].day_status))
-            : -9999;
-          return valB - valA;
-        }
-        return 0;
-      });
-
-      if (searchQuery.value) {
-        const q = searchQuery.value.toLowerCase().trim();
-        items = items.filter(
-          (i) =>
-            (i.etf_name && i.etf_name.toLowerCase().includes(q)) ||
-            (i.etf_code && i.etf_code.toLowerCase().includes(q))
-        );
-      }
-
-      return {
-        list: items,
-        freeTop3Daily,
-        freeTop3Weekly,
-        freeTop3Codes,
-        weekDays,
-        weekStatusMonday,
-      };
-    });
-
-    const canViewDailyChart = (etfCode) => {
-      if (store.state.isVip) return true;
-      return processedData.value.freeTop3Daily.includes(etfCode);
-    };
-
-    const canViewWeeklyChart = (etfCode) => {
-      if (store.state.isVip) return true;
-      return processedData.value.freeTop3Weekly.includes(etfCode);
-    };
-
-    // 探测图片是否真实存在
     const probeImage = (url) =>
       new Promise((resolve) => {
         const img = new Image();
@@ -344,9 +312,8 @@ export default {
         img.src = url;
       });
 
-    // Viewer：仅多图时显示翻页
     const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
-      if (!imgList || imgList.length === 0) return;
+      if (!imgList || !imgList.length) return;
 
       const container = document.createElement("div");
       container.style.display = "none";
@@ -397,9 +364,8 @@ export default {
       }
     };
 
-    // 日线：只加入真实存在的图
     const openDailyChartViewer = async (item) => {
-      if (!canViewDailyChart(item.etf_code)) {
+      if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
           window.location.hash = "#/plan";
         }
@@ -426,9 +392,8 @@ export default {
       showViewerWithMultiImages(images, 0);
     };
 
-    // 周线：仅 1 张，强制无翻页
     const openWeeklyChartViewer = async (item) => {
-      if (!canViewWeeklyChart(item.etf_code)) {
+      if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
           window.location.hash = "#/plan";
         }
@@ -463,7 +428,6 @@ export default {
           etfApi.fetchEtfRawData().catch(() => []),
           etfApi.fetchChartsMap().catch(() => ({})),
         ]);
-
         if (Array.isArray(data)) allData.value = data;
         chartsMap.value = chartsRes.charts || {};
       } catch (err) {
@@ -473,9 +437,7 @@ export default {
       }
     };
 
-    onMounted(() => {
-      initData();
-    });
+    onMounted(initData);
 
     return {
       loading,
