@@ -144,7 +144,7 @@ export default {
       }
     });
 
-    const settings = Vue.computed(() => store.state.publicSettings || {});
+    const settings = computed(() => store.state.publicSettings || {});
 
     return {
       store: store.state,
