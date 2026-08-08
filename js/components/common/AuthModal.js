@@ -172,7 +172,7 @@ export default {
             新注册即送通用 VIP <strong>2</strong> 天
           </div>
 
-          <input v-model="form.username" type="email" :placeholder="store.authMode==='register'?'注册电子邮箱':'邮箱账号'"
+          <input v-model="form.username" type="email" :placeholder="store.authMode==='register'?'注册电子邮箱':'你的注册账号'"
                  class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
 
           <div v-show="store.authMode==='register'" class="flex justify-center min-h-[65px]">
