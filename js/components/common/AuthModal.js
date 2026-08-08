@@ -6,7 +6,7 @@ import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
 import { CONFIG } from "../../config.js";
 
-const { ref, reactive, nextTick, watch } = Vue;
+const { ref, reactive, nextTick, watch, computed } = Vue;
 
 export default {
   name: "AuthModal",
@@ -144,9 +144,11 @@ export default {
       }
     });
 
+    const settings = Vue.computed(() => store.state.publicSettings || {});
+
     return {
       store: store.state,
-      settings: store.state.publicSettings,
+      settings,
       form,
       loading,
       sendCodeLoading,
