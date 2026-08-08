@@ -3,178 +3,147 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>波幅探长 · 管理后台</title>
+  <title>波幅监控系统 - 波幅探长</title>
   <link rel="icon" type="image/png" href="logo.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
   <style>
     [v-cloak] { display: none !important; }
-    body { background: #f4f6f8; -webkit-tap-highlight-color: transparent; }
+    body { -webkit-tap-highlight-color: transparent; background-color: #f4f6f8; }
     .theme-bg { background-color: #4da6a0; }
     .theme-text { color: #4da6a0; }
     .theme-border { border-color: #4da6a0; }
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    .modal-overlay { background: rgba(0, 0, 0, .6); backdrop-filter: blur(2px); }
-  </style> 
+    .nav-item { transition: all 0.2s; color: #64748b; font-size: 14px; cursor: pointer; }
+    .nav-item:hover:not(.active) { color: #4da6a0; }
+    .nav-item.active { background-color: #e2e8f0; color: #334155; border-left: 3px solid #4da6a0; padding-left: 21px; }
+    .modal-overlay { background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); }
+    .social-item { position: relative; }
+    .social-qr-pop {
+      display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 50; width: 132px;
+    }
+    .social-item:hover .social-qr-pop { display: block; }
+    .social-qr-pop img { width: 112px; height: 112px; object-fit: contain; }
+  </style>
 </head>
-<body class="text-slate-700 font-sans h-screen overflow-hidden select-none">
+<body class="text-slate-700 font-sans h-screen overflow-hidden">
 
-<div id="admin-app" v-cloak class="h-full flex flex-col">
-  <!-- 管理员安全登录验证弹窗 -->
-  <div v-if="!isAuthenticated" class="fixed inset-0 z-50 bg-[#f4f6f8] flex items-center justify-center p-4">
-    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-slate-200 text-center space-y-4">
-      <div class="w-16 h-16 theme-bg rounded-2xl flex items-center justify-center mx-auto">
-        <i class="fa-solid fa-shield-halved text-3xl text-white"></i>
-      </div>
-      <h2 class="text-xl font-bold text-slate-800">管理后台安全验证</h2>
-      <input v-model="adminSecret" @keyup.enter="login" type="password" placeholder="请输入 Admin-Secret"
-             class="w-full bg-slate-50 border px-4 py-3 rounded-lg text-center font-mono text-sm focus:theme-border outline-none">
-      <button @click="login" class="w-full theme-bg text-white font-bold py-2.5 rounded-lg hover:opacity-90">登 录</button>
+<div id="app" v-cloak class="flex flex-col h-full overflow-hidden">
+  <!-- 顶部栏 -->
+  <v-header :page-title="pageTitle" @navigate="navigate"></v-header>
+
+  <!-- 侧边栏 -->
+  <v-sidebar :current-route="currentRoute" @navigate="navigate"></v-sidebar>
+
+  <!-- 主内容区动态路由容器 -->
+  <main class="flex-1 overflow-auto custom-scrollbar p-3 sm:p-6 relative flex flex-col justify-between">
+    <div class="flex-1">
+      <component :is="currentComponent"></component>
     </div>
-  </div>
 
-  <template v-else>
-    <!-- 顶部 -->
-    <header class="bg-white border-b h-16 shrink-0 flex items-center justify-between px-6 z-20">
-      <div class="flex items-center gap-3">
-        <h1 class="text-lg font-bold text-slate-800">
-          波幅探长 
-          <span class="text-xs text-slate-400 font-normal ml-1 bg-slate-100 px-2 py-0.5 rounded">管理后台 v2.6</span>
-        </h1>
-      </div>
-      <button @click="logout" class="text-sm text-slate-500 hover:text-red-500">
-        <i class="fa-solid fa-power-off mr-1"></i>退出
-      </button>
-    </header>
+    <!-- 页脚组件 -->
+    <v-footer></v-footer>
+  </main>
 
-    <div class="flex flex-1 overflow-hidden">
-      <!-- 侧边导航（已对齐最新命名） -->
-      <aside class="w-56 bg-white border-r py-4 flex flex-col shrink-0">
-        <nav class="flex-1 space-y-1 px-3 custom-scrollbar overflow-y-auto">
-          <div @click="currentTab='dashboard'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='dashboard'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-chart-pie w-4"></i> 数据概览
-          </div>
-          <div @click="currentTab='users'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='users'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-users w-4"></i> 用户管理
-          </div>
-          <div @click="currentTab='orders'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='orders'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-file-invoice-dollar w-4"></i> 订单审核
-          </div>
-          <div @click="currentTab='plans'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='plans'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-tags w-4"></i> 套餐管理
-          </div>
-          <div @click="currentTab='shared'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='shared'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-list w-4"></i> 通用监控
-          </div>
-          <div @click="currentTab='custom'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='custom'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-user-tag w-4"></i> 定制监控
-          </div>
-          <div @click="currentTab='vote'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='vote'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-check-to-slot w-4"></i> 票选监控
-          </div>
-          <div @click="currentTab='promos'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='promos'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-percent w-4"></i> 优惠码管理
-          </div>
-          <div @click="currentTab='settings'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='settings'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-gear w-4"></i> 系统设置
-          </div>
-          <div @click="currentTab='tickets'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='tickets'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-headset w-4"></i> 客服工单
-          </div>
-        </nav>
-      </aside>
-
-      <!-- 主内容挂载区 -->
-      <main class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50/50">
-        <component :is="currentComponent" @switch-tab="currentTab = $event"></component>
-      </main>
-    </div>
-  </template>
-
+  <!-- 全局弹窗与提示 -->
+  <v-auth-modal></v-auth-modal>
   <v-toast></v-toast>
 </div>
 
-<!-- 完整 10 大后台分块组件脚本整合入口 -->
+<!-- ES Modules 入口总装组件脚本 -->
 <script type="module">
   import { store } from "./js/store.js";
-  import { CONFIG } from "./js/config.js";
+  import { etfApi } from "./js/api/etf.js";
+
+  // 通用组件
+  import Header from "./js/components/common/Header.js";
+  import Sidebar from "./js/components/common/Sidebar.js";
+  import Footer from "./js/components/common/Footer.js";
+  import AuthModal from "./js/components/common/AuthModal.js";
   import Toast from "./js/components/common/Toast.js";
 
-  // 后台 10 大分块组件
-  import Dashboard from "./js/components/admin/Dashboard.js";
-  import UserMgmt from "./js/components/admin/UserMgmt.js";
-  import OrderMgmt from "./js/components/admin/OrderMgmt.js";
-  import PlanMgmt from "./js/components/admin/PlanMgmt.js";
-  import SharedWatch from "./js/components/admin/SharedWatch.js";
-  import CustomWatch from "./js/components/admin/CustomWatch.js";
-  import VoteMgmt from "./js/components/admin/VoteMgmt.js";
-  import PromoMgmt from "./js/components/admin/PromoMgmt.js";
-  import SettingsMgmt from "./js/components/admin/SettingsMgmt.js";
-  import TicketMgmt from "./js/components/admin/TicketMgmt.js";
+  // 业务组件
+  import Dashboard from "./js/components/index/Dashboard.js";
+  import Profile from "./js/components/index/Profile.js";
+  import Plan from "./js/components/index/Plan.js";
+  import Vote from "./js/components/index/Vote.js";
+  import Tickets from "./js/components/index/Tickets.js";
+  import Guide from "./js/components/index/Guide.js";   // 新增：图表指南
 
-  const { createApp, ref, computed } = Vue;
+  const { createApp, ref, computed, onMounted } = Vue;
 
   createApp({
     components: {
+      "v-header": Header,
+      "v-sidebar": Sidebar,
+      "v-footer": Footer,
+      "v-auth-modal": AuthModal,
       "v-toast": Toast,
       Dashboard,
-      UserMgmt,
-      OrderMgmt,
-      PlanMgmt,
-      SharedWatch,
-      CustomWatch,
-      VoteMgmt,
-      PromoMgmt,
-      SettingsMgmt,
-      TicketMgmt,
+      Profile,
+      Plan,
+      Vote,
+      Tickets,
+      Guide,
     },
     setup() {
-      const adminSecret = ref(localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "");
-      const isAuthenticated = ref(!!adminSecret.value);
-      const currentTab = ref("dashboard");
+      const currentRoute = ref(window.location.hash || "#/");
 
-      const login = () => {
-        if (!adminSecret.value) return;
-        localStorage.setItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET, adminSecret.value);
-        isAuthenticated.value = true;
-        store.showToast("鉴权登录成功");
-      };
-
-      const logout = () => {
-        localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
-        isAuthenticated.value = false;
-        adminSecret.value = "";
+      const navigate = (path) => {
+        currentRoute.value = path;
+        window.location.hash = path;
       };
 
       const currentComponent = computed(() => {
+        switch (currentRoute.value) {
+          case "#/profile": return "Profile";
+          case "#/plan":    return "Plan";
+          case "#/vote":    return "Vote";
+          case "#/tickets": return "Tickets";
+          case "#/guide":   return "Guide";     // 新增
+          default:          return "Dashboard";
+        }
+      });
+
+      const pageTitle = computed(() => {
         const map = {
-          dashboard: "Dashboard",
-          users:     "UserMgmt",
-          orders:    "OrderMgmt",
-          plans:     "PlanMgmt",
-          shared:    "SharedWatch",
-          custom:    "CustomWatch",
-          vote:      "VoteMgmt",
-          promos:    "PromoMgmt",
-          settings:  "SettingsMgmt",
-          tickets:   "TicketMgmt",
+          "#/":         "数据看板",
+          "#/profile":  "个人中心",
+          "#/plan":     "购买套餐",
+          "#/vote":     "票选监控",
+          "#/tickets":  "客服工单",
+          "#/guide":    "图表指南",
         };
-        return map[currentTab.value] || "Dashboard";
+        return map[currentRoute.value] || "数据看板";
+      });
+
+      onMounted(() => {
+        store.checkLoginState();
+        etfApi.fetchPublicSettings().then((res) => {
+          if (res.data) store.setPublicSettings(res.data);
+        });
+
+        window.addEventListener("hashchange", () => {
+          currentRoute.value = window.location.hash || "#/";
+        });
       });
 
       return {
-        adminSecret,
-        isAuthenticated,
-        currentTab,
+        currentRoute,
         currentComponent,
-        login,
-        logout,
+        pageTitle,
+        navigate,
       };
     },
-  }).mount("#admin-app");
+  }).mount("#app");
 </script>
 </body>
 </html>
