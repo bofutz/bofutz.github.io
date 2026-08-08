@@ -43,7 +43,7 @@ export const CONFIG = {
     promo_enabled: "1",
     alipay_qr_url: "",
     wechat_qr_url: "",
-    default_pay_channel: "alipay",
+    default_pay_channel: "wechat",
     custom_max_symbols: "3",
     vote_monthly_limit: "10",
     social_douyin: "",
