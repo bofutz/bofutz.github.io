@@ -187,6 +187,10 @@ export default {
             </button>
           </div>
 
+          <p v-if="store.authMode==='register'" class="text-[11px] text-slate-400 leading-relaxed">
+            验证码可能被拦截，若收件箱没有，请到<strong class="text-slate-500">垃圾邮件</strong>中查看。
+          </p>
+
           <input v-model="form.password" type="password" :placeholder="store.authMode==='register'?'设置密码(至少6位)':'输入密码'"
                  class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
 
