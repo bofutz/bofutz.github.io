@@ -377,4 +377,130 @@ export default {
                 </td>
                 <td class="py-3.5 px-4 font-medium text-slate-800">
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-bold">{{ order.plan_id }}</span>
-                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type ===
+                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'custom_watchlist' ? '定制' : '通用' }})</span>
+                  <span v-if="order.promo_code" class="text-[10px] text-orange-500 ml-1 font-bold">{{ order.promo_code }}</span>
+                </td>
+                <td class="py-3.5 px-4 font-bold font-mono text-red-500">¥ {{ order.amount }}</td>
+                <td class="py-3.5 px-4 text-emerald-600 font-bold text-xs">
+                  {{ order.status === 'approved'
+                      ? (order.vip_days_granted ? ('+' + order.vip_days_granted + '天') : (order.order_type === 'custom_watchlist' ? '定制激活' : '-'))
+                      : '-' }}
+                </td>
+                <td class="py-3.5 px-4 font-bold text-xs">
+                  <span :class="order.status === 'approved' ? 'text-emerald-600' : (order.status === 'pending' ? 'text-orange-500' : 'text-slate-400')">
+                    {{ formatStatus(order.status) }}
+                  </span>
+                </td>
+                <td class="py-3.5 px-4 text-xs font-mono text-slate-400">{{ formatDateExact(order.created_at) }}</td>
+              </tr>
+              <tr v-if="!orders.length">
+                <td colspan="6" class="py-10 text-center text-slate-400 text-sm font-medium">暂无订单数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
+        <div class="font-bold text-slate-700 text-base">专属邀请码及奖励</div>
+        <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
+            <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '-' }}</span>
+          </div>
+          <div class="sm:text-right text-xs theme-text font-medium leading-relaxed">
+            <div>邀请与被邀请双方各送 VIP</div>
+            <div class="text-sm font-bold mt-0.5">
+              邀请人 {{ settings.gift_inviter_days || 3 }} 天 · 被邀请人 {{ settings.gift_invitee_days || 2 }} 天
+            </div>
+          </div>
+        </div>
+        <div class="pt-2">
+          <div class="text-sm font-bold text-slate-600 mb-2">
+            我邀请的用户 <span class="text-xs text-slate-400 font-normal">({{ invitees.length }})</span>
+          </div>
+          <div v-if="inviteeLoading" class="text-xs text-slate-400 py-2">加载中...</div>
+          <div v-else-if="!invitees.length" class="text-xs text-slate-400 py-6 text-center font-medium">暂无被邀请人</div>
+          <div v-else class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs text-slate-400 border-b">
+                <tr>
+                  <th class="py-2 px-3">注册账号</th>
+                  <th class="py-2 px-3">注册时间</th>
+                  <th class="py-2 px-3">当前 VIP 天数</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-50">
+                <tr v-for="inv in invitees" :key="inv.id">
+                  <td class="py-2.5 px-3 font-medium text-slate-800">{{ inv.username }}</td>
+                  <td class="py-2.5 px-3 text-xs font-mono text-slate-400">{{ formatDateExact(inv.created_at) }}</td>
+                  <td class="py-2.5 px-3 font-bold" :class="inv.vip_days_left > 0 ? 'text-emerald-600' : 'text-slate-400'">
+                    {{ inv.vip_days_left }} 天
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
+        <h3 class="font-bold text-slate-700 text-base mb-4">修改账号密码</h3>
+        <div class="space-y-3 max-w-md">
+          <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.newPassword" type="password" placeholder="新密码(至少6位)" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <button @click="changePassword" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 hover:opacity-90 shadow-sm">
+            {{ pwdLoading ? '保存中...' : '确认修改' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="customModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4 select-none" @click.self="customModalVisible = false">
+        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl space-y-4 p-6">
+          <div class="flex justify-between items-center border-b pb-3">
+            <h3 class="font-bold text-slate-800 text-base">添加定制监控标的</h3>
+            <button @click="customModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+          </div>
+          <div class="space-y-2">
+            <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
+            <div class="flex gap-2">
+              <input v-model="inputCode" @input="onCodeInput" placeholder="如：563300" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
+              <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
+                {{ searchingName ? '识别中...' : '保存' }}
+              </button>
+            </div>
+            <p v-if="foundName" class="text-xs theme-text font-bold flex items-center gap-1 pt-1">
+              <i class="fa-solid fa-circle-check"></i> 已识别标的：{{ foundName }}
+            </p>
+            <p v-else-if="searchError" class="text-xs text-amber-600 font-medium pt-1">{{ searchError }}</p>
+          </div>
+          <div v-if="draftSymbols.length > 0" class="pt-2 border-t space-y-2">
+            <div class="text-xs font-bold text-slate-600">已保存标的 ({{ draftSymbols.length }}/{{ settings.custom_max_symbols || 3 }})：</div>
+            <div class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+              <div v-for="(sym, i) in draftSymbols" :key="i" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-lg text-xs border">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">#{{ i + 1 }}</span>
+                    <span class="font-mono font-bold text-slate-800">{{ sym.code }}</span>
+                    <span class="text-slate-600 font-medium truncate">{{ sym.name }}</span>
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-0.5 pl-7">添加于 {{ formatAddTime(sym.addTime) }}</div>
+                </div>
+                <button @click="removeDraftSymbol(i)" class="text-slate-400 hover:text-red-500 ml-2 shrink-0">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="pt-3 border-t flex flex-col gap-2">
+            <button @click="goToBuyCustomPlan" :disabled="draftSymbols.length === 0" class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50 shadow-sm flex items-center justify-center gap-1">
+              <i class="fa-solid fa-cart-shopping"></i> 购买“定制监控”套餐
+            </button>
+            <p class="text-[11px] text-slate-400 text-center">套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只标的</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+};
