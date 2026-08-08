@@ -57,6 +57,11 @@ export const authApi = {
     });
   },
 
+  // 获取当前登录用户信息（含最新 VIP 天数）
+  async getMe() {
+    return request("/api/user/me");
+  },
+
   // 获取我邀请的用户列表
   async getInvitees() {
     return request("/api/user/invitees");
