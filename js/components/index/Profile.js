@@ -165,20 +165,31 @@ export default {
       window.location.hash = "#/plan";
     };
 
-    // 加载个人中心关联数据
+      // 加载个人中心关联数据（含最新 VIP 天数）
     const loadProfileData = async () => {
       loading.value = true;
       inviteeLoading.value = true;
       try {
-        const [ordersRes, inviteesRes, customRes] = await Promise.all([
+        const [ordersRes, inviteesRes, customRes, meRes] = await Promise.all([
           planApi.fetchUserOrders().catch(() => ({ data: [] })),
           authApi.getInvitees().catch(() => ({ data: [] })),
           watchlistApi.fetchUserCustomWatchlist().catch(() => ({ data: [] })),
+          authApi.getMe().catch(() => null),
         ]);
 
         orders.value = ordersRes.data || [];
         invitees.value = inviteesRes.data || [];
         customList.value = customRes.data || [];
+
+        // 用服务端最新 VIP 天数覆盖本地缓存
+        if (meRes && meRes.data) {
+          const days = meRes.data.shared_vip_days ?? meRes.data.vip_days_left ?? 0;
+          store.setUserState({
+            username: meRes.data.username,
+            referralCode: meRes.data.referral_code,
+            vipDaysLeft: days,
+          });
+        }
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
