@@ -1,40 +1,26 @@
 /**
- * 波幅探长 - 用户定制监控 API 服务
- * js/api/watchlist.js
- *
- * 对齐后端：
- *   GET    /api/user/watchlist/custom   → 当前用户的定制列表
- *   DELETE /api/user/watchlist/custom   → 移除一只（body: { id }）
- *   POST   /api/user/watchlist/custom   → 用户侧补充/更新（可选，后台审核通过后也会写入）
+ * 波幅探长 - 用户定制监控 API
+ * 对齐 Worker：/api/watchlist/custom（注意：不是 /api/user/...）
  */
 import { request } from "./http.js";
 
 export const watchlistApi = {
-  /**
-   * 获取当前登录用户的定制监控列表
-   * 期望返回：{ success: true, data: [ { id, etf_code, etf_name, status, expire_at, ... } ] }
-   */
+  /** 当前登录用户的定制监控列表 */
   async fetchUserCustomWatchlist() {
-    return request("/api/user/watchlist/custom");
+    return request("/api/watchlist/custom");
   },
 
-  /**
-   * 移除个人的某只定制监控标的
-   * @param {number|string} id  watchlist_custom.id
-   */
+  /** 移除一只定制标的 body: { id } */
   async removeCustomItem(id) {
-    return request("/api/user/watchlist/custom", {
+    return request("/api/watchlist/custom", {
       method: "DELETE",
       body: JSON.stringify({ id }),
     });
   },
 
-  /**
-   * （可选）用户侧主动添加/更新定制标的草稿
-   * 正式开通仍以订单审核通过后 Worker 写入为准
-   */
+  /** 可选：用户侧写入/更新（正式开通仍以订单审核为准） */
   async saveCustomItem(item) {
-    return request("/api/user/watchlist/custom", {
+    return request("/api/watchlist/custom", {
       method: "POST",
       body: JSON.stringify({
         id: item.id || undefined,
