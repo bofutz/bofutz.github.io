@@ -1,12 +1,12 @@
 /**
- * 波幅探长 - 账号认证与用户中心 API 服务
+ * 波幅探长 - 账号认证与用户中心 API
  * js/api/auth.js
  */
 import { request } from "./http.js";
 import { CONFIG } from "../config.js";
 
 export const authApi = {
-  // 账号登录
+  /** 账号登录 */
   async login(username, password) {
     return request("/api/login", {
       method: "POST",
@@ -17,7 +17,7 @@ export const authApi = {
     });
   },
 
-  // 账号注册
+  /** 账号注册 */
   async register({ username, password, refCode, emailCode }) {
     return request("/api/register", {
       method: "POST",
@@ -30,12 +30,12 @@ export const authApi = {
     });
   },
 
-  // 获取当前登录用户信息（含最新 VIP 天数）
+  /** 当前登录用户信息（含最新 VIP 天数） */
   async getMe() {
     return request("/api/user/me");
   },
-  
-  // 发送邮箱验证码
+
+  /** 发送邮箱验证码（走独立邮件 Worker） */
   async sendEmailCode(email, turnstileToken) {
     return request(`${CONFIG.MAIL_API_BASE}/api/send-code`, {
       method: "POST",
@@ -46,7 +46,7 @@ export const authApi = {
     });
   },
 
-  // 修改密码（已对齐 Worker 路径）
+  /** 修改密码 */
   async changePassword(oldPassword, newPassword) {
     return request("/api/user/change-password", {
       method: "POST",
@@ -57,12 +57,7 @@ export const authApi = {
     });
   },
 
-  // 获取当前登录用户信息（含最新 VIP 天数）
-  async getMe() {
-    return request("/api/user/me");
-  },
-
-  // 获取我邀请的用户列表
+  /** 我邀请的用户列表 */
   async getInvitees() {
     return request("/api/user/invitees");
   },
