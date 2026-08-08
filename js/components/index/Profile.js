@@ -1,13 +1,14 @@
 /**
- * 波幅探长 - 个人中心分块组件
- * 修复查名 + 支持保存草稿（带序号/时间）+ 跳转定制套餐页
+ * 波幅探长 - 个人中心
+ * - 定制列表走 /api/watchlist/custom（由 watchlistApi 对齐）
+ * - 添加标的 → 草稿 → 跳转购买定制套餐
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
 import { planApi } from "../../api/plan.js";
 import { watchlistApi } from "../../api/watchlist.js";
-    
+
 const { ref, reactive, onMounted } = Vue;
 
 export default {
@@ -19,7 +20,6 @@ export default {
     const loading = ref(false);
     const inviteeLoading = ref(false);
 
-    // 添加定制标的弹窗状态
     const customModalVisible = ref(false);
     const inputCode = ref("");
     const foundName = ref("");
@@ -34,23 +34,18 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // 完全采用 Chrome 插件 background.js 中的原版查名称算法
     const fetchStockNameByCode = async (symbolStr) => {
       try {
         const codeMatch = String(symbolStr || "").match(/\d{6}/);
         if (!codeMatch) return "";
-        
         const code = codeMatch[0];
         const prefix = ["5", "6", "9"].includes(code[0]) ? "sh" : "sz";
-        
         const tx_url = `https://qt.gtimg.cn/q=${prefix}${code}`;
         const resp = await fetch(tx_url);
         if (!resp.ok) return "";
-        
         const buffer = await resp.arrayBuffer();
         const decoder = new TextDecoder("gbk");
         const text = decoder.decode(buffer);
-        
         const match = text.match(/="[^~]+~([^~]+)/);
         return match ? match[1].trim() : "";
       } catch (err) {
@@ -59,7 +54,6 @@ export default {
       }
     };
 
-    // 输入代码实时防抖查询名称
     let searchTimer = null;
     const onCodeInput = () => {
       foundName.value = "";
@@ -67,51 +61,43 @@ export default {
       if (searchTimer) clearTimeout(searchTimer);
       const code = inputCode.value.trim();
       if (!code) return;
-
       searchTimer = setTimeout(async () => {
         searchingName.value = true;
         const name = await fetchStockNameByCode(code);
         searchingName.value = false;
-        if (name) {
-          foundName.value = name;
-        } else {
-          searchError.value = "未识别到中文名称，确认后将直接使用代码";
-        }
+        if (name) foundName.value = name;
+        else searchError.value = "未识别到中文名称，确认后将直接使用代码";
       }, 300);
     };
 
-    // 打开添加定制弹窗
     const openCustomModal = () => {
       inputCode.value = "";
       foundName.value = "";
       searchError.value = "";
-      // 可选：从 sessionStorage 恢复上次草稿
       try {
         const cached = sessionStorage.getItem("draft_custom_symbols");
-        if (cached) {
-          draftSymbols.value = JSON.parse(cached);
-        } else {
-          draftSymbols.value = [];
-        }
+        draftSymbols.value = cached ? JSON.parse(cached) : [];
+        if (!Array.isArray(draftSymbols.value)) draftSymbols.value = [];
       } catch {
         draftSymbols.value = [];
       }
       customModalVisible.value = true;
     };
 
-    // 保存单个标的到草稿（带序号和时间）
     const confirmAddSingleSymbol = async () => {
       const code = inputCode.value.trim().toUpperCase();
       if (!code) {
         store.showToast("请输入标的代码", "error");
         return;
       }
-      
+      if (!/^\d{6}$/.test(code)) {
+        store.showToast("请输入 6 位标的代码", "error");
+        return;
+      }
       if (draftSymbols.value.some((s) => s.code === code)) {
         store.showToast("请勿重复添加相同代码", "error");
         return;
       }
-
       const maxLimit = parseInt(store.state.publicSettings.custom_max_symbols || 3, 10);
       if (draftSymbols.value.length >= maxLimit) {
         store.showToast(`定制套餐最多添加 ${maxLimit} 只标的`, "error");
@@ -128,44 +114,34 @@ export default {
       draftSymbols.value.push({
         code,
         name: name || code,
-        addTime: Date.now(), // 记录添加时间
+        addTime: Date.now(),
       });
-
-      // 持久化草稿，方便下次打开查看
       sessionStorage.setItem("draft_custom_symbols", JSON.stringify(draftSymbols.value));
-
       inputCode.value = "";
       foundName.value = "";
       searchError.value = "";
     };
 
-    // 删除草稿中的某一项
     const removeDraftSymbol = (index) => {
       draftSymbols.value.splice(index, 1);
       sessionStorage.setItem("draft_custom_symbols", JSON.stringify(draftSymbols.value));
     };
 
-    // 完成标的挑选，跳转至购买「定制监控」套餐页面
     const goToBuyCustomPlan = () => {
       if (!draftSymbols.value.length) {
         store.showToast("请先输入并添加至少一只定制标的", "error");
         return;
       }
-      
       const formattedItems = draftSymbols.value.map((item) => ({
         etf_code: item.code,
         etf_name: item.name,
       }));
       sessionStorage.setItem("pending_custom_items", JSON.stringify(formattedItems));
-      
-      // 关键 Plan 页面打开时强制切到「定制监控」标签
       sessionStorage.setItem("prefer_plan_tab", "custom");
-      
       customModalVisible.value = false;
       window.location.hash = "#/plan";
     };
 
-      // 加载个人中心关联数据（含最新 VIP 天数）
     const loadProfileData = async () => {
       loading.value = true;
       inviteeLoading.value = true;
@@ -177,16 +153,18 @@ export default {
           authApi.getMe().catch(() => null),
         ]);
 
-        orders.value = ordersRes.data || [];
-        invitees.value = inviteesRes.data || [];
-        customList.value = customRes.data || [];
+        orders.value = ordersRes.data || ordersRes || [];
+        invitees.value = inviteesRes.data || inviteesRes || [];
+        // 兼容 { data: [] } 或直接数组
+        const rawCustom = customRes?.data ?? customRes;
+        customList.value = Array.isArray(rawCustom) ? rawCustom : [];
 
-        // 用服务端最新 VIP 天数覆盖本地缓存
-        if (meRes && meRes.data) {
-          const days = meRes.data.shared_vip_days ?? meRes.data.vip_days_left ?? 0;
+        if (meRes && (meRes.data || meRes.username)) {
+          const d = meRes.data || meRes;
+          const days = d.shared_vip_days ?? d.vip_days_left ?? 0;
           store.setUserState({
-            username: meRes.data.username,
-            referralCode: meRes.data.referral_code,
+            username: d.username,
+            referralCode: d.referral_code,
             vipDaysLeft: days,
           });
         }
@@ -251,7 +229,6 @@ export default {
       return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
     };
 
-    // 草稿添加时间格式化
     const formatAddTime = (ts) => {
       if (!ts) return "";
       const d = new Date(ts);
@@ -267,9 +244,7 @@ export default {
     };
 
     onMounted(() => {
-      if (store.state.isLoggedIn) {
-        loadProfileData();
-      }
+      if (store.state.isLoggedIn) loadProfileData();
     });
 
     return {
@@ -304,7 +279,6 @@ export default {
   },
   template: `
     <div class="max-w-4xl mx-auto space-y-5 select-none">
-      <!-- 1. VIP 权限顶栏 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <div class="flex items-center justify-between gap-3">
           <div>
@@ -324,7 +298,6 @@ export default {
         </div>
       </div>
 
-      <!-- 2. 我的定制监控 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -378,7 +351,6 @@ export default {
         </div>
       </div>
 
-      <!-- 3. 我的订单 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <div class="font-bold text-slate-700 text-base">我的订单</div>
@@ -405,147 +377,4 @@ export default {
                 </td>
                 <td class="py-3.5 px-4 font-medium text-slate-800">
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-bold">{{ order.plan_id }}</span>
-                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'custom_watchlist' ? '定制' : '通用' }})</span>
-                  <span v-if="order.promo_code" class="text-[10px] text-orange-500 ml-1 font-bold">{{ order.promo_code }}</span>
-                </td>
-                <td class="py-3.5 px-4 font-bold font-mono text-red-500">¥ {{ order.amount }}</td>
-                <td class="py-3.5 px-4 text-emerald-600 font-bold text-xs">
-                  {{ order.status === 'approved' ? (order.vip_days_granted ? ('+' + order.vip_days_granted + '天') : (order.order_type === 'custom_watchlist' ? '定制激活' : '-')) : '-' }}
-                </td>
-                <td class="py-3.5 px-4 font-bold text-xs">
-                  <span :class="order.status === 'approved' ? 'text-emerald-600' : (order.status === 'pending' ? 'text-orange-500' : 'text-slate-400')">
-                    {{ formatStatus(order.status) }}
-                  </span>
-                </td>
-                <td class="py-3.5 px-4 text-xs font-mono text-slate-400">{{ formatDateExact(order.created_at) }}</td>
-              </tr>
-              <tr v-if="!orders.length">
-                <td colspan="6" class="py-10 text-center text-slate-400 text-sm font-medium">暂无订单数据</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 4. 专属邀请码及奖励 -->
-      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
-        <div class="font-bold text-slate-700 text-base">专属邀请码及奖励</div>
-        
-        <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
-            <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '-' }}</span>
-          </div>
-          <div class="sm:text-right text-xs theme-text font-medium leading-relaxed">
-            <div>邀请与被邀请双方各送 VIP</div>
-            <div class="text-sm font-bold mt-0.5">
-              邀请人 {{ settings.gift_inviter_days || 3 }} 天 · 被邀请人 {{ settings.gift_invitee_days || 2 }} 天
-            </div>
-          </div>
-        </div>
-
-        <div class="pt-2">
-          <div class="text-sm font-bold text-slate-600 mb-2">
-            我邀请的用户 <span class="text-xs text-slate-400 font-normal">({{ invitees.length }})</span>
-          </div>
-          <div v-if="inviteeLoading" class="text-xs text-slate-400 py-2">加载中...</div>
-          <div v-else-if="!invitees.length" class="text-xs text-slate-400 py-6 text-center font-medium">
-            暂无被邀请人
-          </div>
-          <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
-              <thead class="text-xs text-slate-400 border-b">
-                <tr>
-                  <th class="py-2 px-3">注册账号</th>
-                  <th class="py-2 px-3">注册时间</th>
-                  <th class="py-2 px-3">当前 VIP 天数</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-50">
-                <tr v-for="inv in invitees" :key="inv.id">
-                  <td class="py-2.5 px-3 font-medium text-slate-800">{{ inv.username }}</td>
-                  <td class="py-2.5 px-3 text-xs font-mono text-slate-400">{{ formatDateExact(inv.created_at) }}</td>
-                  <td class="py-2.5 px-3 font-bold" :class="inv.vip_days_left > 0 ? 'text-emerald-600' : 'text-slate-400'">
-                    {{ inv.vip_days_left }} 天
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- 5. 修改账号密码 -->
-      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
-        <h3 class="font-bold text-slate-700 text-base mb-4">修改账号密码</h3>
-        <div class="space-y-3 max-w-md">
-          <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-          <input v-model="pwdForm.newPassword" type="password" placeholder="新密码(至少6位)" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-          <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-          <button @click="changePassword" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 hover:opacity-90 shadow-sm">
-            {{ pwdLoading ? '保存中...' : '确认修改' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 添加定制标的对话框 Modal -->
-      <div v-if="customModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4 select-none" @click.self="customModalVisible = false">
-        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl space-y-4 p-6">
-          <div class="flex justify-between items-center border-b pb-3">
-            <h3 class="font-bold text-slate-800 text-base">添加定制监控标的</h3>
-            <button @click="customModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-          </div>
-
-          <!-- 单个标的输入区 -->
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
-            <div class="flex gap-2">
-              <input v-model="inputCode" @input="onCodeInput" placeholder="如：563300" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
-              <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
-                {{ searchingName ? '识别中...' : '保存' }}
-              </button>
-            </div>
-            <p v-if="foundName" class="text-xs theme-text font-bold flex items-center gap-1 pt-1">
-              <i class="fa-solid fa-circle-check"></i> 已识别标的：{{ foundName }}
-            </p>
-            <p v-else-if="searchError" class="text-xs text-amber-600 font-medium pt-1">
-              {{ searchError }}
-            </p>
-          </div>
-
-          <!-- 已添加草稿列表（带序号 + 添加时间） -->
-          <div v-if="draftSymbols.length > 0" class="pt-2 border-t space-y-2">
-            <div class="text-xs font-bold text-slate-600 flex justify-between items-center">
-              <span>已保存标的 ({{ draftSymbols.length }}/{{ settings.custom_max_symbols || 3 }})：</span>
-            </div>
-            <div class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-              <div v-for="(sym, i) in draftSymbols" :key="i" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-lg text-xs border">
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">#{{ i + 1 }}</span>
-                    <span class="font-mono font-bold text-slate-800">{{ sym.code }}</span>
-                    <span class="text-slate-600 font-medium truncate">{{ sym.name }}</span>
-                  </div>
-                  <div class="text-[10px] text-slate-400 mt-0.5 pl-7">
-                    添加于 {{ formatAddTime(sym.addTime) }}
-                  </div>
-                </div>
-                <button @click="removeDraftSymbol(i)" class="text-slate-400 hover:text-red-500 ml-2 shrink-0">
-                  <i class="fa-solid fa-trash"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 底部操作与去购买按钮 -->
-          <div class="pt-3 border-t flex flex-col gap-2">
-            <button @click="goToBuyCustomPlan" :disabled="draftSymbols.length === 0" class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50 shadow-sm flex items-center justify-center gap-1">
-              <i class="fa-solid fa-cart-shopping"></i> 购买“定制监控”套餐
-            </button>
-            <p class="text-[11px] text-slate-400 text-center">套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只标的</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  `,
-};
+                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type ===
