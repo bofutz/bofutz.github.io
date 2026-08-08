@@ -1,8 +1,6 @@
 /**
  * 波幅探长 - 购买套餐组件
  * - 优惠码 / 游客支付即注册 严格跟随后台 publicSettings
- * - 默认微信支付；默认选中「月付」类套餐
- * - 套餐介绍更完整
  * js/components/index/Plan.js
  */
 import { store } from "../../store.js";
