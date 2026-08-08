@@ -21,7 +21,7 @@ export default {
       vote_monthly_limit: 10,
       alipay_qr_url: "",
       wechat_qr_url: "",
-      default_pay_channel: "alipay",
+      default_pay_channel: "wechat",
       social_douyin: "",
       social_shipinhao: "",
       social_xiaohongshu: "",
@@ -187,8 +187,8 @@ export default {
               v-model="settingsForm.default_pay_channel"
               class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none font-medium"
             >
-              <option value="alipay">支付宝（优先显示）</option>
               <option value="wechat">微信支付（优先显示）</option>
+              <option value="alipay">支付宝</option>
             </select>
           </div>
           
@@ -215,57 +215,61 @@ export default {
           </p>
         </div>
 
-        <!-- 前台 Footer 社交链接 -->
+        <!-- 前台 Footer 社交账号（仅展示，无需链接） -->
         <div class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm lg:col-span-2">
           <div class="text-sm font-bold text-slate-700 border-b pb-2">
-            前台 Footer 社交链接
-            <span class="font-normal text-slate-400 text-xs ml-2">（留空则前台不展示该入口）</span>
+            前台 Footer 社交账号
+            <span class="font-normal text-slate-400 text-xs ml-2">
+              填写账号即可（如 @波幅探长），留空则前台不显示该平台
+            </span>
           </div>
-          
+
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">抖音主页链接</label>
+              <label class="text-xs text-slate-500 mb-1 block">抖音账号</label>
               <input
                 v-model="settingsForm.social_douyin"
-                placeholder="https://..."
+                placeholder="@波幅探长"
                 class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
               >
             </div>
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">视频号主页链接</label>
+              <label class="text-xs text-slate-500 mb-1 block">视频号账号</label>
               <input
                 v-model="settingsForm.social_shipinhao"
-                placeholder="https://..."
+                placeholder="@波幅探长"
                 class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
               >
             </div>
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">小红书主页链接</label>
+              <label class="text-xs text-slate-500 mb-1 block">小红书账号</label>
               <input
                 v-model="settingsForm.social_xiaohongshu"
-                placeholder="https://..."
+                placeholder="@波幅探长"
                 class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
               >
             </div>
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">公众号链接</label>
+              <label class="text-xs text-slate-500 mb-1 block">公众号名称</label>
               <input
                 v-model="settingsForm.social_gongzhonghao"
-                placeholder="https://..."
+                placeholder="@波幅探长"
                 class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
               >
             </div>
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">快手主页链接</label>
+              <label class="text-xs text-slate-500 mb-1 block">快手账号</label>
               <input
                 v-model="settingsForm.social_kuaishou"
-                placeholder="https://..."
+                placeholder="@波幅探长"
                 class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
               >
             </div>
           </div>
+          <p class="text-[11px] text-slate-400">
+            桌面端鼠标悬停图标显示「平台名 + 账号」；手机端在图标旁直接显示账号。
+          </p>
         </div>
-      </div>
 
       <!-- 底部提示 -->
       <div class="bg-slate-50 border border-slate-100 rounded-xl p-4 text-xs text-slate-500 leading-relaxed">
