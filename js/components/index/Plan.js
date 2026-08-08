@@ -1,6 +1,7 @@
 /**
  * 波幅探长 - 购买套餐组件
  * - 优惠码 / 游客支付即注册 严格跟随后台 publicSettings
+ * - 定制监控：提交时带上 sessionStorage 中的 pending_custom_items
  * js/components/index/Plan.js
  */
 import { store } from "../../store.js";
@@ -34,7 +35,6 @@ export default {
     const promoValid = ref(false);
     const promoMessage = ref("");
 
-    // 微信优先：初始值取配置，onMounted 再按 publicSettings 校正
     const payChannel = ref(
       (CONFIG.DEFAULT_PUBLIC_SETTINGS.default_pay_channel || "wechat") === "alipay"
         ? "alipay"
@@ -49,8 +49,10 @@ export default {
       refCode: "",
     });
 
-    const settings = computed(() => store.state.publicSettings || {});
+    // 从个人中心带过来的待购定制标的
+    const pendingCustomItems = ref([]);
 
+    const settings = computed(() => store.state.publicSettings || {});
     const promoEnabled = computed(() => settingOn(settings.value.promo_enabled));
     const payRegisterEnabled = computed(() => settingOn(settings.value.pay_register_enabled));
 
@@ -86,7 +88,6 @@ export default {
       );
     });
 
-    /** 优先选「月付」：名称含月 / days≈30 / 否则天数最小 */
     const pickDefaultPlan = (list) => {
       if (!list || !list.length) return null;
       const byName = list.find((p) => /月/.test(String(p.name || "")));
@@ -99,7 +100,7 @@ export default {
       return [...list].sort((a, b) => Number(a.days) - Number(b.days))[0];
     };
 
-    const planTypeLabel = (plan) => {
+    const planTypeLabel = () => {
       if (planTab.value === "custom") return "定制监控";
       return "通用监控 VIP";
     };
@@ -197,6 +198,32 @@ export default {
       store.state.authModalVisible = true;
     };
 
+    /** 读取个人中心带来的定制标的草稿 */
+    const loadPendingCustomItems = () => {
+      try {
+        const raw = sessionStorage.getItem("pending_custom_items");
+        if (!raw) {
+          pendingCustomItems.value = [];
+          return;
+        }
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) {
+          pendingCustomItems.value = [];
+          return;
+        }
+        pendingCustomItems.value = arr
+          .map((it) => ({
+            etf_code: String(it.etf_code || it.code || "")
+              .trim()
+              .toUpperCase(),
+            etf_name: String(it.etf_name || it.name || "").trim(),
+          }))
+          .filter((it) => /^\d{6}$/.test(it.etf_code));
+      } catch {
+        pendingCustomItems.value = [];
+      }
+    };
+
     const submitOrder = async () => {
       if (!topUpForm.planId) {
         store.showToast("请先选择套餐", "error");
@@ -207,7 +234,15 @@ export default {
         return;
       }
 
-      // 未登录
+      // 定制套餐必须带标的
+      if (topUpForm.orderType === "custom_watchlist") {
+        loadPendingCustomItems();
+        if (!pendingCustomItems.value.length) {
+          store.showToast("请先在个人中心添加定制标的后再购买", "error");
+          return;
+        }
+      }
+
       if (!store.state.isLoggedIn) {
         if (!payRegisterEnabled.value) {
           store.showToast("请先登录后再购买", "error");
@@ -232,12 +267,23 @@ export default {
           txId: topUpForm.txId,
           promoCode: promoEnabled.value && promoValid.value ? promoInput.value : undefined,
           orderType: topUpForm.orderType,
+          // ★ 关键：把定制标的传给后端
+          customItems:
+            topUpForm.orderType === "custom_watchlist" ? pendingCustomItems.value : undefined,
           registerUsername: !store.state.isLoggedIn ? payRegister.username : undefined,
           registerPassword: !store.state.isLoggedIn ? payRegister.password : undefined,
           refCode: !store.state.isLoggedIn ? payRegister.refCode : undefined,
         });
+
         store.showToast("订单已提交，请等待审核开通！");
         topUpForm.txId = "";
+
+        // 提交成功后清草稿，避免重复提交
+        if (topUpForm.orderType === "custom_watchlist") {
+          sessionStorage.removeItem("pending_custom_items");
+          sessionStorage.removeItem("draft_custom_symbols");
+          pendingCustomItems.value = [];
+        }
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
@@ -252,7 +298,8 @@ export default {
         sessionStorage.removeItem("prefer_plan_tab");
       }
 
-      // 支付通道：后台 default_pay_channel 优先
+      loadPendingCustomItems();
+
       const ch = settings.value.default_pay_channel || "wechat";
       payChannel.value = ch === "alipay" ? "alipay" : "wechat";
 
@@ -275,6 +322,7 @@ export default {
       showManualInput,
       submitLoading,
       payRegister,
+      pendingCustomItems,
       currentPayQrSrc,
       planTypeLabel,
       planBenefits,
@@ -305,6 +353,24 @@ export default {
         </button>
       </div>
 
+      <!-- 定制标的草稿提示 -->
+      <div v-if="planTab==='custom' && pendingCustomItems.length"
+           class="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-800">
+        <i class="fa-solid fa-circle-check mr-1"></i>
+        已选择 <strong>{{ pendingCustomItems.length }}</strong> 只定制标的：
+        <span class="font-mono">
+          {{ pendingCustomItems.map(i => i.etf_code).join('、') }}
+        </span>
+        ，提交订单后将一并开通。
+      </div>
+      <div v-else-if="planTab==='custom' && !pendingCustomItems.length"
+           class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-800">
+        <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+        尚未选择定制标的。请先到
+        <a href="#/profile" class="underline font-bold">个人中心 → 添加标的</a>
+        后再购买定制套餐。
+      </div>
+
       <div v-if="loading" class="text-center py-10 text-slate-400 text-sm">
         <i class="fa-solid fa-spinner animate-spin mr-2"></i>加载套餐中...
       </div>
@@ -324,7 +390,7 @@ export default {
               <span class="text-base text-slate-400">¥</span> {{ plan.price }}
             </div>
             <div class="text-[11px] text-slate-400 mb-3">
-              开通后计入：<strong class="theme-text">{{ planTypeLabel(plan) }}</strong>
+              开通后计入：<strong class="theme-text">{{ planTypeLabel() }}</strong>
             </div>
             <ul class="space-y-1.5 text-xs text-slate-500">
               <li v-for="(tip, i) in planBenefits(plan)" :key="i" class="flex items-start gap-1.5">
@@ -373,7 +439,6 @@ export default {
           <div class="text-[11px] text-slate-400 text-center">长按保存二维码或扫码完成支付</div>
         </div>
 
-        <!-- 仅后台开启优惠码时显示 -->
         <div v-if="promoEnabled" class="border border-slate-100 rounded-xl p-4 bg-slate-50/60">
           <label class="text-xs font-bold text-slate-600 mb-2 block">优惠码 (选填)</label>
           <div class="flex gap-2">
@@ -387,7 +452,6 @@ export default {
           </p>
         </div>
 
-        <!-- 未登录：仅当后台开启「游客支付即注册」才显示注册表单 -->
         <div v-if="!store.isLoggedIn && payRegisterEnabled"
              class="bg-amber-50/60 border border-amber-100 rounded-xl p-4 space-y-3">
           <div class="text-xs font-bold text-amber-800">
@@ -402,7 +466,6 @@ export default {
                  class="w-full px-3 py-2 border rounded-lg text-sm focus:theme-border outline-none bg-white">
         </div>
 
-        <!-- 未登录且后台关闭游客注册 → 引导登录 -->
         <div v-else-if="!store.isLoggedIn && !payRegisterEnabled"
              class="bg-slate-50 border border-slate-100 rounded-xl p-4 text-center space-y-2">
           <p class="text-xs text-slate-600">当前需登录后才能购买套餐</p>
