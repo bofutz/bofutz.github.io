@@ -1,20 +1,36 @@
 /**
- * 波幅探长 - 页脚与社交二维码组件
+ * 波幅探长 - 页脚与社交平台图标
  * js/components/common/Footer.js
+ * 桌面：悬停显示「平台名 账号」；手机：图标后直接显示账号
  */
 import { store } from "../../store.js";
+
+const { computed } = Vue;
+
+const PLATFORM_META = [
+  { key: "social_douyin", label: "抖音", icon: "fa-brands fa-tiktok", color: "hover:text-slate-800" },
+  { key: "social_shipinhao", label: "视频号", icon: "fa-brands fa-weixin", color: "hover:text-[#07C160]" },
+  { key: "social_xiaohongshu", label: "小红书", icon: "fa-solid fa-book", color: "hover:text-[#FE2C55]" },
+  { key: "social_gongzhonghao", label: "公众号", icon: "fa-solid fa-comment-dots", color: "hover:text-[#07C160]" },
+  { key: "social_kuaishou", label: "快手", icon: "fa-solid fa-video", color: "hover:text-[#FF4906]" },
+];
 
 export default {
   name: "Footer",
   setup() {
-    const getQrUrl = (link) => {
-      if (!link) return "";
-      return `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(link.trim())}`;
-    };
+    const socialItems = computed(() => {
+      const s = store.state.publicSettings || {};
+      return PLATFORM_META.map((p) => {
+        const raw = (s[p.key] || "").trim();
+        if (!raw) return null;
+        // 没有 @ 时自动补上，方便统一展示
+        const handle = raw.startsWith("@") ? raw : `@${raw}`;
+        return { ...p, handle };
+      }).filter(Boolean);
+    });
 
     return {
-      settings: store.state.publicSettings,
-      getQrUrl,
+      socialItems,
     };
   },
   template: `
@@ -25,46 +41,25 @@ export default {
           <span>© 2026 波幅探长 · 专业的波幅监控与数据分析平台</span>
         </div>
 
-        <div class="flex items-center gap-4 text-slate-400">
-          <a v-if="settings.social_douyin" :href="settings.social_douyin" target="_blank" rel="noopener" class="social-item hover:text-slate-700 transition-colors" title="抖音">
-            <i class="fa-brands fa-tiktok text-lg"></i>
-            <div class="social-qr-pop">
-              <img :src="getQrUrl(settings.social_douyin)" alt="抖音二维码">
-              <p class="text-[10px] text-slate-500 mt-1 text-center">扫码关注抖音</p>
+        <div v-if="socialItems.length" class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-slate-400">
+          <div
+            v-for="item in socialItems"
+            :key="item.key"
+            class="group relative flex items-center gap-1.5 cursor-default transition-colors"
+            :class="item.color"
+          >
+            <i :class="item.icon + ' text-lg'"></i>
+            <!-- 手机端：图标后常显账号 -->
+            <span class="text-[11px] text-slate-500 sm:hidden">{{ item.handle }}</span>
+            <!-- 桌面端：悬停气泡 -->
+            <div
+              class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden sm:group-hover:block
+                     whitespace-nowrap rounded-md bg-slate-800 text-white text-[11px] px-2.5 py-1.5 shadow-lg z-20"
+            >
+              {{ item.label }} {{ item.handle }}
+              <span class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></span>
             </div>
-          </a>
-
-          <a v-if="settings.social_shipinhao" :href="settings.social_shipinhao" target="_blank" rel="noopener" class="social-item hover:text-[#07C160] transition-colors" title="视频号">
-            <i class="fa-brands fa-weixin text-lg"></i>
-            <div class="social-qr-pop">
-              <img :src="getQrUrl(settings.social_shipinhao)" alt="视频号二维码">
-              <p class="text-[10px] text-slate-500 mt-1 text-center">扫码关注视频号</p>
-            </div>
-          </a>
-
-          <a v-if="settings.social_xiaohongshu" :href="settings.social_xiaohongshu" target="_blank" rel="noopener" class="social-item hover:text-[#FE2C55] transition-colors" title="小红书">
-            <i class="fa-solid fa-book text-lg"></i>
-            <div class="social-qr-pop">
-              <img :src="getQrUrl(settings.social_xiaohongshu)" alt="小红书二维码">
-              <p class="text-[10px] text-slate-500 mt-1 text-center">扫码关注小红书</p>
-            </div>
-          </a>
-
-          <a v-if="settings.social_gongzhonghao" :href="settings.social_gongzhonghao" target="_blank" rel="noopener" class="social-item hover:text-[#07C160] transition-colors" title="公众号">
-            <i class="fa-solid fa-comment-dots text-lg"></i>
-            <div class="social-qr-pop">
-              <img :src="getQrUrl(settings.social_gongzhonghao)" alt="公众号二维码">
-              <p class="text-[10px] text-slate-500 mt-1 text-center">扫码关注公众号</p>
-            </div>
-          </a>
-
-          <a v-if="settings.social_kuaishou" :href="settings.social_kuaishou" target="_blank" rel="noopener" class="social-item hover:text-[#FF4906] transition-colors" title="快手">
-            <i class="fa-solid fa-video text-lg"></i>
-            <div class="social-qr-pop">
-              <img :src="getQrUrl(settings.social_kuaishou)" alt="快手二维码">
-              <p class="text-[10px] text-slate-500 mt-1 text-center">扫码关注快手</p>
-            </div>
-          </a>
+          </div>
         </div>
       </div>
     </footer>
