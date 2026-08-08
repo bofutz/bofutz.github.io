@@ -169,7 +169,7 @@ export default {
 
         <div class="p-6 space-y-3.5">
           <div v-if="store.authMode==='register'" class="bg-emerald-50 text-emerald-600 text-xs p-2 rounded-lg text-center border border-emerald-100">
-            新注册即送通用 VIP <strong>{{ settings.gift_register_days || 1 }}</strong> 天
+            新注册即送通用 VIP <strong>2</strong> 天
           </div>
 
           <input v-model="form.username" type="email" :placeholder="store.authMode==='register'?'注册电子邮箱':'邮箱账号'"
