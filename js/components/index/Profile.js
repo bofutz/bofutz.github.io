@@ -1,16 +1,18 @@
 /**
- * 波幅探长 - 个人中心
- * - 定制列表走 /api/watchlist/custom（由 watchlistApi 对齐）
- * - 添加标的 → 草稿 → 跳转购买定制套餐
- * - 安全问题设置（密码找回，不走邮箱）+ 未设置持续提醒
+ * 波幅探长 - 个人中心（整合版）
+ * - 安全问题设置 + 未设置红条提醒
+ * - 会员等级展示
+ * - 定制标的可添加多只；按「每组 N 只」计费（N=后台 custom_max_symbols）
+ * - 草稿 → 购买定制套餐
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
 import { planApi } from "../../api/plan.js";
 import { watchlistApi } from "../../api/watchlist.js";
+import { CONFIG } from "../../config.js";
 
-const { ref, reactive, onMounted } = Vue;
+const { ref, reactive, computed, onMounted } = Vue;
 
 export default {
   name: "Profile",
@@ -35,8 +37,8 @@ export default {
     });
     const pwdLoading = ref(false);
 
-    // ---------- 安全问题（密码找回） ----------
-    const securitySet = ref(true); // 默认 true，避免未加载时闪红条
+    // ---------- 安全问题 ----------
+    const securitySet = ref(true);
     const secForm = reactive({
       q1: "",
       a1: "",
@@ -47,6 +49,19 @@ export default {
     });
     const secLoading = ref(false);
     const secEditing = ref(false);
+
+    const settings = computed(() => store.state.publicSettings || {});
+    const perGroup = computed(() => {
+      const n = parseInt(settings.value.custom_max_symbols || "3", 10);
+      return isNaN(n) || n < 1 ? 3 : n;
+    });
+    const draftGroups = computed(() =>
+      planApi.calcCustomGroups(draftSymbols.value.length, perGroup.value)
+    );
+    const levelLabel = computed(() => {
+      const map = CONFIG.VIP_LEVEL_LABELS || {};
+      return map[store.state.vipLevel] || map[0] || "普通用户";
+    });
 
     const fetchStockNameByCode = async (symbolStr) => {
       try {
@@ -112,11 +127,7 @@ export default {
         store.showToast("请勿重复添加相同代码", "error");
         return;
       }
-      const maxLimit = parseInt(store.state.publicSettings.custom_max_symbols || 3, 10);
-      if (draftSymbols.value.length >= maxLimit) {
-        store.showToast(`定制套餐最多添加 ${maxLimit} 只标的`, "error");
-        return;
-      }
+      // 不再限制只数上限；按组计费
 
       let name = foundName.value;
       if (!name) {
@@ -162,17 +173,22 @@ export default {
         const res = await authApi.getSecurityStatus();
         const set = !!(res.data?.security_set ?? res.security_set);
         securitySet.value = set;
+        store.setSecuritySet?.(set);
         if (!set) secEditing.value = true;
       } catch (e) {
-        // 接口未部署或失败时不打断页面
         console.warn("loadSecurityStatus:", e);
       }
     };
 
     const saveSecurity = async () => {
-      if (!secForm.q1?.trim() || !secForm.a1?.trim() ||
-          !secForm.q2?.trim() || !secForm.a2?.trim() ||
-          !secForm.q3?.trim() || !secForm.a3?.trim()) {
+      if (
+        !secForm.q1?.trim() ||
+        !secForm.a1?.trim() ||
+        !secForm.q2?.trim() ||
+        !secForm.a2?.trim() ||
+        !secForm.q3?.trim() ||
+        !secForm.a3?.trim()
+      ) {
         store.showToast("请填写完整的三个问题与答案", "error");
         return;
       }
@@ -193,6 +209,7 @@ export default {
         });
         store.showToast("安全问题已保存");
         securitySet.value = true;
+        store.setSecuritySet?.(true);
         secEditing.value = false;
         secForm.a1 = "";
         secForm.a2 = "";
@@ -227,7 +244,12 @@ export default {
             username: d.username,
             referralCode: d.referral_code,
             vipDaysLeft: days,
+            vipLevel: d.vip_level ?? 0,
           });
+          if (d.security_set != null) {
+            securitySet.value = !!d.security_set;
+            store.setSecuritySet?.(!!d.security_set);
+          }
         }
 
         await loadSecurityStatus();
@@ -312,7 +334,10 @@ export default {
 
     return {
       store: store.state,
-      settings: store.state.publicSettings,
+      settings,
+      perGroup,
+      draftGroups,
+      levelLabel,
       orders,
       invitees,
       customList,
@@ -326,7 +351,6 @@ export default {
       draftSymbols,
       pwdForm,
       pwdLoading,
-      // 安全问题
       securitySet,
       secForm,
       secLoading,
@@ -349,7 +373,7 @@ export default {
   template: `
     <div class="max-w-4xl mx-auto space-y-5 select-none">
 
-      <!-- 未设置安全问题：持续提醒 -->
+      <!-- 未设置安全问题提醒 -->
       <div v-if="store.isLoggedIn && !securitySet"
            class="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
@@ -362,6 +386,7 @@ export default {
         </button>
       </div>
 
+      <!-- VIP + 等级 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <div class="flex items-center justify-between gap-3">
           <div>
@@ -373,6 +398,10 @@ export default {
               <span v-if="store.isVip" class="text-xs bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full border border-emerald-100 font-bold">
                 剩余 {{ store.vipDaysLeft }} 天
               </span>
+              <span class="text-xs px-2.5 py-0.5 rounded-full border font-bold"
+                    :class="store.vipLevel > 0 ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'">
+                Lv.{{ store.vipLevel || 0 }} · {{ levelLabel }}
+              </span>
             </div>
           </div>
           <a href="#/plan" class="theme-bg text-white px-5 sm:px-6 py-2 sm:py-2.5 rounded-lg text-sm font-bold shadow-sm shrink-0 hover:opacity-90">
@@ -381,12 +410,13 @@ export default {
         </div>
       </div>
 
+      <!-- 我的定制监控 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div class="font-bold text-slate-700 text-base">我的定制监控</div>
             <p class="text-[11px] text-slate-400 mt-0.5">
-              套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只 · 与通用独立 · 不解锁通用图表
+              可添加多只标的 · 每 {{ perGroup }} 只为 1 组（按组购买套餐）· 与通用独立 · 不解锁通用图表
             </p>
           </div>
           <button @click="openCustomModal" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg self-start font-bold hover:opacity-90">
@@ -434,6 +464,7 @@ export default {
         </div>
       </div>
 
+      <!-- 订单 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <div class="font-bold text-slate-700 text-base">我的订单</div>
@@ -461,6 +492,9 @@ export default {
                 <td class="py-3.5 px-4 font-medium text-slate-800">
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-bold">{{ order.plan_id }}</span>
                   <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'custom_watchlist' ? '定制' : '通用' }})</span>
+                  <span v-if="order.order_type === 'custom_watchlist' && order.symbol_count" class="text-[10px] text-purple-500 ml-1 font-bold">
+                    {{ order.symbol_count }}只
+                  </span>
                   <span v-if="order.promo_code" class="text-[10px] text-orange-500 ml-1 font-bold">{{ order.promo_code }}</span>
                 </td>
                 <td class="py-3.5 px-4 font-bold font-mono text-red-500">¥ {{ order.amount }}</td>
@@ -484,6 +518,7 @@ export default {
         </div>
       </div>
 
+      <!-- 邀请 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
         <div class="font-bold text-slate-700 text-base">专属邀请码及奖励</div>
         <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -527,7 +562,7 @@ export default {
         </div>
       </div>
 
-      <!-- 安全问题（密码找回） -->
+      <!-- 安全问题 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -579,6 +614,7 @@ export default {
         </div>
       </div>
 
+      <!-- 修改密码 -->
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <h3 class="font-bold text-slate-700 text-base mb-4">修改账号密码</h3>
         <div class="space-y-3 max-w-md">
@@ -591,18 +627,23 @@ export default {
         </div>
       </div>
 
+      <!-- 添加定制标的弹窗 -->
       <div v-if="customModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4 select-none" @click.self="customModalVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl space-y-4 p-6">
           <div class="flex justify-between items-center border-b pb-3">
             <h3 class="font-bold text-slate-800 text-base">添加定制监控标的</h3>
             <button @click="customModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
           </div>
+          <p class="text-[11px] text-slate-500 leading-relaxed">
+            可添加任意只数。结算时：每 <strong class="theme-text">{{ perGroup }}</strong> 只为 1 组，
+            组数 = 向上取整(只数 ÷ {{ perGroup }})，购买对应组数的定制套餐即可。
+          </p>
           <div class="space-y-2">
             <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
             <div class="flex gap-2">
               <input v-model="inputCode" @input="onCodeInput" placeholder="如：563300" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
               <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
-                {{ searchingName ? '识别中...' : '保存' }}
+                {{ searchingName ? '识别中...' : '添加' }}
               </button>
             </div>
             <p v-if="foundName" class="text-xs theme-text font-bold flex items-center gap-1 pt-1">
@@ -611,7 +652,10 @@ export default {
             <p v-else-if="searchError" class="text-xs text-amber-600 font-medium pt-1">{{ searchError }}</p>
           </div>
           <div v-if="draftSymbols.length > 0" class="pt-2 border-t space-y-2">
-            <div class="text-xs font-bold text-slate-600">已保存标的 ({{ draftSymbols.length }}/{{ settings.custom_max_symbols || 3 }})：</div>
+            <div class="text-xs font-bold text-slate-600 flex justify-between">
+              <span>已添加 {{ draftSymbols.length }} 只</span>
+              <span class="theme-text">需购买 {{ draftGroups }} 组</span>
+            </div>
             <div class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
               <div v-for="(sym, i) in draftSymbols" :key="i" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-lg text-xs border">
                 <div class="flex-1 min-w-0">
@@ -630,9 +674,10 @@ export default {
           </div>
           <div class="pt-3 border-t flex flex-col gap-2">
             <button @click="goToBuyCustomPlan" :disabled="draftSymbols.length === 0" class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50 shadow-sm flex items-center justify-center gap-1">
-              <i class="fa-solid fa-cart-shopping"></i> 购买“定制监控”套餐
+              <i class="fa-solid fa-cart-shopping"></i>
+              去购买定制套餐（{{ draftGroups }} 组）
             </button>
-            <p class="text-[11px] text-slate-400 text-center">套餐总价含最多 {{ settings.custom_max_symbols || 3 }} 只标的</p>
+            <p class="text-[11px] text-slate-400 text-center">支付页将按组数 × 套餐单价结算</p>
           </div>
         </div>
       </div>
