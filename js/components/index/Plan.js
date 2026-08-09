@@ -1,7 +1,8 @@
 /**
- * 波幅探长 - 购买套餐组件
- * - 优惠码 / 游客支付即注册 严格跟随后台 publicSettings
- * - 定制监控：提交时带上 sessionStorage 中的 pending_custom_items
+ * 波幅探长 - 购买套餐（整合版）
+ * - 优惠码 / 游客支付即注册 跟随后台 publicSettings
+ * - 定制：按组计价 groups = ceil(只数 / custom_max_symbols)
+ * - 提交时带 pending_custom_items + groups + symbol_count
  * js/components/index/Plan.js
  */
 import { store } from "../../store.js";
@@ -23,6 +24,7 @@ export default {
 
     const topUpForm = reactive({
       planId: "",
+      unitPrice: 0,
       amount: 0,
       originalAmount: 0,
       floatingAmount: "0.00",
@@ -49,12 +51,25 @@ export default {
       refCode: "",
     });
 
-    // 从个人中心带过来的待购定制标的
     const pendingCustomItems = ref([]);
 
     const settings = computed(() => store.state.publicSettings || {});
     const promoEnabled = computed(() => settingOn(settings.value.promo_enabled));
-    const payRegisterEnabled = computed(() => settingOn(settings.value.pay_register_enabled));
+    const payRegisterEnabled = computed(() =>
+      settingOn(settings.value.pay_register_enabled)
+    );
+    const perGroup = computed(() => {
+      const n = parseInt(settings.value.custom_max_symbols || "3", 10);
+      return isNaN(n) || n < 1 ? 3 : n;
+    });
+    const customGroups = computed(() =>
+      planTab.value === "custom"
+        ? planApi.calcCustomGroups(pendingCustomItems.value.length, perGroup.value)
+        : 1
+    );
+    const quantity = computed(() =>
+      planTab.value === "custom" ? Math.max(1, customGroups.value) : 1
+    );
 
     const isImageUrl = (url) => {
       if (!url || typeof url !== "string") return false;
@@ -81,7 +96,9 @@ export default {
 
     const displayPlans = computed(() => {
       if (planTab.value === "custom") {
-        return plans.value.filter((p) => p.plan_type === "custom" || p.plan_type === "both");
+        return plans.value.filter(
+          (p) => p.plan_type === "custom" || p.plan_type === "both"
+        );
       }
       return plans.value.filter(
         (p) => p.plan_type === "shared" || p.plan_type === "both" || !p.plan_type
@@ -108,10 +125,9 @@ export default {
     const planBenefits = (plan) => {
       const days = Number(plan.days) || 0;
       if (planTab.value === "custom") {
-        const maxN = settings.value.custom_max_symbols || 3;
         return [
-          `有效期 ${days} 天`,
-          `最多可监控约 ${maxN} 只自选标的`,
+          `有效期 ${days} 天（本组内全部标的）`,
+          `每组最多 ${perGroup.value} 只 · 可买多组`,
           "与通用监控相互独立",
           "不解锁通用看板图表权限",
         ];
@@ -129,16 +145,33 @@ export default {
       return (Number(base) + cents).toFixed(2);
     };
 
+    const recalcAmount = () => {
+      if (!topUpForm.planId || !topUpForm.unitPrice) return;
+      const qty = quantity.value;
+      const base = Number(topUpForm.unitPrice) * qty;
+      topUpForm.originalAmount = base;
+      if (promoValid.value) {
+        // 优惠后金额已在 applyPromo 写入 amount，这里只刷新浮动尾数
+        topUpForm.floatingAmount = generateFloatingAmount(topUpForm.amount);
+      } else {
+        topUpForm.amount = base;
+        topUpForm.floatingAmount = generateFloatingAmount(base);
+      }
+    };
+
     const selectPlan = (plan) => {
       if (!plan) return;
       topUpForm.planId = plan.id;
-      topUpForm.amount = Number(plan.price);
-      topUpForm.originalAmount = Number(plan.price);
-      topUpForm.floatingAmount = generateFloatingAmount(plan.price);
+      topUpForm.unitPrice = Number(plan.price);
       topUpForm.orderType = planTab.value === "custom" ? "custom_watchlist" : "vip";
       promoValid.value = false;
       promoMessage.value = "";
       promoInput.value = "";
+      const qty = quantity.value;
+      const base = Number(plan.price) * qty;
+      topUpForm.originalAmount = base;
+      topUpForm.amount = base;
+      topUpForm.floatingAmount = generateFloatingAmount(base);
     };
 
     const loadPlans = async () => {
@@ -160,6 +193,15 @@ export default {
       if (def) selectPlan(def);
     });
 
+    watch(quantity, () => {
+      if (topUpForm.planId) {
+        promoValid.value = false;
+        promoMessage.value = "";
+        promoInput.value = "";
+        recalcAmount();
+      }
+    });
+
     const applyPromo = async () => {
       if (!promoEnabled.value) {
         store.showToast("优惠码功能未开启", "error");
@@ -173,14 +215,22 @@ export default {
         store.showToast("请先选择套餐", "error");
         return;
       }
+      if (planTab.value === "custom" && !pendingCustomItems.value.length) {
+        store.showToast("请先在个人中心添加定制标的", "error");
+        return;
+      }
       promoChecking.value = true;
       try {
-        const res = await planApi.checkPromo(topUpForm.planId, promoInput.value.trim());
+        const res = await planApi.checkPromo(
+          topUpForm.planId,
+          promoInput.value.trim(),
+          quantity.value
+        );
         if (res.success) {
           promoValid.value = true;
           topUpForm.amount = res.amount;
           topUpForm.floatingAmount = generateFloatingAmount(res.amount);
-          promoMessage.value = `已享受优惠，折后金额 ¥${res.amount}`;
+          promoMessage.value = `已享受优惠，折后金额 ¥${res.amount}（${quantity.value} 组）`;
         } else {
           promoValid.value = false;
           promoMessage.value = res.error || "优惠码无效";
@@ -198,7 +248,6 @@ export default {
       store.state.authModalVisible = true;
     };
 
-    /** 读取个人中心带来的定制标的草稿 */
     const loadPendingCustomItems = () => {
       try {
         const raw = sessionStorage.getItem("pending_custom_items");
@@ -234,7 +283,6 @@ export default {
         return;
       }
 
-      // 定制套餐必须带标的
       if (topUpForm.orderType === "custom_watchlist") {
         loadPendingCustomItems();
         if (!pendingCustomItems.value.length) {
@@ -265,20 +313,32 @@ export default {
           planId: topUpForm.planId,
           amount: topUpForm.floatingAmount,
           txId: topUpForm.txId,
-          promoCode: promoEnabled.value && promoValid.value ? promoInput.value : undefined,
+          promoCode:
+            promoEnabled.value && promoValid.value ? promoInput.value : undefined,
           orderType: topUpForm.orderType,
-          // ★ 关键：把定制标的传给后端
           customItems:
-            topUpForm.orderType === "custom_watchlist" ? pendingCustomItems.value : undefined,
-          registerUsername: !store.state.isLoggedIn ? payRegister.username : undefined,
-          registerPassword: !store.state.isLoggedIn ? payRegister.password : undefined,
+            topUpForm.orderType === "custom_watchlist"
+              ? pendingCustomItems.value
+              : undefined,
+          groups:
+            topUpForm.orderType === "custom_watchlist" ? customGroups.value : 1,
+          symbolCount:
+            topUpForm.orderType === "custom_watchlist"
+              ? pendingCustomItems.value.length
+              : 1,
+          perGroup: perGroup.value,
+          registerUsername: !store.state.isLoggedIn
+            ? payRegister.username
+            : undefined,
+          registerPassword: !store.state.isLoggedIn
+            ? payRegister.password
+            : undefined,
           refCode: !store.state.isLoggedIn ? payRegister.refCode : undefined,
         });
 
         store.showToast("订单已提交，请等待审核开通！");
         topUpForm.txId = "";
 
-        // 提交成功后清草稿，避免重复提交
         if (topUpForm.orderType === "custom_watchlist") {
           sessionStorage.removeItem("pending_custom_items");
           sessionStorage.removeItem("draft_custom_symbols");
@@ -311,6 +371,9 @@ export default {
       settings,
       promoEnabled,
       payRegisterEnabled,
+      perGroup,
+      customGroups,
+      quantity,
       planTab,
       displayPlans,
       topUpForm,
@@ -338,7 +401,7 @@ export default {
       <div>
         <h2 class="text-2xl font-bold text-slate-800">选择服务套餐</h2>
         <p class="text-xs text-slate-400 mt-1">
-          通用监控解锁全市场图表；定制监控针对您自选标的。支付后请提交凭证，管理员审核后自动开通。
+          通用监控解锁全市场图表；定制监控针对您自选标的（按组计费）。支付后请提交凭证，管理员审核后自动开通。
         </p>
       </div>
 
@@ -353,15 +416,18 @@ export default {
         </button>
       </div>
 
-      <!-- 定制标的草稿提示 -->
+      <!-- 定制草稿提示 -->
       <div v-if="planTab==='custom' && pendingCustomItems.length"
-           class="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-800">
-        <i class="fa-solid fa-circle-check mr-1"></i>
-        已选择 <strong>{{ pendingCustomItems.length }}</strong> 只定制标的：
-        <span class="font-mono">
+           class="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-800 space-y-1">
+        <div>
+          <i class="fa-solid fa-circle-check mr-1"></i>
+          已选择 <strong>{{ pendingCustomItems.length }}</strong> 只定制标的，
+          按每组 <strong>{{ perGroup }}</strong> 只计算，需购买
+          <strong class="text-base">{{ customGroups }}</strong> 组套餐。
+        </div>
+        <div class="font-mono text-[11px] text-emerald-700/90 break-all">
           {{ pendingCustomItems.map(i => i.etf_code).join('、') }}
-        </span>
-        ，提交订单后将一并开通。
+        </div>
       </div>
       <div v-else-if="planTab==='custom' && !pendingCustomItems.length"
            class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-800">
@@ -388,6 +454,11 @@ export default {
             <div class="text-slate-600 text-sm mb-1 font-bold">{{ plan.name }}</div>
             <div class="text-3xl font-light text-slate-800 mb-1">
               <span class="text-base text-slate-400">¥</span> {{ plan.price }}
+              <span v-if="planTab==='custom'" class="text-xs text-slate-400 font-normal ml-1">/ 组</span>
+            </div>
+            <div v-if="planTab==='custom' && topUpForm.planId === plan.id && pendingCustomItems.length"
+                 class="text-xs text-orange-600 font-bold mb-2">
+              本组结算：¥{{ plan.price }} × {{ customGroups }} 组
             </div>
             <div class="text-[11px] text-slate-400 mb-3">
               开通后计入：<strong class="theme-text">{{ planTypeLabel() }}</strong>
@@ -416,8 +487,11 @@ export default {
           <div class="mt-2 flex items-baseline justify-center gap-1 flex-wrap">
             <span class="text-sm text-slate-500">需支付:</span>
             <span class="text-3xl font-extrabold text-red-500 font-mono">¥ {{ topUpForm.floatingAmount }}</span>
-            <span v-if="promoValid && topUpForm.originalAmount" class="text-sm text-slate-400 line-through ml-1">¥ {{ topUpForm.originalAmount }}</span>
+            <span v-if="promoValid && topUpForm.originalAmount" class="text-sm text-slate-400 line-through ml-1">¥ {{ Number(topUpForm.originalAmount).toFixed(2) }}</span>
           </div>
+          <p v-if="planTab==='custom' && pendingCustomItems.length" class="text-[11px] text-slate-400 mt-1">
+            {{ pendingCustomItems.length }} 只标的 · {{ customGroups }} 组 × 单价
+          </p>
         </div>
 
         <div class="flex justify-center gap-2 text-xs">
