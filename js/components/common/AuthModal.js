@@ -23,6 +23,88 @@ export default {
       turnstileToken: "",
     });
 
+    // 找回密码：account → questions → newpwd
+    const resetStep = ref("account"); // account | questions | done
+    const resetLoading = ref(false);
+    const resetForm = reactive({
+      username: "",
+      challengeId: "",
+      questions: [], // [{id, question}]
+      answers: {}, // { [id]: string }
+      newPassword: "",
+      confirmPassword: "",
+    });
+
+    const openForgot = () => {
+      store.state.authMode = "forgot";
+      resetStep.value = "account";
+      resetForm.username = form.username || "";
+      resetForm.challengeId = "";
+      resetForm.questions = [];
+      resetForm.answers = {};
+      resetForm.newPassword = "";
+      resetForm.confirmPassword = "";
+    };
+
+    const startReset = async () => {
+      if (!isEmail(resetForm.username)) {
+        store.showToast("请输入注册邮箱账号", "error");
+        return;
+      }
+      resetLoading.value = true;
+      try {
+        const res = await authApi.passwordResetStart(resetForm.username);
+        const data = res.data || res;
+        resetForm.challengeId = data.challenge_id;
+        resetForm.questions = data.questions || [];
+        resetForm.answers = {};
+        resetForm.questions.forEach((q) => {
+          resetForm.answers[q.id] = "";
+        });
+        resetStep.value = "questions";
+      } catch (err) {
+        store.showToast(err.message, "error");
+      } finally {
+        resetLoading.value = false;
+      }
+    };
+
+    const confirmReset = async () => {
+      if (resetForm.newPassword.length < 6) {
+        store.showToast("新密码至少 6 位", "error");
+        return;
+      }
+      if (resetForm.newPassword !== resetForm.confirmPassword) {
+        store.showToast("两次密码不一致", "error");
+        return;
+      }
+      const answers = resetForm.questions.map((q) => ({
+        id: q.id,
+        answer: resetForm.answers[q.id] || "",
+      }));
+      if (answers.some((a) => !String(a.answer).trim())) {
+        store.showToast("请回答全部问题", "error");
+        return;
+      }
+      resetLoading.value = true;
+      try {
+        await authApi.passwordResetConfirm({
+          challengeId: resetForm.challengeId,
+          answers,
+          newPassword: resetForm.newPassword,
+        });
+        store.showToast("密码已重置，请登录");
+        resetStep.value = "done";
+        switchMode("login");
+        form.username = resetForm.username;
+        form.password = "";
+      } catch (err) {
+        store.showToast(err.message, "error");
+      } finally {
+        resetLoading.value = false;
+      }
+    };    
+    
     const closeModal = () => {
       store.state.authModalVisible = false;
     };
