@@ -1,6 +1,9 @@
 /**
  * 波幅探长 - 管理后台综合 API 服务集
  * js/api/admin.js
+ *
+ * 设置类（票选门槛 / ETF 限制 / 打赏 / 广告 / 社交平台）统一走
+ * fetchSettings / saveSettings，无需单独接口。
  */
 import { request } from "./http.js";
 
@@ -17,7 +20,11 @@ export const adminApi = {
   async chargeUser(userId, addDays, setDays = null) {
     return request("/api/admin/users/charge", {
       method: "POST",
-      body: JSON.stringify({ user_id: userId, add_days: addDays, set_days: setDays }),
+      body: JSON.stringify({
+        user_id: userId,
+        add_days: addDays,
+        set_days: setDays,
+      }),
     });
   },
   async batchChargeUsers(userIds, addDays) {
@@ -29,13 +36,29 @@ export const adminApi = {
   async resetPassword(userId, adminConfirmSecret) {
     return request("/api/admin/users/reset_password", {
       method: "POST",
-      body: JSON.stringify({ user_id: userId, admin_confirm: adminConfirmSecret }),
+      body: JSON.stringify({
+        user_id: userId,
+        admin_confirm: adminConfirmSecret,
+      }),
     });
   },
   async deleteUser(userId, adminConfirmSecret) {
     return request("/api/admin/users", {
       method: "DELETE",
-      body: JSON.stringify({ user_id: userId, admin_confirm: adminConfirmSecret }),
+      body: JSON.stringify({
+        user_id: userId,
+        admin_confirm: adminConfirmSecret,
+      }),
+    });
+  },
+  /** 手动调整会员等级 0~4（可选，与充天数配合） */
+  async setUserLevel(userId, vipLevel) {
+    return request("/api/admin/users/set_level", {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId,
+        vip_level: Math.max(0, Math.min(4, parseInt(vipLevel, 10) || 0)),
+      }),
     });
   },
 
@@ -47,7 +70,11 @@ export const adminApi = {
   async approveOrder(orderId, userId, addDays) {
     return request("/api/admin/orders/approve", {
       method: "POST",
-      body: JSON.stringify({ order_id: orderId, user_id: userId, add_days: addDays }),
+      body: JSON.stringify({
+        order_id: orderId,
+        user_id: userId,
+        add_days: addDays,
+      }),
     });
   },
   async rejectOrder(orderId) {
@@ -113,6 +140,13 @@ export const adminApi = {
       body: JSON.stringify({ id }),
     });
   },
+  /** 将过期定制标的批量标记为 expired（也可由 Worker 定时任务执行） */
+  async expireCustomWatchlist() {
+    return request("/api/admin/watchlist/custom/expire", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  },
 
   // 7. 优惠码管理
   async fetchPromos() {
@@ -131,7 +165,7 @@ export const adminApi = {
     });
   },
 
-  // 8. 系统设置
+  // 8. 系统设置（含：票选门槛、ETF限制、打赏、广告、社交平台 JSON）
   async fetchSettings() {
     return request("/api/admin/settings");
   },
@@ -146,10 +180,14 @@ export const adminApi = {
   async fetchTickets() {
     return request("/api/admin/tickets");
   },
-  async replyTicket(ticketId, replyMessage) {
+  async replyTicket(ticketId, replyMessage, replyImages = []) {
     return request("/api/admin/tickets/reply", {
       method: "POST",
-      body: JSON.stringify({ ticket_id: ticketId, reply_message: replyMessage }),
+      body: JSON.stringify({
+        ticket_id: ticketId,
+        reply_message: replyMessage,
+        reply_images: Array.isArray(replyImages) ? replyImages : [],
+      }),
     });
   },
   async broadcastNotice(title, content, alsoTg = true) {
