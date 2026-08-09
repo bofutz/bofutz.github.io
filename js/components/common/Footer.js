@@ -1,65 +1,86 @@
 /**
- * 波幅探长 - 页脚与社交平台图标
+ * 波幅探长 - 页脚（整合版）
+ * - 电脑：图标 + 悬停显示「平台@账号」
+ * - 手机：仅图标（或小标签），避免「@波幅探长」挤成一排难看
+ * - 优先 social_platforms JSON；否则回退旧五字段
  * js/components/common/Footer.js
- * 桌面：悬停显示「平台名 账号」；手机：图标后直接显示账号
  */
 import { store } from "../../store.js";
 
 const { computed } = Vue;
 
-const PLATFORM_META = [
-  { key: "social_douyin", label: "抖音", icon: "fa-brands fa-tiktok", color: "hover:text-slate-800" },
-  { key: "social_shipinhao", label: "视频号", icon: "fa-brands fa-weixin", color: "hover:text-[#07C160]" },
-  { key: "social_xiaohongshu", label: "小红书", icon: "fa-solid fa-book", color: "hover:text-[#FE2C55]" },
-  { key: "social_gongzhonghao", label: "公众号", icon: "fa-solid fa-comment-dots", color: "hover:text-[#07C160]" },
-  { key: "social_kuaishou", label: "快手", icon: "fa-solid fa-video", color: "hover:text-[#FF4906]" },
-];
-
 export default {
   name: "Footer",
   setup() {
-    const socialItems = computed(() => {
-      const s = store.state.publicSettings || {};
-      return PLATFORM_META.map((p) => {
-        const raw = (s[p.key] || "").trim();
-        if (!raw) return null;
-        // 没有 @ 时自动补上，方便统一展示
-        const handle = raw.startsWith("@") ? raw : `@${raw}`;
-        return { ...p, handle };
-      }).filter(Boolean);
+    const platforms = computed(() => {
+      try {
+        return store.getSocialPlatforms ? store.getSocialPlatforms() : [];
+      } catch {
+        return [];
+      }
     });
 
+    /** 展示用 handle：保证有 @ 前缀 */
+    const displayHandle = (h) => {
+      const s = String(h || "").trim();
+      if (!s) return "";
+      return s.startsWith("@") ? s : `@${s}`;
+    };
+
     return {
-      socialItems,
+      platforms,
+      displayHandle,
     };
   },
   template: `
-    <footer class="mt-10 pt-5 pb-5 border-t border-slate-200/80 text-center text-xs text-slate-500 shrink-0 select-none">
-      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-          <img src="logo.png" alt="Logo" class="w-5 h-5 rounded object-cover" onerror="this.style.display='none'">
-          <span>© 2026 波幅探长 · 专业的波幅监控与数据分析平台</span>
-        </div>
+    <footer class="mt-auto border-t border-slate-100 bg-white">
+      <div class="max-w-6xl mx-auto px-4 py-6 sm:py-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 
-        <div v-if="socialItems.length" class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-slate-400">
-          <div
-            v-for="item in socialItems"
-            :key="item.key"
-            class="group relative flex items-center gap-1.5 cursor-default transition-colors"
-            :class="item.color"
-          >
-            <i :class="item.icon + ' text-lg'"></i>
-            <!-- 手机端：图标后常显账号 -->
-            <span class="text-[11px] text-slate-500 sm:hidden">{{ item.handle }}</span>
-            <!-- 桌面端：悬停气泡 -->
+          <div class="text-center sm:text-left">
+            <div class="text-sm font-bold text-slate-700">波幅探长</div>
+            <p class="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+              ETF 波幅监控 · 图表与票选工具
+            </p>
+          </div>
+
+          <!-- 社交：手机仅图标；md 及以上悬停显示账号 -->
+          <div v-if="platforms.length" class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
             <div
-              class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden sm:group-hover:block
-                     whitespace-nowrap rounded-md bg-slate-800 text-white text-[11px] px-2.5 py-1.5 shadow-lg z-20"
+              v-for="p in platforms"
+              :key="p.key || p.label"
+              class="group relative"
+              :title="p.label + ' ' + displayHandle(p.handle)"
             >
-              {{ item.label }} {{ item.handle }}
-              <span class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></span>
+              <!-- 图标按钮 -->
+              <span
+                class="inline-flex items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5
+                       rounded-full sm:rounded-lg bg-slate-50 border border-slate-100
+                       text-slate-500 hover:theme-text hover:border-[#4da6a0]/30 transition-colors cursor-default"
+              >
+                <i :class="p.icon || 'fa-solid fa-link'" class="text-sm"></i>
+                <!-- 仅桌面显示平台名，不塞 @账号 -->
+                <span class="hidden sm:inline text-xs font-medium ml-1.5 text-slate-600 group-hover:theme-text">
+                  {{ p.label }}
+                </span>
+              </span>
+
+              <!-- 桌面悬停气泡：平台@账号 -->
+              <span
+                class="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5
+                       hidden md:group-hover:block z-20 whitespace-nowrap
+                       bg-slate-800 text-white text-[11px] px-2.5 py-1 rounded-md shadow-lg"
+              >
+                {{ p.label }}{{ displayHandle(p.handle) }}
+                <span class="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0
+                             border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-800"></span>
+              </span>
             </div>
           </div>
+        </div>
+
+        <div class="mt-5 pt-4 border-t border-slate-50 text-center text-[11px] text-slate-400">
+          © {{ new Date().getFullYear() }} 波幅探长 · 数据仅供参考，不构成投资建议
         </div>
       </div>
     </footer>
