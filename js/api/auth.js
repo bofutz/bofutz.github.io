@@ -35,16 +35,16 @@ export const authApi = {
     return request("/api/user/me");
   },
 
-  /** 发送邮箱验证码（走独立邮件 Worker） */
-  async sendEmailCode(email, turnstileToken) {
-    return request(`${CONFIG.MAIL_API_BASE}/api/send-code`, {
-      method: "POST",
-      body: JSON.stringify({
-        email: email.trim(),
-        turnstileToken,
-      }),
-    });
-  },
+/** 发送邮箱验证码（经主 API 转发，避免跨域） */
+async sendEmailCode(email, turnstileToken) {
+  return request("/api/send-code", {
+    method: "POST",
+    body: JSON.stringify({
+      email: email.trim(),
+      turnstileToken,
+    }),
+  });
+},
 
   /** 修改密码 */
   async changePassword(oldPassword, newPassword) {
