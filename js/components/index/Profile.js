@@ -2,6 +2,7 @@
  * 波幅探长 - 个人中心
  * - 定制列表走 /api/watchlist/custom（由 watchlistApi 对齐）
  * - 添加标的 → 草稿 → 跳转购买定制套餐
+ * - 安全问题设置（密码找回，不走邮箱）+ 未设置持续提醒
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
@@ -33,6 +34,19 @@ export default {
       confirmPassword: "",
     });
     const pwdLoading = ref(false);
+
+    // ---------- 安全问题（密码找回） ----------
+    const securitySet = ref(true); // 默认 true，避免未加载时闪红条
+    const secForm = reactive({
+      q1: "",
+      a1: "",
+      q2: "",
+      a2: "",
+      q3: "",
+      a3: "",
+    });
+    const secLoading = ref(false);
+    const secEditing = ref(false);
 
     const fetchStockNameByCode = async (symbolStr) => {
       try {
@@ -142,6 +156,54 @@ export default {
       window.location.hash = "#/plan";
     };
 
+    const loadSecurityStatus = async () => {
+      if (!store.state.isLoggedIn) return;
+      try {
+        const res = await authApi.getSecurityStatus();
+        const set = !!(res.data?.security_set ?? res.security_set);
+        securitySet.value = set;
+        if (!set) secEditing.value = true;
+      } catch (e) {
+        // 接口未部署或失败时不打断页面
+        console.warn("loadSecurityStatus:", e);
+      }
+    };
+
+    const saveSecurity = async () => {
+      if (!secForm.q1?.trim() || !secForm.a1?.trim() ||
+          !secForm.q2?.trim() || !secForm.a2?.trim() ||
+          !secForm.q3?.trim() || !secForm.a3?.trim()) {
+        store.showToast("请填写完整的三个问题与答案", "error");
+        return;
+      }
+      const qs = [secForm.q1, secForm.q2, secForm.q3].map((q) => q.trim());
+      if (new Set(qs).size < 3) {
+        store.showToast("三个问题不能重复", "error");
+        return;
+      }
+      secLoading.value = true;
+      try {
+        await authApi.setSecurityQuestions({
+          q1: secForm.q1.trim(),
+          a1: secForm.a1.trim(),
+          q2: secForm.q2.trim(),
+          a2: secForm.a2.trim(),
+          q3: secForm.q3.trim(),
+          a3: secForm.a3.trim(),
+        });
+        store.showToast("安全问题已保存");
+        securitySet.value = true;
+        secEditing.value = false;
+        secForm.a1 = "";
+        secForm.a2 = "";
+        secForm.a3 = "";
+      } catch (err) {
+        store.showToast(err.message, "error");
+      } finally {
+        secLoading.value = false;
+      }
+    };
+
     const loadProfileData = async () => {
       loading.value = true;
       inviteeLoading.value = true;
@@ -155,7 +217,6 @@ export default {
 
         orders.value = ordersRes.data || ordersRes || [];
         invitees.value = inviteesRes.data || inviteesRes || [];
-        // 兼容 { data: [] } 或直接数组
         const rawCustom = customRes?.data ?? customRes;
         customList.value = Array.isArray(rawCustom) ? rawCustom : [];
 
@@ -168,6 +229,8 @@ export default {
             vipDaysLeft: days,
           });
         }
+
+        await loadSecurityStatus();
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
@@ -263,6 +326,12 @@ export default {
       draftSymbols,
       pwdForm,
       pwdLoading,
+      // 安全问题
+      securitySet,
+      secForm,
+      secLoading,
+      secEditing,
+      saveSecurity,
       onCodeInput,
       openCustomModal,
       confirmAddSingleSymbol,
@@ -279,6 +348,20 @@ export default {
   },
   template: `
     <div class="max-w-4xl mx-auto space-y-5 select-none">
+
+      <!-- 未设置安全问题：持续提醒 -->
+      <div v-if="store.isLoggedIn && !securitySet"
+           class="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+          <strong>请尽快设置安全问题</strong>，否则无法使用「忘记密码」找回账号。
+        </div>
+        <button type="button" @click="secEditing = true"
+                class="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg font-bold shrink-0 hover:opacity-90">
+          去设置
+        </button>
+      </div>
+
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <div class="flex items-center justify-between gap-3">
           <div>
@@ -441,6 +524,58 @@ export default {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- 安全问题（密码找回） -->
+      <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 class="font-bold text-slate-700 text-base">安全问题（密码找回）</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">
+              自行设置 3 个最熟悉的问题；忘记密码时随机抽 2 题，全部答对即可重置密码（无需邮箱）
+            </p>
+          </div>
+          <span v-if="securitySet" class="text-xs text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">已设置</span>
+          <span v-else class="text-xs text-red-500 font-bold bg-red-50 px-2.5 py-1 rounded-full border border-red-100">未设置</span>
+        </div>
+
+        <div v-if="secEditing || !securitySet" class="space-y-3 max-w-xl">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input v-model="secForm.q1" type="text" placeholder="问题1（如：小学班主任姓氏）"
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+            <input v-model="secForm.a1" type="text" placeholder="答案1"
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input v-model="secForm.q2" type="text" placeholder="问题2（如：第一只宠物名字）"
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+            <input v-model="secForm.a2" type="text" placeholder="答案2"
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input v-model="secForm.q3" type="text" placeholder="问题3（如：最喜欢的城市）"
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+            <input v-model="secForm.a3" type="text" placeholder="答案3"
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          </div>
+          <p class="text-[11px] text-slate-400">答案不区分大小写与空格；请务必记住，找回时无法查看原答案。</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" @click="saveSecurity" :disabled="secLoading"
+                    class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:opacity-90">
+              {{ secLoading ? '保存中...' : '保存安全问题' }}
+            </button>
+            <button v-if="securitySet" type="button" @click="secEditing = false"
+                    class="text-sm text-slate-500 px-3 py-2">
+              取消
+            </button>
+          </div>
+        </div>
+        <div v-else>
+          <button type="button" @click="secEditing = true"
+                  class="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg font-bold hover:bg-slate-200">
+            重新设置安全问题
+          </button>
         </div>
       </div>
 
