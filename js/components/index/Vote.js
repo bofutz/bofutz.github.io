@@ -1,12 +1,19 @@
 /**
- * 波幅探长 - 票选监控
+ * 波幅探长 - 票选监控（整合版）
+ * - 等级门槛：vote_min_level（后台可配）
+ * - 可选仅 ETF：vote_etf_only，名称不含 ETF 则拦截
  * 对齐：GET /api/vote/rankings | /api/vote/status | POST submit/cancel
  * js/components/index/Vote.js
  */
 import { store } from "../../store.js";
 import { voteApi } from "../../api/vote.js";
+import { CONFIG } from "../../config.js";
 
-const { ref, reactive, onMounted, watch } = Vue;
+const { ref, reactive, computed, onMounted, watch } = Vue;
+
+function settingOn(val) {
+  return val === "1" || val === 1 || val === true || val === "true";
+}
 
 export default {
   name: "Vote",
@@ -20,6 +27,9 @@ export default {
       votesUsed: 0,
       votesRemaining: 0,
       myVotes: [],
+      vipLevel: 0,
+      minLevel: 1,
+      etfOnly: true,
     });
 
     const voteModalVisible = ref(false);
@@ -27,6 +37,19 @@ export default {
     const searchingName = ref(false);
     const nameError = ref("");
     const submitLoading = ref(false);
+
+    const settings = computed(() => store.state.publicSettings || {});
+    const etfOnlySetting = computed(() =>
+      settingOn(settings.value.vote_etf_only ?? "1")
+    );
+    const minLevelSetting = computed(() => {
+      const n = parseInt(settings.value.vote_min_level || "1", 10);
+      return isNaN(n) ? 1 : Math.max(0, Math.min(4, n));
+    });
+    const levelLabel = (lv) => {
+      const map = CONFIG.VIP_LEVEL_LABELS || {};
+      return map[lv] || `Lv.${lv}`;
+    };
 
     const fetchStockNameByCode = async (symbolStr) => {
       try {
@@ -56,8 +79,14 @@ export default {
         searchingName.value = true;
         const name = await fetchStockNameByCode(code);
         searchingName.value = false;
-        if (name) voteForm.etfName = name;
-        else nameError.value = "未识别到中文名称，可手动填写或直接提交";
+        if (name) {
+          voteForm.etfName = name;
+          if (etfOnlySetting.value && !/ETF/i.test(name)) {
+            nameError.value = "当前仅支持名称含「ETF」的标的，该代码无效";
+          }
+        } else {
+          nameError.value = "未识别到中文名称，可手动填写或直接提交";
+        }
       }, 350);
     };
 
@@ -83,6 +112,21 @@ export default {
               ? statusRes.votes_remaining
               : Math.max(0, userStatus.monthlyLimit - userStatus.votesUsed);
           userStatus.myVotes = statusRes.my_votes || [];
+          userStatus.vipLevel = statusRes.vip_level ?? store.state.vipLevel ?? 0;
+          userStatus.minLevel = statusRes.min_level ?? minLevelSetting.value;
+          userStatus.etfOnly =
+            statusRes.etf_only != null
+              ? !!statusRes.etf_only
+              : etfOnlySetting.value;
+
+          if (statusRes.vip_level != null) {
+            store.setUserState({ vipLevel: statusRes.vip_level });
+          }
+        } else if (store.state.isLoggedIn) {
+          userStatus.minLevel = minLevelSetting.value;
+          userStatus.etfOnly = etfOnlySetting.value;
+          userStatus.vipLevel = store.state.vipLevel || 0;
+          userStatus.hasQualified = userStatus.vipLevel >= userStatus.minLevel;
         }
       } catch (err) {
         store.showToast(err.message || "加载失败", "error");
@@ -104,11 +148,19 @@ export default {
         return;
       }
       if (!userStatus.hasQualified) {
-        store.showToast("票选监控仅限月付及以上会员参与", "error");
+        store.showToast(
+          `票选需达到 Lv.${userStatus.minLevel}（${levelLabel(
+            userStatus.minLevel
+          )}）及以上会员`,
+          "error"
+        );
         return;
       }
       if (userStatus.votesRemaining <= 0) {
-        store.showToast(`您本月已用完投票名额（上限 ${userStatus.monthlyLimit} 只）`, "error");
+        store.showToast(
+          `您本月已用完投票名额（上限 ${userStatus.monthlyLimit} 只）`,
+          "error"
+        );
         return;
       }
       voteForm.etfCode = presetCode || "";
@@ -131,9 +183,15 @@ export default {
         searchingName.value = false;
         if (name) voteForm.etfName = name;
       }
+      const finalName = (voteForm.etfName || code).trim();
+      if (etfOnlySetting.value && !/ETF/i.test(finalName)) {
+        store.showToast("当前仅支持名称含「ETF」的标的", "error");
+        return;
+      }
+
       submitLoading.value = true;
       try {
-        await voteApi.submitVote(code, voteForm.etfName || code);
+        await voteApi.submitVote(code, finalName);
         store.showToast("投票成功！");
         voteModalVisible.value = false;
         await loadVoteData();
@@ -171,12 +229,14 @@ export default {
       searchingName,
       nameError,
       submitLoading,
+      etfOnlySetting,
       openVoteModal,
       submitVote,
       cancelVote,
       isVotedByMe,
       loadVoteData,
       onCodeInput,
+      levelLabel,
     };
   },
   template: `
@@ -187,10 +247,13 @@ export default {
             <div class="flex items-center gap-2 mb-2 flex-wrap">
               <h2 class="text-xl sm:text-2xl font-bold tracking-wide">票选监控</h2>
               <span class="bg-white/20 text-xs px-2.5 py-0.5 rounded-full font-mono">TOP 200</span>
+              <span v-if="etfOnlySetting" class="bg-white/15 text-[10px] px-2 py-0.5 rounded-full">仅 ETF</span>
             </div>
             <p class="text-xs sm:text-sm text-white/90 leading-relaxed max-w-3xl">
-              月付及以上会员每月可投票/新增最多 <strong>{{ userStatus.monthlyLimit || 10 }}</strong> 只最想监控的标的。<br>
-              系统按得票数实时排序，每月初取当时 <strong>Top 50</strong> 自动纳入当月通用监控列表。票数持续累计。
+              Lv.{{ userStatus.minLevel }} 及以上会员每月可投票/新增最多
+              <strong>{{ userStatus.monthlyLimit || 10 }}</strong> 只标的。
+              系统按得票实时排序，每月初可同步 Top 50 至通用监控。
+              <span v-if="etfOnlySetting">当前开启「仅 ETF」限制。</span>
             </p>
           </div>
           <div class="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20 text-center min-w-[210px] shrink-0">
@@ -199,7 +262,12 @@ export default {
               <div class="text-sm font-bold text-amber-200 py-1">请先登录后投票</div>
             </template>
             <template v-else-if="!userStatus.hasQualified">
-              <div class="text-sm font-bold text-amber-200 py-1">暂无资格<br><span class="text-[11px] opacity-80">（限月付及以上会员）</span></div>
+              <div class="text-sm font-bold text-amber-200 py-1 leading-snug">
+                暂无资格<br>
+                <span class="text-[11px] opacity-80">
+                  需 Lv.{{ userStatus.minLevel }}（当前 Lv.{{ userStatus.vipLevel || store.vipLevel || 0 }}）
+                </span>
+              </div>
             </template>
             <template v-else>
               <div class="text-2xl font-extrabold font-mono text-amber-300 mb-1">
@@ -301,7 +369,9 @@ export default {
       </div>
 
       <div class="text-center text-[11px] text-slate-400 leading-relaxed px-2">
-        本页任何人可查看 · 投票/新增需登录且具备月付及以上资格 · 票数持续累计 · 每月初自动取 Top50 作为通用监控列表
+        本页任何人可查看 · 投票需登录且达到等级门槛
+        <span v-if="etfOnlySetting"> · 仅限 ETF</span>
+        · 票数持续累计
       </div>
 
       <div v-if="voteModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4"
@@ -339,7 +409,8 @@ export default {
             </div>
             <div class="text-xs text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-100 leading-relaxed">
               <i class="fa-solid fa-circle-info mr-1"></i>
-              提交将扣除 1 个本月名额。若该标的已在列表中则直接 +1 票；若不存在则新增进入票选池。
+              提交将扣除 1 个本月名额。
+              <span v-if="etfOnlySetting">名称须包含「ETF」。</span>
             </div>
           </div>
           <div class="flex justify-end gap-2 pt-1">
