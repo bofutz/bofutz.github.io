@@ -1,156 +1,185 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>波幅监控系统 - 波幅探长</title>
-  <link rel="icon" type="image/png" href="logo.png">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>波幅探长 - 波幅监控</title>
+  <meta name="description" content="波幅探长：ETF 波幅监控、票选与定制图表服务" />
+
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.js"></script>
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <!-- Vue 3 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Viewer.js -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.js"></script>
+  <!-- Turnstile -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 
   <style>
-    [v-cloak] { display: none !important; }
-    body { -webkit-tap-highlight-color: transparent; background-color: #f4f6f8; }
-    .theme-bg { background-color: #4da6a0; }
-    .theme-text { color: #4da6a0; }
-    .theme-border { border-color: #4da6a0; }
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    .nav-item { transition: all 0.2s; color: #64748b; font-size: 14px; cursor: pointer; }
-    .nav-item:hover:not(.active) { color: #4da6a0; }
-    .nav-item.active { background-color: #e2e8f0; color: #334155; border-left: 3px solid #4da6a0; padding-left: 21px; }
-    .modal-overlay { background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); }
-    .social-item { position: relative; }
-    .social-qr-pop {
-      display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
-      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 50; width: 132px;
+    :root {
+      --theme: #4da6a0;
+      --theme-dark: #3d8a85;
     }
-    .social-item:hover .social-qr-pop { display: block; }
-    .social-qr-pop img { width: 112px; height: 112px; object-fit: contain; }
+    .theme-bg { background-color: var(--theme); }
+    .theme-text { color: var(--theme); }
+    .theme-border { border-color: var(--theme); }
+    .focus\:theme-border:focus { border-color: var(--theme); box-shadow: 0 0 0 2px rgba(77, 166, 160, 0.15); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f7f9;
+      min-height: 100dvh;
+    }
+    .modal-overlay {
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(2px);
+    }
+    .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 999px;
+    }
+    .etf-name-column {
+      min-width: 120px;
+      max-width: 160px;
+    }
+    @media (min-width: 640px) {
+      .etf-name-column { min-width: 160px; max-width: 220px; }
+    }
   </style>
 </head>
-<body class="text-slate-700 font-sans h-screen overflow-hidden">
+<body class="text-slate-800">
+  <div id="app" class="min-h-[100dvh] flex flex-col">
+    <!-- 顶栏 -->
+    <app-header></app-header>
 
-<div id="app" v-cloak class="flex flex-col h-full overflow-hidden">
-  <v-header :page-title="pageTitle" @navigate="navigate"></v-header>
-  <v-sidebar :current-route="currentRoute" @navigate="navigate"></v-sidebar>
+    <!-- 主内容 -->
+    <main class="flex-1 w-full px-3 sm:px-4 py-4 sm:py-6">
+      <component :is="currentView"></component>
+    </main>
 
-  <main class="flex-1 overflow-auto custom-scrollbar p-3 sm:p-6 relative flex flex-col justify-between">
-    <div class="flex-1">
-      <component :is="currentComponent"></component>
-    </div>
-    <v-footer></v-footer>
-  </main>
+    <!-- 页脚 -->
+    <app-footer></app-footer>
 
-  <v-auth-modal></v-auth-modal>
-  <v-toast></v-toast>
-</div>
+    <!-- 登录 / 注册 / 忘记密码 -->
+    <auth-modal></auth-modal>
 
-<script type="module">
-  import { store } from "./js/store.js";
-  import { etfApi } from "./js/api/etf.js";
+    <!-- 全局 Toast -->
+    <toast-stack></toast-stack>
 
-  import Header from "./js/components/common/Header.js";
-  import Sidebar from "./js/components/common/Sidebar.js";
-  import Footer from "./js/components/common/Footer.js";
-  import AuthModal from "./js/components/common/AuthModal.js";
-  import Toast from "./js/components/common/Toast.js";
+    <!-- 弹窗广告 -->
+    <ads-popup></ads-popup>
+  </div>
 
-  import Dashboard from "./js/components/index/Dashboard.js";
-  import Profile from "./js/components/index/Profile.js";
-  import Plan from "./js/components/index/Plan.js";
-  import Vote from "./js/components/index/Vote.js";
-  import Tickets from "./js/components/index/Tickets.js";
-  import Guide from "./js/components/index/Guide.js";
+  <script type="module">
+    import { store } from "./js/store.js";
+    import { CONFIG } from "./js/config.js";
+    import { authApi } from "./js/api/auth.js";
 
-  const { createApp, ref, computed, onMounted } = Vue;
+    import Header from "./js/components/common/Header.js";
+    import Footer from "./js/components/common/Footer.js";
+    import AuthModal from "./js/components/common/AuthModal.js";
+    import Toast from "./js/components/common/Toast.js";
+    import AdsPopup from "./js/components/common/AdsPopup.js";
 
-  createApp({
-    components: {
-      "v-header": Header,
-      "v-sidebar": Sidebar,
-      "v-footer": Footer,
-      "v-auth-modal": AuthModal,
-      "v-toast": Toast,
-      Dashboard,
-      Profile,
-      Plan,
-      Vote,
-      Tickets,
-      Guide,
-    },
-    setup() {
-      const currentRoute = ref(window.location.hash || "#/");
+    import Dashboard from "./js/components/index/Dashboard.js";
+    import Plan from "./js/components/index/Plan.js";
+    import Profile from "./js/components/index/Profile.js";
+    import Vote from "./js/components/index/Vote.js";
+    import Tickets from "./js/components/index/Tickets.js";
+    import Guide from "./js/components/index/Guide.js";
 
-      const navigate = (path) => {
-        currentRoute.value = path;
-        window.location.hash = path;
-      };
+    const { createApp, ref, computed, onMounted, watch } = Vue;
 
-      const currentComponent = computed(() => {
-        switch (currentRoute.value) {
-          case "#/profile": return "Profile";
-          case "#/plan":    return "Plan";
-          case "#/vote":    return "Vote";
-          case "#/tickets": return "Tickets";
-          case "#/guide":   return "Guide";
-          default:          return "Dashboard";
-        }
-      });
+    const routes = {
+      "/": "dashboard-view",
+      "/plan": "plan-view",
+      "/profile": "profile-view",
+      "/vote": "vote-view",
+      "/tickets": "tickets-view",
+      "/guide": "guide-view",
+    };
 
-      const pageTitle = computed(() => {
-        const map = {
-          "#/":         "数据看板",
-          "#/profile":  "个人中心",
-          "#/plan":     "购买套餐",
-          "#/vote":     "票选监控",
-          "#/tickets":  "客服工单",
-          "#/guide":    "图表指南",
+    function parseHash() {
+      const raw = (window.location.hash || "#/").replace(/^#/, "") || "/";
+      const path = raw.split("?")[0];
+      return routes[path] ? path : "/";
+    }
+
+    const app = createApp({
+      setup() {
+        const routePath = ref(parseHash());
+
+        const currentView = computed(() => routes[routePath.value] || "dashboard-view");
+
+        const syncRoute = () => {
+          routePath.value = parseHash();
+          store.state.menuOpen = false;
+          store.state.userMenuOpen = false;
+          window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
         };
-        return map[currentRoute.value] || "数据看板";
-      });
 
-      /** 拉取后台公共配置，写入 store（优惠码/赠送天数/支付通道等） */
-      const bootstrapPublicSettings = async () => {
-        try {
-          // 优先用 store 内置方法（若已升级 store.js）
-          if (typeof store.loadPublicSettings === "function") {
-            await store.loadPublicSettings();
-            return;
+        /** 登录态刷新：天数 + 等级 + 安全问题标记 */
+        const refreshMe = async () => {
+          if (!store.state.isLoggedIn) return;
+          try {
+            const res = await authApi.getMe();
+            const d = res?.data || res;
+            if (!d) return;
+            store.setUserState({
+              username: d.username,
+              referralCode: d.referral_code,
+              vipDaysLeft: d.shared_vip_days ?? d.vip_days_left ?? 0,
+              vipLevel: d.vip_level ?? 0,
+            });
+            if (d.security_set != null) {
+              store.setSecuritySet?.(!!d.security_set);
+            }
+          } catch (e) {
+            // token 失效
+            if (String(e.message || "").includes("401") || e.status === 401) {
+              store.clearUserState();
+            }
           }
-          // 兼容 etfApi
-          const res = await etfApi.fetchPublicSettings();
-          const payload = res?.data || res;
-          if (payload && typeof payload === "object") {
-            store.setPublicSettings(payload);
-          }
-        } catch (e) {
-          console.error("加载公共配置失败:", e);
-        }
-      };
+        };
 
-      onMounted(async () => {
-        store.checkLoginState();
-        await bootstrapPublicSettings();
-
-        window.addEventListener("hashchange", () => {
-          currentRoute.value = window.location.hash || "#/";
+        onMounted(async () => {
+          store.checkLoginState();
+          await store.loadPublicSettings();
+          await refreshMe();
+          window.addEventListener("hashchange", syncRoute);
         });
-      });
 
-      return {
-        currentRoute,
-        currentComponent,
-        pageTitle,
-        navigate,
-      };
-    },
-  }).mount("#app");
-</script>
+        watch(
+          () => store.state.isLoggedIn,
+          (v) => {
+            if (v) refreshMe();
+          }
+        );
+
+        return {
+          currentView,
+          store: store.state,
+        };
+      },
+    });
+
+    app.component("app-header", Header);
+    app.component("app-footer", Footer);
+    app.component("auth-modal", AuthModal);
+    app.component("toast-stack", Toast);
+    app.component("ads-popup", AdsPopup);
+
+    app.component("dashboard-view", Dashboard);
+    app.component("plan-view", Plan);
+    app.component("profile-view", Profile);
+    app.component("vote-view", Vote);
+    app.component("tickets-view", Tickets);
+    app.component("guide-view", Guide);
+
+    app.mount("#app");
+  </script>
 </body>
 </html>
