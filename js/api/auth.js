@@ -46,6 +46,39 @@ async sendEmailCode(email, turnstileToken) {
   });
 },
 
+  /** 安全问题是否已设置 */
+  async getSecurityStatus() {
+    return request("/api/user/security-status");
+  },
+
+  /** 设置三个安全问题 */
+  async setSecurityQuestions({ q1, a1, q2, a2, q3, a3 }) {
+    return request("/api/user/security-questions", {
+      method: "POST",
+      body: JSON.stringify({ q1, a1, q2, a2, q3, a3 }),
+    });
+  },
+
+  /** 忘记密码：开始，拿随机两题 */
+  async passwordResetStart(username) {
+    return request("/api/password-reset/start", {
+      method: "POST",
+      body: JSON.stringify({ username: username.trim() }),
+    });
+  },
+
+  /** 忘记密码：提交答案 + 新密码 */
+  async passwordResetConfirm({ challengeId, answers, newPassword }) {
+    return request("/api/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({
+        challenge_id: challengeId,
+        answers,
+        new_password: newPassword,
+      }),
+    });
+  },
+  
   /** 修改密码 */
   async changePassword(oldPassword, newPassword) {
     return request("/api/user/change-password", {
