@@ -21,8 +21,8 @@ export default {
     // 桌面顶栏
     const nav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
-      { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
       { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
+      { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
       { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
     ];
     // 手机抽屉顺序：看板 → 个人中心 → 购买套餐 → 票选 → 工单 → 指南
@@ -97,7 +97,8 @@ export default {
       <div class="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-3">
         <!-- Logo -->
         <a href="#/" class="flex items-center gap-2 shrink-0 no-underline">
-          <span class="w-8 h-8 rounded-lg theme-bg text-white flex items-center justify-center text-sm font-bold shadow-sm">波</span>
+          <img src="./logo.png" alt="波幅探长" class="w-8 h-8 rounded-lg object-cover shadow-sm bg-slate-100 shrink-0"
+               onerror="this.onerror=null;this.src='logo.png';">
           <span class="font-bold text-slate-800 text-sm sm:text-base tracking-wide">波幅探长</span>
         </a>
 
