@@ -7,7 +7,7 @@ import { request } from "./http.js";
 import { CONFIG } from "../config.js";
 
 /** 将图片压缩为 JPEG Blob，控制体积 */
-async function compressImage(file, maxSide = 1280, quality = 0.72) {
+async function compressImage(file, maxSide = 1280, quality = 0.65) {
   if (!file || !file.type.startsWith("image/")) return file;
   // gif 不动，避免丢动画
   if (file.type === "image/gif") return file;
