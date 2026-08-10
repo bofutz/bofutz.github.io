@@ -19,6 +19,8 @@ export default {
   setup() {
     const orders = ref([]);
     const invitees = ref([]);
+    const referralEdit = ref("");
+    const referralSaving = ref(false);
     const customList = ref([]);
     const loading = ref(false);
     const inviteeLoading = ref(false);
@@ -328,32 +330,42 @@ export default {
       return "已取消";
     };
 
-    const copyReferralCode = async () => {
-      const code = store.state.referralCode;
-      if (!code) {
-        store.showToast("暂无邀请码", "error");
-        return;
-      }
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(code);
-        } else {
-          const ta = document.createElement("textarea");
-          ta.value = code;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand("copy");
-          ta.remove();
-        }
-        store.showToast("邀请码已复制");
-      } catch (e) {
-        store.showToast("复制失败，请手动选择", "error");
-      }
-    };
-
     onMounted(() => {
       if (store.state.isLoggedIn) loadProfileData();
     });
+
+    const saveReferralCode = async () => {
+      const code = (referralEdit.value || "").trim();
+      if (!code) {
+        store.showToast("请输入邀请码", "error");
+        return;
+      }
+      referralSaving.value = true;
+      try {
+        const res = await authApi.setReferralCode(code);
+        store.state.referralCode = res.referral_code || code.toUpperCase();
+        referralEdit.value = "";
+        store.showToast(res.message || "邀请码已设置");
+      } catch (err) {
+        store.showToast(err.message || "设置失败", "error");
+      } finally {
+        referralSaving.value = false;
+      }
+    };
+
+    const copyReferralCode = async () => {
+      const code = store.state.referralCode;
+      if (!code) {
+        store.showToast("请先设置邀请码", "error");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(code);
+        store.showToast("邀请码已复制");
+      } catch {
+        store.showToast("复制失败，请手动复制", "error");
+      }
+    };
 
     return {
       store: store.state,
@@ -363,6 +375,10 @@ export default {
       levelLabel,
       orders,
       invitees,
+      referralEdit,
+      referralSaving,
+      saveReferralCode,
+      copyReferralCode,
       customList,
       loading,
       inviteeLoading,
@@ -385,7 +401,6 @@ export default {
       removeDraftSymbol,
       goToBuyCustomPlan,
       loadProfileData,
-      copyReferralCode,
       removeCustomItem,
       changePassword,
       formatDateExact,
@@ -443,14 +458,9 @@ export default {
               可添加多只标的 · 每 {{ perGroup }} 只为 1 组（按组购买套餐）· 与通用独立 · 不解锁通用图表
             </p>
           </div>
-          <div class="flex items-center gap-2 self-start">
-            <button type="button" @click="loadProfileData" class="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg font-bold hover:bg-slate-200">
-              <i class="fa-solid fa-rotate-right mr-1" :class="{'animate-spin': loading}"></i>刷新数据
-            </button>
-            <button @click="openCustomModal" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg font-bold hover:opacity-90">
-              <i class="fa-solid fa-plus mr-1"></i>添加标的
-            </button>
-          </div>
+          <button @click="openCustomModal" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg self-start font-bold hover:opacity-90">
+            <i class="fa-solid fa-plus mr-1"></i>添加标的
+          </button>
         </div>
 
         <div v-if="loading" class="p-8 text-center text-slate-400 text-sm">
@@ -553,18 +563,25 @@ export default {
         <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '-' }}</span>
-              <button type="button" @click="copyReferralCode"
-                      class="text-xs theme-bg text-white px-2.5 py-1 rounded-lg font-bold hover:opacity-90 shrink-0">
-                <i class="fa-regular fa-copy mr-1"></i>复制
+            <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '未设置' }}</span>
+            <div class="flex flex-wrap gap-2 mt-3 items-center">
+              <input v-model="referralEdit" maxlength="32" placeholder="自设邀请码（字母数字）"
+                     class="border rounded-lg px-3 py-1.5 text-sm font-mono w-44 uppercase">
+              <button type="button" @click="saveReferralCode" :disabled="referralSaving"
+                      class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg font-bold disabled:opacity-50">
+                {{ store.referralCode ? '更换' : '设置' }}
+              </button>
+              <button type="button" v-if="store.referralCode" @click="copyReferralCode"
+                      class="text-xs border px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:bg-slate-50">
+                复制
               </button>
             </div>
+            <p class="text-[10px] text-slate-400 mt-1">长度 {{ settings.referral_code_min_len || 6 }}～{{ settings.referral_code_max_len || 8 }} 位，仅英文与数字</p>
           </div>
           <div class="sm:text-right text-xs theme-text font-medium leading-relaxed">
-            <div>邀请与被邀请双方各送 VIP</div>
+            <div>邀请规则：注册送被邀请人体验 · 付费返利给邀请人</div>
             <div class="text-sm font-bold mt-0.5">
-              邀请人 {{ settings.gift_inviter_days || 3 }} 天 · 被邀请人 {{ settings.gift_invitee_days || 2 }} 天
+              被邀请人 +{{ settings.gift_invitee_days || 3 }} 天 · 付费返利 {{ settings.referral_rebate_percent || 10 }}%（门槛 {{ settings.referral_rebate_min_days || 90 }} 天）
             </div>
           </div>
         </div>
