@@ -80,13 +80,13 @@ export default {
           <div @click="navigate('#/tickets', true)" 
                class="nav-item block px-6 py-3.5 border-b border-slate-50" 
                :class="{active: currentRoute === '#/tickets'}">
-            <i class="fa-solid fa-headset w-6"></i> 客服工单
+            <i class="fa-solid fa-headset w-6"></i> 工单反馈
           </div>
 
           <div @click="navigate('#/guide')" 
                class="nav-item block px-6 py-3.5" 
                :class="{active: currentRoute === '#/guide'}">
-            <i class="fa-solid fa-book-open w-6"></i> 图表指南
+            <i class="fa-solid fa-book-open w-6"></i> 使用指南
           </div>
         </div>
       </aside>
