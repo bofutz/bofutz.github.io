@@ -328,6 +328,29 @@ export default {
       return "已取消";
     };
 
+    const copyReferralCode = async () => {
+      const code = store.state.referralCode;
+      if (!code) {
+        store.showToast("暂无邀请码", "error");
+        return;
+      }
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(code);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = code;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        store.showToast("邀请码已复制");
+      } catch (e) {
+        store.showToast("复制失败，请手动选择", "error");
+      }
+    };
+
     onMounted(() => {
       if (store.state.isLoggedIn) loadProfileData();
     });
@@ -362,6 +385,7 @@ export default {
       removeDraftSymbol,
       goToBuyCustomPlan,
       loadProfileData,
+      copyReferralCode,
       removeCustomItem,
       changePassword,
       formatDateExact,
@@ -419,9 +443,14 @@ export default {
               可添加多只标的 · 每 {{ perGroup }} 只为 1 组（按组购买套餐）· 与通用独立 · 不解锁通用图表
             </p>
           </div>
-          <button @click="openCustomModal" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg self-start font-bold hover:opacity-90">
-            <i class="fa-solid fa-plus mr-1"></i>添加标的
-          </button>
+          <div class="flex items-center gap-2 self-start">
+            <button type="button" @click="loadProfileData" class="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg font-bold hover:bg-slate-200">
+              <i class="fa-solid fa-rotate-right mr-1" :class="{'animate-spin': loading}"></i>刷新数据
+            </button>
+            <button @click="openCustomModal" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg font-bold hover:opacity-90">
+              <i class="fa-solid fa-plus mr-1"></i>添加标的
+            </button>
+          </div>
         </div>
 
         <div v-if="loading" class="p-8 text-center text-slate-400 text-sm">
@@ -524,7 +553,13 @@ export default {
         <div class="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
-            <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '-' }}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '-' }}</span>
+              <button type="button" @click="copyReferralCode"
+                      class="text-xs theme-bg text-white px-2.5 py-1 rounded-lg font-bold hover:opacity-90 shrink-0">
+                <i class="fa-regular fa-copy mr-1"></i>复制
+              </button>
+            </div>
           </div>
           <div class="sm:text-right text-xs theme-text font-medium leading-relaxed">
             <div>邀请与被邀请双方各送 VIP</div>
