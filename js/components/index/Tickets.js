@@ -32,9 +32,9 @@ export default {
         store.showToast("仅支持图片文件", "error");
         return null;
       }
-      // 限制单张 5MB
-      if (file.size > 5 * 1024 * 1024) {
-        store.showToast("单张图片不能超过 5MB", "error");
+      // 限制单张 2MB
+      if (file.size > 2 * 1024 * 1024) {
+        store.showToast("单张图片不能超过 2MB", "error");
         return null;
       }
 
