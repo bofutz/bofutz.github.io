@@ -25,8 +25,12 @@ export default {
 
     const form = reactive({
       gift_register_days: "1",
-      gift_inviter_days: "3",
-      gift_invitee_days: "2",
+      gift_inviter_days: "0",
+      gift_invitee_days: "3",
+      referral_code_min_len: "6",
+      referral_code_max_len: "8",
+      referral_rebate_percent: "10",
+      referral_rebate_min_days: "90",
       free_top_n_charts: "3",
       pay_register_enabled: "1",
       promo_enabled: "1",
@@ -199,21 +203,40 @@ export default {
       </div>
 
       <template v-else>
-        <!-- 注册与赠送 -->
+        <!-- 注册与邀请返利 -->
         <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
-          <h3 class="font-bold text-slate-700 text-sm border-b pb-2">注册与赠送</h3>
+          <h3 class="font-bold text-slate-700 text-sm border-b pb-2">注册与邀请返利</h3>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label class="text-xs space-y-1">
               <span class="text-slate-500">注册赠送天数</span>
               <input v-model="form.gift_register_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
-              <span class="text-slate-500">邀请人赠送</span>
+              <span class="text-slate-500">邀请人注册赠送（建议 0）</span>
               <input v-model="form.gift_inviter_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
-              <span class="text-slate-500">被邀请人赠送</span>
+              <span class="text-slate-500">被邀请人注册赠送</span>
               <input v-model="form.gift_invitee_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </label>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <label class="text-xs space-y-1">
+              <span class="text-slate-500">邀请码最短位数</span>
+              <input v-model="form.referral_code_min_len" type="number" min="4" max="16" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </label>
+            <label class="text-xs space-y-1">
+              <span class="text-slate-500">邀请码最长位数</span>
+              <input v-model="form.referral_code_max_len" type="number" min="4" max="32" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </label>
+            <label class="text-xs space-y-1">
+              <span class="text-slate-500">付费返利比例 %</span>
+              <input v-model="form.referral_rebate_percent" type="number" min="0" max="100" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </label>
+            <label class="text-xs space-y-1">
+              <span class="text-slate-500">返利门槛（套餐天数≥）</span>
+              <input v-model="form.referral_rebate_min_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <span class="text-[10px] text-slate-400">如 90=季付起；邀请人仅在好友付费后获天数返利</span>
             </label>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
