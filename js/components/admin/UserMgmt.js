@@ -151,20 +151,6 @@ export default {
       }
     };
 
-    const resetPwd = async (user) => {
-      const secret = prompt(`重置 ${user.username} 密码为 bofutz\n请输入管理密钥确认：`);
-      if (!secret) return;
-      actionLoading.value = true;
-      try {
-        await adminApi.resetPassword(user.id, secret);
-        store.showToast("密码已重置为 bofutz");
-      } catch (err) {
-        store.showToast(err.message || "失败", "error");
-      } finally {
-        actionLoading.value = false;
-      }
-    };
-
     const removeUser = async (user) => {
       if (!confirm(`确认删除用户 ${user.username}？此操作不可恢复。`)) return;
       const secret = prompt("请输入管理密钥确认删除：");
@@ -211,7 +197,6 @@ export default {
       openLevel,
       submitLevel,
       batchCharge,
-      resetPwd,
       removeUser,
       formatDate,
       vipDays,
@@ -278,8 +263,7 @@ export default {
                 <td class="py-2.5 px-3 text-right space-x-1">
                   <button @click="openCharge(u,'add')" class="text-xs theme-text hover:underline">+天</button>
                   <button @click="openCharge(u,'set')" class="text-xs text-slate-500 hover:underline">设天</button>
-                  <button @click="resetPwd(u)" class="text-xs text-amber-600 hover:underline">重置密</button>
-                  <button @click="removeUser(u)" class="text-xs text-red-500 hover:underline">删</button>
+                  <button @click="removeUser(u)" class="text-xs text-red-500 hover:underline">删除</button>
                 </td>
               </tr>
               <tr v-if="!filtered.length">
