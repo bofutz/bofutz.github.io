@@ -33,12 +33,31 @@ export const adminApi = {
       body: JSON.stringify({ user_ids: userIds, add_days: addDays }),
     });
   },
+  async resetPassword(userId, adminConfirmSecret) {
+    return request("/api/admin/users/reset_password", {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId,
+        admin_confirm: adminConfirmSecret,
+      }),
+    });
+  },
   async deleteUser(userId, adminConfirmSecret) {
     return request("/api/admin/users", {
       method: "DELETE",
       body: JSON.stringify({
         user_id: userId,
         admin_confirm: adminConfirmSecret,
+      }),
+    });
+  },
+  /** 手动调整会员等级 0~4（可选，与充天数配合） */
+  async setUserLevel(userId, vipLevel) {
+    return request("/api/admin/users/set_level", {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId,
+        vip_level: Math.max(0, Math.min(4, parseInt(vipLevel, 10) || 0)),
       }),
     });
   },
@@ -169,6 +188,18 @@ export const adminApi = {
         reply_message: replyMessage,
         reply_images: Array.isArray(replyImages) ? replyImages : [],
       }),
+    });
+  },
+  async deleteTickets(ids, adminConfirmSecret) {
+    return request("/api/admin/tickets", {
+      method: "DELETE",
+      body: JSON.stringify({ ids, admin_confirm: adminConfirmSecret }),
+    });
+  },
+  async purgeInactiveUsers(days, adminConfirmSecret, dryRun = false) {
+    return request("/api/admin/users/purge_inactive", {
+      method: "POST",
+      body: JSON.stringify({ days, admin_confirm: adminConfirmSecret, dry_run: dryRun }),
     });
   },
   async broadcastNotice(title, content, alsoTg = true) {
