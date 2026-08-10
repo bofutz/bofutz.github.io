@@ -328,7 +328,7 @@ export default {
                  class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
 
           <p v-if="store.authMode==='register' && form.refCode" class="text-[11px] text-slate-400">
-            填写邀请码后，双方各送 VIP：邀请人 {{ settings.gift_inviter_days || 3 }} 天 · 您 {{ (Number(settings.gift_register_days)||1) + (Number(settings.gift_invitee_days)||2) }} 天（含注册赠送）
+            填写邀请码后，您可额外获得 {{ settings.gift_invitee_days || 3 }} 天体验（含注册赠送共约 {{ (Number(settings.gift_register_days)||1) + (Number(settings.gift_invitee_days)||3) }} 天）。邀请人将在您购买达到门槛的套餐后获得天数返利。
           </p>
 
           <button @click="submit" :disabled="loading" class="w-full theme-bg text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-50 hover:opacity-90 flex justify-center items-center">
