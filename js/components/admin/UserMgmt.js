@@ -1,8 +1,7 @@
 /**
  * 波幅探长 - 后台用户管理（整合版）
- * - 列表展示 VIP 天数 / 等级
- * - 充值天数、批量充值、重置密码、删除
- * - 手动设置会员等级 0~4
+ * - 列表展示 VIP 天数 / 等级（等级由后端按总剩余天数自动计算）
+ * - 充值天数、批量充值、删除（已移除重置密码 / 手动设等级）
  * js/components/admin/UserMgmt.js
  */
 import { store } from "../../store.js";
@@ -23,14 +22,8 @@ export default {
       visible: false,
       userId: null,
       username: "",
-      mode: "add", // add | set
+      mode: "add",
       days: 30,
-    });
-    const levelModal = reactive({
-      visible: false,
-      userId: null,
-      username: "",
-      vipLevel: 0,
     });
     const actionLoading = ref(false);
 
@@ -82,7 +75,8 @@ export default {
       chargeModal.userId = user.id;
       chargeModal.username = user.username;
       chargeModal.mode = mode;
-      chargeModal.days = mode === "set" ? user.shared_vip_days || user.vip_days_left || 0 : 30;
+      chargeModal.days =
+        mode === "set" ? user.shared_vip_days || user.vip_days_left || 0 : 30;
     };
 
     const submitCharge = async () => {
@@ -109,28 +103,6 @@ export default {
       }
     };
 
-    const openLevel = (user) => {
-      levelModal.visible = true;
-      levelModal.userId = user.id;
-      levelModal.username = user.username;
-      levelModal.vipLevel = user.vip_level || 0;
-    };
-
-    const submitLevel = async () => {
-      if (!levelModal.userId) return;
-      actionLoading.value = true;
-      try {
-        await adminApi.setUserLevel(levelModal.userId, levelModal.vipLevel);
-        store.showToast("等级已更新");
-        levelModal.visible = false;
-        await loadUsers();
-      } catch (err) {
-        store.showToast(err.message || "操作失败", "error");
-      } finally {
-        actionLoading.value = false;
-      }
-    };
-
     const batchCharge = async () => {
       if (!selected.value.length) {
         store.showToast("请先勾选用户", "error");
@@ -144,20 +116,6 @@ export default {
         await adminApi.batchChargeUsers(selected.value, days);
         store.showToast("批量调整完成");
         await loadUsers();
-      } catch (err) {
-        store.showToast(err.message || "失败", "error");
-      } finally {
-        actionLoading.value = false;
-      }
-    };
-
-    const resetPwd = async (user) => {
-      const secret = prompt(`重置 ${user.username} 密码为 bofutz\n请输入管理密钥确认：`);
-      if (!secret) return;
-      actionLoading.value = true;
-      try {
-        await adminApi.resetPassword(user.id, secret);
-        store.showToast("密码已重置为 bofutz");
       } catch (err) {
         store.showToast(err.message || "失败", "error");
       } finally {
@@ -200,7 +158,6 @@ export default {
       keyword,
       selected,
       chargeModal,
-      levelModal,
       actionLoading,
       levelLabel,
       loadUsers,
@@ -208,10 +165,7 @@ export default {
       toggleSelectAll,
       openCharge,
       submitCharge,
-      openLevel,
-      submitLevel,
       batchCharge,
-      resetPwd,
       removeUser,
       formatDate,
       vipDays,
@@ -263,11 +217,11 @@ export default {
                 <td class="py-2.5 px-3 font-mono text-xs text-slate-400">{{ u.id }}</td>
                 <td class="py-2.5 px-3 font-medium text-slate-800 max-w-[160px] truncate">{{ u.username }}</td>
                 <td class="py-2.5 px-3">
-                  <button type="button" @click="openLevel(u)"
-                          class="text-xs px-2 py-0.5 rounded-full border font-bold"
-                          :class="(u.vip_level||0)>0 ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'">
+                  <span class="text-xs px-2 py-0.5 rounded-full border font-bold"
+                        :class="(u.vip_level||0)>0 ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'"
+                        :title="levelLabel(u.vip_level || 0)">
                     Lv.{{ u.vip_level || 0 }}
-                  </button>
+                  </span>
                 </td>
                 <td class="py-2.5 px-3 font-bold font-mono"
                     :class="vipDays(u) > 0 ? 'text-emerald-600' : 'text-slate-400'">
@@ -278,7 +232,6 @@ export default {
                 <td class="py-2.5 px-3 text-right space-x-1">
                   <button @click="openCharge(u,'add')" class="text-xs theme-text hover:underline">+天</button>
                   <button @click="openCharge(u,'set')" class="text-xs text-slate-500 hover:underline">设天</button>
-                  <button @click="resetPwd(u)" class="text-xs text-amber-600 hover:underline">重置密</button>
                   <button @click="removeUser(u)" class="text-xs text-red-500 hover:underline">删</button>
                 </td>
               </tr>
@@ -290,7 +243,6 @@ export default {
         </div>
       </div>
 
-      <!-- 充天数 -->
       <div v-if="chargeModal.visible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4"
            @click.self="chargeModal.visible=false">
         <div class="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4 shadow-xl">
@@ -299,35 +251,12 @@ export default {
           </h3>
           <p class="text-xs text-slate-500">用户：{{ chargeModal.username }}</p>
           <input v-model.number="chargeModal.days" type="number" class="w-full border rounded-lg px-3 py-2 text-sm">
+          <p class="text-[11px] text-slate-400">等级将按更新后的总剩余天数自动计算。</p>
           <div class="flex justify-end gap-2">
             <button @click="chargeModal.visible=false" class="text-sm text-slate-500 px-3 py-2">取消</button>
             <button @click="submitCharge" :disabled="actionLoading"
                     class="theme-bg text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">
               确认
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 设等级 -->
-      <div v-if="levelModal.visible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4"
-           @click.self="levelModal.visible=false">
-        <div class="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4 shadow-xl">
-          <h3 class="font-bold text-slate-800">设置会员等级</h3>
-          <p class="text-xs text-slate-500">用户：{{ levelModal.username }}</p>
-          <select v-model.number="levelModal.vipLevel" class="w-full border rounded-lg px-3 py-2 text-sm">
-            <option :value="0">Lv.0 普通用户</option>
-            <option :value="1">Lv.1 月卡会员</option>
-            <option :value="2">Lv.2 季卡会员</option>
-            <option :value="3">Lv.3 半年会员</option>
-            <option :value="4">Lv.4 年卡会员</option>
-          </select>
-          <p class="text-[11px] text-slate-400">审核通用套餐订单时会按天数自动抬升等级；此处可手动覆盖。</p>
-          <div class="flex justify-end gap-2">
-            <button @click="levelModal.visible=false" class="text-sm text-slate-500 px-3 py-2">取消</button>
-            <button @click="submitLevel" :disabled="actionLoading"
-                    class="theme-bg text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">
-              保存等级
             </button>
           </div>
         </div>
