@@ -18,10 +18,20 @@ export default {
       return map[lv] || "普通用户";
     });
 
+    // 桌面顶栏
     const nav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
       { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
       { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
+      { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
+    ];
+    // 手机抽屉顺序：看板 → 个人中心 → 购买套餐 → 票选 → 工单 → 指南
+    const mobileNav = [
+      { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
+      { path: "#/profile", label: "个人中心", icon: "fa-solid fa-id-card" },
+      { path: "#/plan", label: "购买套餐", icon: "fa-solid fa-crown" },
+      { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
+      { path: "#/tickets", label: "工单反馈", icon: "fa-solid fa-headset" },
       { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
     ];
 
@@ -73,6 +83,7 @@ export default {
     return {
       store: store.state,
       nav,
+      mobileNav,
       levelLabel,
       isActive,
       openAuth,
@@ -86,8 +97,7 @@ export default {
       <div class="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-3">
         <!-- Logo -->
         <a href="#/" class="flex items-center gap-2 shrink-0 no-underline">
-          <img src="./logo.png" alt="波幅探长" class="w-8 h-8 rounded-lg object-cover shadow-sm bg-slate-100"
-               onerror="this.onerror=null;this.src='logo.png';">
+          <span class="w-8 h-8 rounded-lg theme-bg text-white flex items-center justify-center text-sm font-bold shadow-sm">波</span>
           <span class="font-bold text-slate-800 text-sm sm:text-base tracking-wide">波幅探长</span>
         </a>
 
@@ -180,19 +190,11 @@ export default {
 
       <!-- 移动端抽屉导航 -->
       <div v-if="store.menuOpen" class="md:hidden border-t border-slate-100 bg-white px-3 py-2 space-y-0.5">
-        <a v-for="item in nav" :key="item.path" :href="item.path"
+        <a v-for="item in mobileNav" :key="item.path" :href="item.path"
            @click="store.menuOpen=false"
            class="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium no-underline"
            :class="isActive(item.path) ? 'theme-text bg-[#4da6a0]/10' : 'text-slate-600'">
           <i :class="item.icon" class="w-5 text-center opacity-80"></i>{{ item.label }}
-        </a>
-        <a href="#/profile" @click="store.menuOpen=false"
-           class="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-slate-600 no-underline">
-          <i class="fa-solid fa-id-card w-5 text-center opacity-80"></i>个人中心
-        </a>
-        <a href="#/tickets" @click="store.menuOpen=false"
-           class="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-slate-600 no-underline">
-          <i class="fa-solid fa-headset w-5 text-center opacity-80"></i>工单反馈
         </a>
       </div>
     </header>
