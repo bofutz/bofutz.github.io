@@ -180,13 +180,14 @@ export default {
 
     // ---------- 忘记密码：拉题 ----------
     const startReset = async () => {
-      if (!isEmail(resetForm.username)) {
-        store.showToast("请输入注册邮箱账号", "error");
+      // 只要求账号不为空，不再限制必须是邮箱（支持购买套餐等非邮箱账号）
+      if (!String(resetForm.username || "").trim()) {
+        store.showToast("请输入账号", "error");
         return;
       }
       resetLoading.value = true;
       try {
-        const res = await authApi.passwordResetStart(resetForm.username);
+        const res = await authApi.passwordResetStart(resetForm.username.trim());
         const data = res.data || res;
         resetForm.challengeId = data.challenge_id;
         resetForm.questions = data.questions || [];
@@ -344,7 +345,7 @@ export default {
 
           <!-- 步骤1：输入账号 -->
           <template v-if="resetStep === 'account'">
-            <input v-model="resetForm.username" type="email" placeholder="注册邮箱账号"
+            <input v-model="resetForm.username" type="text" placeholder="请输入账号"
                    class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
                    @keyup.enter="startReset">
             <button @click="startReset" :disabled="resetLoading"
