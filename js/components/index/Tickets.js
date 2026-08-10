@@ -15,6 +15,8 @@ export default {
     const tickets = ref([]);
     const loading = ref(false);
     const showForm = ref(false);
+    const selectedIds = ref([]);
+    const deleteLoading = ref(false);
 
     const form = reactive({
       subject: "",
@@ -154,6 +156,34 @@ export default {
       }
     };
 
+    const toggleSelect = (id) => {
+      const i = selectedIds.value.indexOf(id);
+      if (i >= 0) selectedIds.value.splice(i, 1);
+      else selectedIds.value.push(id);
+    };
+    const toggleSelectAll = () => {
+      if (selectedIds.value.length === tickets.value.length) selectedIds.value = [];
+      else selectedIds.value = tickets.value.map((x) => x.id);
+    };
+    const deleteSelected = async () => {
+      if (!selectedIds.value.length) {
+        store.showToast("请先勾选工单", "error");
+        return;
+      }
+      if (!confirm(`确认删除选中的 ${selectedIds.value.length} 条工单？`)) return;
+      deleteLoading.value = true;
+      try {
+        await ticketApi.deleteTickets(selectedIds.value);
+        store.showToast("已删除");
+        selectedIds.value = [];
+        await loadTickets();
+      } catch (err) {
+        store.showToast(err.message || "删除失败", "error");
+      } finally {
+        deleteLoading.value = false;
+      }
+    };
+
     const formatTime = (ts) => {
       if (!ts) return "";
       const d = new Date(ts);
@@ -173,6 +203,11 @@ export default {
       tickets,
       loading,
       showForm,
+      selectedIds,
+      deleteLoading,
+      toggleSelect,
+      toggleSelectAll,
+      deleteSelected,
       form,
       submitLoading,
       uploadingCount,
@@ -292,15 +327,30 @@ export default {
 
       <!-- 历史工单列表 -->
       <div class="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
-        <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+        <div class="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
           <span class="font-bold text-slate-700 text-sm">我的工单记录</span>
-          <button
-            v-if="store.isLoggedIn"
-            @click="loadTickets"
-            class="text-xs text-slate-400 hover:theme-text"
-          >
-            <i class="fa-solid fa-rotate-right mr-1"></i>刷新
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="store.isLoggedIn && tickets.length"
+              type="button"
+              @click="toggleSelectAll"
+              class="text-xs text-slate-500 hover:theme-text"
+            >全选</button>
+            <button
+              v-if="store.isLoggedIn && selectedIds.length"
+              type="button"
+              @click="deleteSelected"
+              :disabled="deleteLoading"
+              class="text-xs text-red-500 font-bold hover:underline disabled:opacity-50"
+            >删除选中 ({{ selectedIds.length }})</button>
+            <button
+              v-if="store.isLoggedIn"
+              @click="loadTickets"
+              class="text-xs text-slate-400 hover:theme-text"
+            >
+              <i class="fa-solid fa-rotate-right mr-1"></i>刷新
+            </button>
+          </div>
         </div>
 
         <div v-if="!store.isLoggedIn" class="text-center py-12 text-slate-400 text-sm">
@@ -320,7 +370,10 @@ export default {
           <div v-for="t in tickets" :key="t.id" class="p-4 sm:p-5 space-y-3">
             <!-- 头部 -->
             <div class="flex justify-between items-start gap-3">
-              <div class="min-w-0">
+              <label class="pt-0.5 shrink-0">
+                <input type="checkbox" :checked="selectedIds.includes(t.id)" @change="toggleSelect(t.id)">
+              </label>
+              <div class="min-w-0 flex-1">
                 <div class="font-bold text-sm text-slate-800 truncate">{{ t.subject }}</div>
                 <div class="text-[11px] text-slate-400 mt-0.5">
                   {{ formatTime(t.created_at) }}
