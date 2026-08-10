@@ -23,6 +23,7 @@ export default {
     const allData = ref([]);
     const chartsMap = ref({});
     const customList = ref([]);
+    const sharedList = ref([]);  // 通用监控全量（无论是否触发）
 
     const searchQuery = ref("");
     const expandedRowKey = ref(null);
@@ -99,17 +100,32 @@ export default {
       return match ? parseFloat(match[0]) : -9999;
     };
 
+    /** 本周一（本地日历），行情为空时仍能展示监控列表 */
+    const calendarMonday = () => {
+      const d = new Date();
+      const day = d.getDay(); // 0=Sun
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setDate(d.getDate() + diff);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    };
+
     const latestMonday = computed(() => {
+      // 优先：行情里最新有效日期所在周；否则用本周一（保证无触发也出表）
       const validDates = [
         ...new Set(
           allData.value
-            .filter((i) => (i.day_status || i.week_status) && isValidDate(i.date))
+            .filter((i) => i.date && isValidDate(i.date))
             .map((i) => i.date)
         ),
       ].sort();
-      if (!validDates.length) return "";
-      const wDays = getWeekDays(validDates[validDates.length - 1]);
-      return wDays.length ? wDays[0] : "";
+      if (validDates.length) {
+        const wDays = getWeekDays(validDates[validDates.length - 1]);
+        if (wDays.length) return wDays[0];
+      }
+      return calendarMonday();
     });
 
     const latestDailyColIndex = computed(() => {
@@ -241,6 +257,38 @@ export default {
       const weekStatusMonday = hasCurrentWeekStatus(etfMap)
         ? latestMonday.value
         : prevMonday;
+
+      // ★ 关键并入通用监控列表：无触发数据的标的也要占一行（可看图表）
+      (sharedList.value || []).forEach((s) => {
+        const code = String(s.etf_code || s.code || "").replace(/\D/g, "").slice(-6);
+        if (code.length !== 6) return;
+        if (!etfMap[code]) {
+          etfMap[code] = {
+            etf_code: code,
+            etf_name: s.etf_name || s.name || code,
+            days: [null, null, null, null, null],
+            week_status: null,
+            week_status_from: null,
+          };
+        } else if ((s.etf_name || s.name) && !etfMap[code].etf_name) {
+          etfMap[code].etf_name = s.etf_name || s.name;
+        }
+      });
+
+      // 行情里出现过、但不在本周格子里的代码也并入（跨周兜底）
+      allData.value.forEach((item) => {
+        const code = String(item.etf_code || "").replace(/\D/g, "").slice(-6);
+        if (code.length !== 6) return;
+        if (!etfMap[code]) {
+          etfMap[code] = {
+            etf_code: code,
+            etf_name: item.etf_name || code,
+            days: [null, null, null, null, null],
+            week_status: null,
+            week_status_from: null,
+          };
+        }
+      });
 
       let items = Object.values(etfMap);
 
@@ -499,6 +547,7 @@ export default {
         const tasks = [
           etfApi.fetchEtfRawData().catch(() => []),
           etfApi.fetchChartsMap().catch(() => ({})),
+          etfApi.fetchSharedWatchlist().catch(() => ({ data: [] })),
         ];
         if (store.state.isLoggedIn) {
           tasks.push(watchlistApi.fetchUserCustomWatchlist().catch(() => ({ data: [] })));
@@ -506,10 +555,13 @@ export default {
         const results = await Promise.all(tasks);
         const data = results[0];
         const chartsRes = results[1];
+        const sharedRes = results[2];
         if (Array.isArray(data)) allData.value = data;
-        chartsMap.value = chartsRes.charts || {};
-        if (store.state.isLoggedIn && results[2]) {
-          const raw = results[2].data ?? results[2];
+        chartsMap.value = chartsRes.charts || chartsRes || {};
+        const sharedRaw = sharedRes?.data ?? sharedRes;
+        sharedList.value = Array.isArray(sharedRaw) ? sharedRaw : [];
+        if (store.state.isLoggedIn && results[3]) {
+          const raw = results[3].data ?? results[3];
           customList.value = Array.isArray(raw) ? raw : [];
         }
       } catch (err) {
@@ -569,41 +621,32 @@ export default {
             <a href="#/profile" class="text-[11px] text-purple-600 hover:underline">管理</a>
           </div>
           <div class="overflow-x-auto custom-scrollbar">
-            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max table-fixed dash-board-table">
-              <colgroup>
-                <col class="dash-col-name">
-                <col class="dash-col-day" span="5">
-                <col class="dash-col-week">
-              </colgroup>
+            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
               <thead class="bg-slate-50 border-b border-slate-100">
-                <tr class="text-xs text-slate-600 font-bold select-none">
-                  <th class="py-3 px-4 text-left etf-name-column sticky left-0 bg-slate-50 z-10 border-b border-slate-200">标的名称</th>
-                  <th v-for="idx in 5" :key="'c'+idx" class="py-3 px-2 border-b border-slate-200">周{{ ['一','二','三','四','五'][idx-1] }}</th>
-                  <th class="py-3 px-4 border-b border-slate-200">周线</th>
+                <tr class="text-xs text-slate-600 font-bold">
+                  <th class="py-2.5 px-4 text-left sticky left-0 bg-slate-50 z-10">标的名称</th>
+                  <th v-for="idx in 5" :key="'c'+idx" class="py-2.5 px-2">周{{ ['一','二','三','四','五'][idx-1] }}</th>
+                  <th class="py-2.5 px-4">周线</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-50 text-sm">
                 <tr v-for="item in customRows" :key="'custom-'+item.etf_code" class="hover:bg-purple-50/40">
-                  <td class="p-3 text-left sticky left-0 bg-white z-10 etf-name-column">
-                    <div class="flex items-center justify-between gap-2">
-                      <div class="min-w-0">
-                        <div class="font-bold text-slate-800 flex items-center gap-1 flex-wrap">
-                          {{ item.etf_name }}
-                          <span class="text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded font-bold">定制</span>
-                          <span v-if="item._customMeta?.expire_at" class="text-[9px] text-slate-400 font-normal">
-                            {{ formatExpire(item._customMeta.expire_at) }}
-                          </span>
-                        </div>
-                        <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
-                      </div>
-                      <span class="w-3 shrink-0" aria-hidden="true"></span>
+                  <td class="p-3 text-left sticky left-0 bg-white z-10">
+                    <div class="font-bold text-slate-800 flex items-center gap-1 flex-wrap">
+                      {{ item.etf_name }}
+                      <span class="text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded font-bold">定制</span>
+                      <span v-if="item._customMeta?.expire_at" class="text-[9px] text-slate-400 font-normal">
+                        {{ formatExpire(item._customMeta.expire_at) }}
+                      </span>
                     </div>
+                    <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                   </td>
                   <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
                     <div class="flex items-center justify-center gap-1">
                       <span>{{ item.days[idx-1]?.day_status || '-' }}</span>
-                      <i v-if="idx - 1 === latestDailyColIndex"
+                      <i v-if="(latestDailyColIndex >= 0 ? idx - 1 === latestDailyColIndex : idx === 5)"
                          class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
+                         title="查看半日线 / 日线图表"
                          @click.stop="openDailyChartViewer(item, true)"></i>
                     </div>
                   </td>
@@ -628,12 +671,7 @@ export default {
 
         <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div class="overflow-x-auto custom-scrollbar">
-            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max table-fixed dash-board-table">
-              <colgroup>
-                <col class="dash-col-name">
-                <col class="dash-col-day" span="5">
-                <col class="dash-col-week">
-              </colgroup>
+            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
               <thead class="bg-slate-50 border-b border-slate-100">
                 <tr class="text-xs text-slate-600 font-bold select-none">
                   <th class="py-3 px-4 text-left etf-name-column sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('etf_name')">
@@ -670,9 +708,9 @@ export default {
                     <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
                       <div class="flex items-center justify-center gap-1" :title="formatDateCN(item.days[idx-1]?.date)">
                         <span>{{ item.days[idx-1]?.day_status || '-' }}</span>
-                        <i v-if="idx - 1 === latestDailyColIndex"
+                        <i v-if="(latestDailyColIndex >= 0 ? idx - 1 === latestDailyColIndex : idx === 5)"
                            class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
-                           :title="formatDateCN(item.days[idx-1]?.date)"
+                           title="查看半日线 / 日线图表"
                            @click.stop="openDailyChartViewer(item, false)"></i>
                       </div>
                     </td>
@@ -708,6 +746,10 @@ export default {
             </table>
           </div>
         </div>
+
+        <p class="text-[11px] text-slate-400 text-center">
+          列表展示全部通用监控标的；未触发波幅时显示 “-”，仍可点击图表图标查看半日线/日线/周线。
+        </p>
 
         <!-- 打赏入口 -->
         <div v-if="tipEnabled" class="text-center pt-2">
