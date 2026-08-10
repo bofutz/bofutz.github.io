@@ -273,6 +273,8 @@ export default {
       }
     };
 
+    const txIdValid = computed(() => /^\d{6}$/.test(String(topUpForm.txId || "").trim()));
+
     const submitOrder = async () => {
       if (!topUpForm.planId) {
         store.showToast("请先选择套餐", "error");
@@ -392,6 +394,7 @@ export default {
       selectPlan,
       applyPromo,
       submitOrder,
+      txIdValid,
       openLogin,
       loading,
     };
@@ -556,10 +559,11 @@ export default {
           <div v-if="showManualInput" class="space-y-2">
             <input v-model="topUpForm.txId" type="text" maxlength="6" placeholder="支付凭证后 6 位数字"
                    class="w-full px-4 py-2 border rounded-lg text-center font-mono text-sm focus:theme-border outline-none">
-            <button @click="submitOrder" :disabled="submitLoading"
+            <button @click="submitOrder" :disabled="submitLoading || !txIdValid"
                     class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50 shadow-sm">
               {{ submitLoading ? '提交中...' : '提交凭证开通' }}
             </button>
+            <p v-if="topUpForm.txId && !txIdValid" class="text-[11px] text-red-500">请输入完整 6 位数字凭证</p>
           </div>
         </div>
       </div>
