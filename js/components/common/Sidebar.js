@@ -44,7 +44,7 @@ export default {
              :class="store.menuOpen ? 'translate-x-0' : '-translate-x-full'">
         <div class="h-14 sm:h-16 theme-bg text-white flex items-center justify-between px-5 text-lg tracking-wider">
           <a href="#/" @click="navigate('#/')" class="flex items-center gap-2 text-white">
-            <img src="logo.png" class="w-7 h-7 rounded-full bg-white/20 p-0.5 object-cover" onerror="this.style.display='none'">
+            <img src="./logo.png" class="w-7 h-7 rounded-full bg-white/20 p-0.5 object-cover" onerror="this.style.display='none'">
             <span class="font-bold">波幅探长</span>
           </a>
           <button @click="closeSidebar" class="text-white/70 hover:text-white">
