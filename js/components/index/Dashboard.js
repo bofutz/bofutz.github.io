@@ -569,25 +569,35 @@ export default {
             <a href="#/profile" class="text-[11px] text-purple-600 hover:underline">管理</a>
           </div>
           <div class="overflow-x-auto custom-scrollbar">
-            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
+            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max table-fixed dash-board-table">
+              <colgroup>
+                <col class="dash-col-name">
+                <col class="dash-col-day" span="5">
+                <col class="dash-col-week">
+              </colgroup>
               <thead class="bg-slate-50 border-b border-slate-100">
-                <tr class="text-xs text-slate-600 font-bold">
-                  <th class="py-2.5 px-4 text-left sticky left-0 bg-slate-50 z-10">标的名称</th>
-                  <th v-for="idx in 5" :key="'c'+idx" class="py-2.5 px-2">周{{ ['一','二','三','四','五'][idx-1] }}</th>
-                  <th class="py-2.5 px-4">周线</th>
+                <tr class="text-xs text-slate-600 font-bold select-none">
+                  <th class="py-3 px-4 text-left etf-name-column sticky left-0 bg-slate-50 z-10 border-b border-slate-200">标的名称</th>
+                  <th v-for="idx in 5" :key="'c'+idx" class="py-3 px-2 border-b border-slate-200">周{{ ['一','二','三','四','五'][idx-1] }}</th>
+                  <th class="py-3 px-4 border-b border-slate-200">周线</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-50 text-sm">
                 <tr v-for="item in customRows" :key="'custom-'+item.etf_code" class="hover:bg-purple-50/40">
-                  <td class="p-3 text-left sticky left-0 bg-white z-10">
-                    <div class="font-bold text-slate-800 flex items-center gap-1 flex-wrap">
-                      {{ item.etf_name }}
-                      <span class="text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded font-bold">定制</span>
-                      <span v-if="item._customMeta?.expire_at" class="text-[9px] text-slate-400 font-normal">
-                        {{ formatExpire(item._customMeta.expire_at) }}
-                      </span>
+                  <td class="p-3 text-left sticky left-0 bg-white z-10 etf-name-column">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="min-w-0">
+                        <div class="font-bold text-slate-800 flex items-center gap-1 flex-wrap">
+                          {{ item.etf_name }}
+                          <span class="text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded font-bold">定制</span>
+                          <span v-if="item._customMeta?.expire_at" class="text-[9px] text-slate-400 font-normal">
+                            {{ formatExpire(item._customMeta.expire_at) }}
+                          </span>
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
+                      </div>
+                      <span class="w-3 shrink-0" aria-hidden="true"></span>
                     </div>
-                    <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                   </td>
                   <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(item.days[idx-1]?.day_status)">
                     <div class="flex items-center justify-center gap-1">
@@ -618,7 +628,12 @@ export default {
 
         <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div class="overflow-x-auto custom-scrollbar">
-            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
+            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max table-fixed dash-board-table">
+              <colgroup>
+                <col class="dash-col-name">
+                <col class="dash-col-day" span="5">
+                <col class="dash-col-week">
+              </colgroup>
               <thead class="bg-slate-50 border-b border-slate-100">
                 <tr class="text-xs text-slate-600 font-bold select-none">
                   <th class="py-3 px-4 text-left etf-name-column sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('etf_name')">
