@@ -18,13 +18,10 @@ export default {
       id: null,
       code: "",
       name: "",
-      plan_id: "",
       discount_type: "percent",
       discount_value: 10,
       startLocal: "",
       endLocal: "",
-      max_uses: null,
-      max_per_user: 1,
       enabled: true,
     });
 
@@ -54,13 +51,10 @@ export default {
           id: p.id,
           code: p.code,
           name: p.name || "",
-          plan_id: p.plan_id || "",
           discount_type: p.discount_type,
           discount_value: p.discount_value,
           startLocal: toLocalInput(p.start_at),
           endLocal: toLocalInput(p.end_at),
-          max_uses: p.max_uses,
-          max_per_user: p.max_per_user,
           enabled: !!p.enabled,
         });
       } else {
@@ -68,13 +62,10 @@ export default {
           id: null,
           code: "",
           name: "",
-          plan_id: "",
           discount_type: "percent",
           discount_value: 10,
           startLocal: toLocalInput(now),
           endLocal: toLocalInput(now + 7 * 86400000),
-          max_uses: null,
-          max_per_user: 1,
           enabled: true,
         });
       }
@@ -91,13 +82,10 @@ export default {
           id: promoForm.id,
           code: promoForm.code.trim().toUpperCase(),
           name: promoForm.name,
-          plan_id: promoForm.plan_id || null,
           discount_type: promoForm.discount_type,
           discount_value: promoForm.discount_value,
           start_at: new Date(promoForm.startLocal).getTime(),
           end_at: new Date(promoForm.endLocal).getTime(),
-          max_uses: promoForm.max_uses || null,
-          max_per_user: promoForm.max_per_user,
           enabled: promoForm.enabled,
         });
         store.showToast("保存成功");
