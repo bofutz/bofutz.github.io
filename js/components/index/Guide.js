@@ -1,7 +1,7 @@
 /**
  * 波幅探长 - 图表指南
  * 说明本站价值、看板用法、双趋势线读图与示例纪律
- * 图片请放在站点根目录：chart1.jpg、chart2.jpg
+ * 图片请放在站点根目录：chart1.png、chart2.png
  * js/components/index/Guide.js
  */
 import { store } from "../../store.js";
@@ -194,24 +194,24 @@ export default {
 
           <!-- 图 1 -->
           <figure class="space-y-2">
-            <img src="./chart1.jpg" alt="双趋势线与评分示例图一"
+            <img src="./chart1.png" alt="双趋势线与评分示例图一"
                  class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[480px]"
                  loading="lazy"
                  onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');">
             <div style="display:none" class="text-xs text-slate-400 text-center py-8 border border-dashed rounded-xl">
-              请将 chart1.jpg 上传到网站根目录（与 index.html 同级）
+              请将 chart1.png 上传到网站根目录（与 index.html 同级）
             </div>
             <figcaption class="text-xs text-slate-500 text-center">图 1 · 双趋势线与 K 线评分示意（示例）</figcaption>
           </figure>
 
           <!-- 图 2 -->
           <figure class="space-y-2">
-            <img src="./chart2.jpg" alt="双趋势线与评分示例图二"
+            <img src="./chart2.png" alt="双趋势线与评分示例图二"
                  class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[480px]"
                  loading="lazy"
                  onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');">
             <div style="display:none" class="text-xs text-slate-400 text-center py-8 border border-dashed rounded-xl">
-              请将 chart2.jpg 上传到网站根目录（与 index.html 同级）
+              请将 chart2.png 上传到网站根目录（与 index.html 同级）
             </div>
             <figcaption class="text-xs text-slate-500 text-center">图 2 · 转色与评分配合示意（示例）</figcaption>
           </figure>
