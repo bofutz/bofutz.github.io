@@ -92,4 +92,12 @@ export const ticketApi = {
   async fetchAnnouncements() {
     return request("/api/announcements");
   },
+
+  /** 会员删除自己的工单 ids: number[] */
+  async deleteTickets(ids) {
+    return request("/api/tickets", {
+      method: "DELETE",
+      body: JSON.stringify({ ids }),
+    });
+  },
 };
