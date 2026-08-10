@@ -33,6 +33,15 @@ export const adminApi = {
       body: JSON.stringify({ user_ids: userIds, add_days: addDays }),
     });
   },
+  async resetPassword(userId, adminConfirmSecret) {
+    return request("/api/admin/users/reset_password", {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId,
+        admin_confirm: adminConfirmSecret,
+      }),
+    });
+  },
   async deleteUser(userId, adminConfirmSecret) {
     return request("/api/admin/users", {
       method: "DELETE",
