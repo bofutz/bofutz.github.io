@@ -86,7 +86,7 @@ export default {
       <div class="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-3">
         <!-- Logo -->
         <a href="#/" class="flex items-center gap-2 shrink-0 no-underline">
-          <span class="w-8 h-8 rounded-lg theme-bg text-white flex items-center justify-center text-sm font-bold shadow-sm">波</span>
+          <img src="logo.png" alt="波幅探长" class="w-8 h-8 rounded-lg object-cover shadow-sm" onerror="this.style.display='none'">
           <span class="font-bold text-slate-800 text-sm sm:text-base tracking-wide">波幅探长</span>
         </a>
 
