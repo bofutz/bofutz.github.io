@@ -65,6 +65,14 @@ export const authApi = {
     return request("/api/user/invitees");
   },
 
+  /** 用户自设邀请码（字母数字，长度由后台配置） */
+  async setReferralCode(code) {
+    return request("/api/user/referral-code", {
+      method: "POST",
+      body: JSON.stringify({ code: String(code || "").trim() }),
+    });
+  },
+
   // ========== 安全问题 / 密码找回（不走邮箱） ==========
 
   /** 是否已设置安全问题 */
