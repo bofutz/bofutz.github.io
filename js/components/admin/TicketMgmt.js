@@ -14,6 +14,8 @@ export default {
     const tickets = ref([]);
     const loading = ref(false);
     const statusFilter = ref("all"); // all | pending | replied
+    const selectedIds = ref([]);
+    const deleteLoading = ref(false);
 
     const replyModalVisible = ref(false);
     const currentTicket = ref(null);
@@ -46,6 +48,36 @@ export default {
         return tickets.value.filter((t) => t.status === "pending" || t.status === "open");
       }
       return tickets.value.filter((t) => t.status === "replied" || t.status === "closed");
+    };
+
+    const toggleSelect = (id) => {
+      const i = selectedIds.value.indexOf(id);
+      if (i >= 0) selectedIds.value.splice(i, 1);
+      else selectedIds.value.push(id);
+    };
+    const toggleSelectAll = () => {
+      const list = filteredTickets();
+      if (selectedIds.value.length === list.length) selectedIds.value = [];
+      else selectedIds.value = list.map((x) => x.id);
+    };
+    const deleteSelected = async () => {
+      if (!selectedIds.value.length) {
+        store.showToast("请先勾选工单", "error");
+        return;
+      }
+      const secret = prompt(`将删除 ${selectedIds.value.length} 条工单，请输入管理密钥确认：`);
+      if (!secret) return;
+      deleteLoading.value = true;
+      try {
+        await adminApi.deleteTickets(selectedIds.value, secret);
+        store.showToast("已删除");
+        selectedIds.value = [];
+        await loadTickets();
+      } catch (err) {
+        store.showToast(err.message || "删除失败", "error");
+      } finally {
+        deleteLoading.value = false;
+      }
     };
 
     const openReplyModal = (t) => {
@@ -108,6 +140,11 @@ export default {
       tickets,
       loading,
       statusFilter,
+      selectedIds,
+      deleteLoading,
+      toggleSelect,
+      toggleSelectAll,
+      deleteSelected,
       filteredTickets,
       replyModalVisible,
       currentTicket,
@@ -131,6 +168,11 @@ export default {
           <p class="text-xs text-slate-400 mt-0.5">回复用户工单 · 支持查看图片附件 · 一键全员广播</p>
         </div>
         <div class="flex gap-2 flex-wrap">
+          <button type="button" @click="toggleSelectAll" class="text-xs px-3 py-2 rounded-lg border bg-white">全选</button>
+          <button type="button" @click="deleteSelected" :disabled="!selectedIds.length || deleteLoading"
+                  class="text-xs px-3 py-2 rounded-lg border bg-white text-red-500 font-bold disabled:opacity-40">
+            删除选中{{ selectedIds.length ? ' ('+selectedIds.length+')' : '' }}
+          </button>
           <div class="flex bg-white border border-slate-200 rounded-lg overflow-hidden text-xs">
             <button v-for="s in [{k:'all',t:'全部'},{k:'pending',t:'待回复'},{k:'replied',t:'已回复'}]"
                     :key="s.k" @click="statusFilter = s.k"
@@ -159,6 +201,7 @@ export default {
           <table class="w-full text-sm text-left whitespace-nowrap">
             <thead class="bg-slate-50 text-slate-500 border-b text-xs font-bold">
               <tr>
+                <th class="py-2.5 px-2 w-8"></th>
                 <th class="py-3 px-4">时间</th>
                 <th class="py-3 px-4">用户</th>
                 <th class="py-3 px-4">主题</th>
@@ -168,6 +211,9 @@ export default {
             </thead>
             <tbody class="divide-y divide-slate-50">
               <tr v-for="t in filteredTickets()" :key="t.id" class="hover:bg-slate-50">
+                <td class="py-3.5 px-2">
+                  <input type="checkbox" :checked="selectedIds.includes(t.id)" @change="toggleSelect(t.id)">
+                </td>
                 <td class="py-3.5 px-4 text-xs font-mono text-slate-400">{{ formatDate(t.created_at) }}</td>
                 <td class="py-3.5 px-4 font-bold text-slate-800">{{ t.username || '用户' }}</td>
                 <td class="py-3.5 px-4 font-medium max-w-[200px] truncate">{{ t.subject }}</td>
