@@ -49,6 +49,17 @@
     @media (min-width: 640px) {
       .etf-name-column { min-width: 160px; max-width: 220px; }
     }
+  
+    .dash-board-table { table-layout: fixed; width: 100%; }
+    .dash-board-table .dash-col-name { width: 200px; min-width: 180px; max-width: 240px; }
+    .dash-board-table .dash-col-day { width: 88px; }
+    .dash-board-table .dash-col-week { width: 100px; }
+    @media (max-width: 640px) {
+      .dash-board-table .dash-col-name { width: 140px; min-width: 120px; }
+      .dash-board-table .dash-col-day { width: 72px; }
+      .dash-board-table .dash-col-week { width: 80px; }
+    }
+
   </style>
 </head>
 <body class="text-slate-800">
