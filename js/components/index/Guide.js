@@ -201,19 +201,19 @@ export default {
             <div style="display:none" class="text-xs text-slate-400 text-center py-8 border border-dashed rounded-xl">
               请将 chart1.png 上传到网站根目录（与 index.html 同级）
             </div>
-            <figcaption class="text-xs text-slate-500 text-center">图 1 · 双趋势线与 K 线评分示意（示例）</figcaption>
+            <figcaption class="text-xs text-slate-500 text-center">图 1 · 双趋势线与K线评分示意：趋势线上涨为绿线，下跌为橙线。</figcaption>
           </figure>
 
           <!-- 图 2 -->
           <figure class="space-y-2">
-            <img src="./chart2.png" alt="双趋势线与评分示例图二"
+            <img src="./chart2.png" alt="上涨标签和下涨标签示例图二"
                  class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[480px]"
                  loading="lazy"
                  onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');">
             <div style="display:none" class="text-xs text-slate-400 text-center py-8 border border-dashed rounded-xl">
               请将 chart2.png 上传到网站根目录（与 index.html 同级）
             </div>
-            <figcaption class="text-xs text-slate-500 text-center">图 2 · 转色与评分配合示意（示例）</figcaption>
+            <figcaption class="text-xs text-slate-500 text-center">图 2 · 上涨标签和下跌标签示意（示例）</figcaption>
           </figure>
 
           <div class="bg-slate-50 rounded-xl p-4 space-y-2">
