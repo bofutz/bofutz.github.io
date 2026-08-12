@@ -7,12 +7,19 @@ import { request } from "./http.js";
 export const etfApi = {
   // 获取公开/核心看板行情数据 (底层 JSON 接口)
   async fetchEtfRawData() {
-    const rawUrl = atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=");
-    const res = await fetch(rawUrl).catch(() => null);
-    if (!res || !res.ok) {
-      throw new Error("获取远程行情数据失败");
+    // 使用 globalThis 防止在非浏览器环境（如 Node.js 自动化测试流水线）中报 atob 未定义
+    const rawUrl = globalThis.atob ? globalThis.atob("aHR0cHM6Ly9ldGYuaGFoYWd3LmV1Lm9yZy8=") : "https://etf.hahagw.eu.org/";
+    
+    try {
+      const res = await fetch(rawUrl);
+      if (!res || !res.ok) {
+        throw new Error("获取远程行情数据失败: 响应状态异常");
+      }
+      return await res.json();
+    } catch (err) {
+      // 规范化错误捕获，避免静默吞异常触发代码质量扫描警告
+      throw new Error("获取远程行情数据失败: " + (err.message || "网络错误"));
     }
-    return res.json();
   },
 
   // 获取前台通用监控标的列表
