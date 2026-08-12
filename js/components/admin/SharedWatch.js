@@ -1,5 +1,5 @@
 /**
- * 波幅探长 - 后台【通用监控列表】分块组件
+ * 波幅探长 - 后台【监控列表列表】分块组件
  * js/components/admin/SharedWatch.js
  */
 import { store } from "../../store.js";
@@ -141,7 +141,7 @@ export default {
     <div class="space-y-4 select-none">
       <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <div>
-          <h2 class="text-xl font-bold text-slate-800">通用监控列表</h2>
+          <h2 class="text-xl font-bold text-slate-800">监控列表列表</h2>
           <p class="text-xs text-slate-400 mt-0.5">管理前台通用公开监控标的 · 支持批量导入</p>
         </div>
         <div class="flex gap-2 flex-wrap">
