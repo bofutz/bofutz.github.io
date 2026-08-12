@@ -5,7 +5,8 @@
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
 
-const { ref, reactive, onMounted } = Vue;
+// 修复：改用 window.Vue
+const { ref, reactive, onMounted } = window.Vue;
 
 export default {
   name: "PromoMgmt",
@@ -192,16 +193,17 @@ export default {
       <div v-if="modalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="modalVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3 shadow-2xl">
           <h3 class="font-bold text-slate-800">{{ promoForm.id ? '编辑' : '新增' }}优惠码</h3>
+          <!-- 修复：补充 input 闭合斜杠 -->
           <input
             v-model="promoForm.code"
             placeholder="代码（例如：DISCOUNT10）"
             class="w-full border px-3 py-2 rounded-lg text-sm font-mono uppercase focus:theme-border outline-none"
-          >
+          />
           <input
             v-model="promoForm.name"
             placeholder="名称（例如：新人优惠）"
             class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
-          >
+          />
 
           <div class="grid grid-cols-2 gap-2">
             <select v-model="promoForm.discount_type" class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
@@ -213,22 +215,22 @@ export default {
               v-model.number="promoForm.discount_value"
               placeholder="折扣值"
               class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
-            >
+            />
           </div>
 
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-[10px] text-slate-400 block mb-0.5">生效开始</label>
-              <input type="datetime-local" v-model="promoForm.startLocal" class="w-full border px-2 py-1.5 rounded-lg text-xs focus:theme-border outline-none">
+              <input type="datetime-local" v-model="promoForm.startLocal" class="w-full border px-2 py-1.5 rounded-lg text-xs focus:theme-border outline-none" />
             </div>
             <div>
               <label class="text-[10px] text-slate-400 block mb-0.5">生效截止</label>
-              <input type="datetime-local" v-model="promoForm.endLocal" class="w-full border px-2 py-1.5 rounded-lg text-xs focus:theme-border outline-none">
+              <input type="datetime-local" v-model="promoForm.endLocal" class="w-full border px-2 py-1.5 rounded-lg text-xs focus:theme-border outline-none" />
             </div>
           </div>
 
           <label class="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" v-model="promoForm.enabled"> 启用状态
+            <input type="checkbox" v-model="promoForm.enabled" /> 启用状态
           </label>
 
           <div class="flex justify-end gap-2 pt-2">
