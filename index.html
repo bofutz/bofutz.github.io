@@ -102,12 +102,14 @@
     import Vote from "./js/components/index/Vote.js";
     import Tickets from "./js/components/index/Tickets.js";
     import Guide from "./js/components/index/Guide.js";
+    import Query from "./js/components/index/Query.js";
 
     const { createApp, ref, computed, onMounted, watch } = Vue;
 
     const routes = {
       "/": "dashboard-view",
       "/plan": "plan-view",
+      "/query": "query-view",
       "/profile": "profile-view",
       "/vote": "vote-view",
       "/tickets": "tickets-view",
@@ -145,6 +147,7 @@
               referralCode: d.referral_code,
               vipDaysLeft: d.shared_vip_days ?? d.vip_days_left ?? 0,
               vipLevel: d.vip_level ?? 0,
+              chartCredits: d.chart_credits ?? 0,
             });
             if (d.security_set != null) {
               store.setSecuritySet?.(!!d.security_set);
@@ -190,6 +193,7 @@
     app.component("vote-view", Vote);
     app.component("tickets-view", Tickets);
     app.component("guide-view", Guide);
+    app.component("query-view", Query);
 
     app.mount("#app");
   </script>
