@@ -88,7 +88,7 @@ export default {
                 全量列表 + 图表，不只看触发
               </div>
               <p class="text-xs text-slate-600 leading-relaxed">
-                通用监控会列出池内<strong>全部</strong>标的：未触发时显示 “-”，仍可打开半日线 / 日线 / 周线图表。真正价值往往在「没触发也能看结构」。
+                监控会列出池内<strong>全部</strong>标的：未触发时显示 “-”，仍可打开半日线 / 日线 / 周线图表。真正价值往往在「没触发也能看结构」。
               </p>
             </div>
             <div class="bg-slate-50 rounded-xl p-4">
