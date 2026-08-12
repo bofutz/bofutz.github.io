@@ -2,7 +2,7 @@
  * 波幅探长 - 套餐、优惠码与订单 API
  * js/api/plan.js
  *
- * 定制监控：可提交任意只数；组数 = ceil(只数 / custom_max_symbols)
+ * 支持 orderType: vip | chart_credits
  * 后端按 symbol_count / 组数计费与开通
  */
 import { request } from "./http.js";
@@ -51,35 +51,6 @@ export const planApi = {
    * - groups: 定制组数（可选，后端也会按 custom_items 重算）
    */
   async submitOrder(orderData) {
-    const isCustom = orderData.orderType === "custom_watchlist";
-
-    let customItems;
-    if (isCustom && Array.isArray(orderData.customItems)) {
-      customItems = orderData.customItems
-        .map((it) => ({
-          etf_code: String(it.etf_code || it.code || "")
-            .trim()
-            .toUpperCase(),
-          etf_name: String(it.etf_name || it.name || "").trim() || undefined,
-        }))
-        .filter((it) => /^\d{6}$/.test(it.etf_code));
-    }
-
-    const symbolCount = isCustom
-      ? customItems?.length || Number(orderData.symbolCount) || 0
-      : 1;
-
-    const groups = isCustom
-      ? Math.max(
-          1,
-          Number(orderData.groups) ||
-            this.calcCustomGroups(
-              symbolCount,
-              orderData.perGroup || 3
-            )
-        )
-      : 1;
-
     const body = {
       plan_id: orderData.planId,
       amount: Number(orderData.amount),
@@ -87,13 +58,9 @@ export const planApi = {
       promo_code: orderData.promoCode
         ? String(orderData.promoCode).trim().toUpperCase()
         : undefined,
+      // vip = 监控天数；chart_credits = 图表次数包
       order_type: orderData.orderType || "vip",
-      // 定制：标的列表 + 只数 + 组数（后端按此开通与校验金额）
-      custom_items: isCustom ? customItems : undefined,
-      symbol_count: isCustom ? symbolCount : 1,
-      groups: isCustom ? groups : 1,
 
-      // 游客支付即注册
       register_username: orderData.registerUsername
         ? String(orderData.registerUsername).trim()
         : undefined,
