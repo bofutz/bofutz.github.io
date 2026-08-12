@@ -197,7 +197,7 @@ export default {
             <label class="text-xs text-slate-500 mb-1 block font-bold">前台上架范围</label>
             <select v-model="planForm.plan_type" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none font-medium">
               <option value="both">通用 + 定制（推荐）</option>
-              <option value="shared">仅通用监控分类</option>
+              <option value="shared">仅监控列表分类</option>
               <option value="custom">仅定制监控分类</option>
             </select>
           </div>
