@@ -18,6 +18,20 @@ export default {
   name: "Plan",
   setup() {
     const planTab = ref("vip"); // vip | credits
+
+    const readPlanTabFromHash = () => {
+      try {
+        const h = window.location.hash || "";
+        const q = h.includes("?") ? h.split("?")[1] : "";
+        const params = new URLSearchParams(q);
+        const tab = params.get("tab") || params.get("type") || "";
+        if (tab === "credits" || tab === "chart" || tab === "query") return "credits";
+        if (tab === "vip" || tab === "shared" || tab === "monitor") return "vip";
+      } catch (_) {}
+      return null;
+    };
+    const fromHash = readPlanTabFromHash();
+    if (fromHash) planTab.value = fromHash;
     const vipPlans = ref([]);
     const creditPlans = ref([]);
     const loading = ref(false);
@@ -108,7 +122,18 @@ export default {
       }
     };
 
-    watch(planTab, () => {
+    watch(planTab, (v) => {
+      try {
+        const base = "#/plan";
+        const q = v === "credits" ? "?tab=credits" : "?tab=vip";
+        if ((window.location.hash || "").split("?")[0] === "#/plan" ||
+            (window.location.hash || "").startsWith("#/plan")) {
+          const next = base + q;
+          if (window.location.hash !== next) {
+            history.replaceState(null, "", next);
+          }
+        }
+      } catch (_) {}
       const list = displayPlans.value;
       if (list.length) selectPlan(list[0]);
       else {
@@ -227,9 +252,17 @@ export default {
     };
 
     onMounted(() => {
+      const tab = readPlanTabFromHash();
+      if (tab) planTab.value = tab;
       const ch = settings.value.default_pay_channel || "wechat";
       payChannel.value = ch === "alipay" ? "alipay" : "wechat";
       loadPlans();
+      const onHash = () => {
+        const t2 = readPlanTabFromHash();
+        if (t2) planTab.value = t2;
+      };
+      window.addEventListener("hashchange", onHash);
+      // 组件卸载时由页面切换自然丢弃监听即可（SPA 会整页替换组件）
     });
 
     return {
