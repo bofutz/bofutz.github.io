@@ -38,6 +38,10 @@ export default {
       wechat_qr_url: "",
       default_pay_channel: "wechat",
       custom_max_symbols: "3",
+      chart_query_batch_hours: "2",
+      chart_query_retain_trading_days: "2",
+      chart_query_intervals: '["daily"]',
+      chart_query_deduct_on: "submit",
 
       // 票选
       vote_monthly_limit: "10",
@@ -245,10 +249,34 @@ export default {
               <input v-model="form.free_top_n_charts" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
-              <span class="text-slate-500">定制每组只数</span>
-              <input v-model="form.custom_max_symbols" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm">
-              <span class="text-[10px] text-slate-400">用户可添加多只；每 N 只算 1 组套餐价</span>
+              <span class="text-slate-500">（已废弃）定制每组只数</span>
+              <input v-model="form.custom_max_symbols" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm opacity-50">
             </label>
+          </div>
+          <div class="border rounded-xl p-3 bg-slate-50/80 space-y-3">
+            <div class="text-xs font-bold text-slate-700">自主查询</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="text-xs space-y-1">
+                <span class="text-slate-500">批量生成间隔（小时）</span>
+                <input v-model="form.chart_query_batch_hours" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+              </label>
+              <label class="text-xs space-y-1">
+                <span class="text-slate-500">图片保留交易日</span>
+                <input v-model="form.chart_query_retain_trading_days" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+              </label>
+              <label class="text-xs space-y-1">
+                <span class="text-slate-500">开放周期 JSON</span>
+                <input v-model="form.chart_query_intervals" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-white" placeholder='["daily"]'>
+                <span class="text-[10px] text-slate-400">例 ["daily"] 或 ["half_day","daily","weekly"]</span>
+              </label>
+              <label class="text-xs space-y-1">
+                <span class="text-slate-500">扣次时机</span>
+                <select v-model="form.chart_query_deduct_on" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="submit">提交时扣次</option>
+                  <option value="success">成功时扣次</option>
+                </select>
+              </label>
+            </div>
           </div>
           <div class="flex flex-wrap gap-4 text-xs">
             <label class="inline-flex items-center gap-2 cursor-pointer">
