@@ -31,7 +31,7 @@ export default {
 
     const approve = async (order) => {
       const userLabel = order.username || order.register_username || "游客";
-      if (!confirm(`确认通过该订单？\n用户：${userLabel}\n类型：${order.order_type === "custom_watchlist" ? "定制监控" : "通用VIP"}\n金额：¥${order.amount}`)) return;
+      if (!confirm(`确认通过该订单？\n用户：${userLabel}\n类型：${order.order_type === "chart_credits" ? "查询次数" : order.order_type === "custom_watchlist" ? "定制监控" : "监控VIP"}\n金额：¥${order.amount}`)) return;
       try {
         await adminApi.approveOrder(order.id, order.user_id);
         store.showToast("订单已审核通过");
@@ -92,7 +92,7 @@ export default {
       <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <div>
           <h2 class="text-xl font-bold text-slate-800">订单审核</h2>
-          <p class="text-xs text-slate-400 mt-0.5">审核用户支付凭证，开通通用VIP或定制监控</p>
+          <p class="text-xs text-slate-400 mt-0.5">审核支付凭证：监控 VIP 按天 / 图表查询按次</p>
         </div>
         <div class="flex gap-2 flex-wrap items-center">
           <div class="flex bg-white border border-slate-200 rounded-lg overflow-hidden text-xs">
@@ -149,9 +149,9 @@ export default {
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-medium">{{ o.plan_id }}</span>
                   <span
                     class="text-[10px] ml-1.5 px-1.5 py-0.5 rounded font-bold"
-                    :class="o.order_type === 'custom_watchlist' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'"
+                    :class="o.order_type === 'chart_credits' ? 'bg-sky-50 text-sky-600' : o.order_type === 'custom_watchlist' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'"
                   >
-                    {{ o.order_type === 'custom_watchlist' ? '定制' : '通用' }}
+                    {{ o.order_type === 'chart_credits' ? '次数' : o.order_type === 'custom_watchlist' ? '定制' : '监控' }}
                   </span>
                 </td>
                 <td class="py-3.5 px-4 font-bold text-slate-800 font-mono">¥{{ Number(o.amount).toFixed(2) }}</td>
