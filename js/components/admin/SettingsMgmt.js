@@ -6,6 +6,7 @@
  */
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
+import PromoMgmt from "./PromoMgmt.js";
 
 const { ref, reactive, onMounted } = Vue;
 
@@ -19,7 +20,9 @@ const DEFAULT_PLATFORMS = [
 
 export default {
   name: "SettingsMgmt",
+  components: { PromoMgmt },
   setup() {
+    const settingsTab = ref("general");
     const loading = ref(false);
     const saving = ref(false);
 
@@ -177,6 +180,7 @@ export default {
     onMounted(loadSettings);
 
     return {
+      settingsTab,
       form,
       platforms,
       loading,
@@ -188,25 +192,36 @@ export default {
     };
   },
   template: `
-    <div class="space-y-6 max-w-3xl select-none">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-bold text-slate-800">系统设置</h2>
-        <div class="flex gap-2">
-          <button @click="loadSettings" class="text-xs text-slate-500 px-3 py-1.5 rounded-lg border hover:bg-slate-50">
-            刷新
-          </button>
-          <button @click="saveSettings" :disabled="saving"
+    <div class="space-y-5 max-w-4xl select-none">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800 tracking-tight">系统设置</h2>
+          <p class="text-[11px] text-slate-400 mt-0.5">注册 / 支付 / 查询 / 票选 / 广告；优惠码见右侧子页</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-bold">
+            <button type="button" @click="settingsTab='general'" class="px-3 py-1.5 rounded-md"
+                    :class="settingsTab==='general' ? 'theme-bg text-white' : 'text-slate-500'">常规</button>
+            <button type="button" @click="settingsTab='promo'" class="px-3 py-1.5 rounded-md"
+                    :class="settingsTab==='promo' ? 'theme-bg text-white' : 'text-slate-500'">优惠码</button>
+          </div>
+          <button v-show="settingsTab==='general'" @click="loadSettings" class="text-xs text-slate-500 px-3 py-1.5 rounded-lg border hover:bg-slate-50">刷新</button>
+          <button v-show="settingsTab==='general'" @click="saveSettings" :disabled="saving"
                   class="text-xs theme-bg text-white px-4 py-1.5 rounded-lg font-bold disabled:opacity-50">
             {{ saving ? '保存中...' : '保存全部' }}
           </button>
         </div>
       </div>
 
-      <div v-if="loading" class="text-center py-10 text-slate-400 text-sm">
+      <div v-show="settingsTab==='promo'" class="bg-white rounded-2xl border border-slate-100 p-2 shadow-sm">
+        <PromoMgmt />
+      </div>
+
+      <div v-if="loading && settingsTab==='general'" class="text-center py-10 text-slate-400 text-sm">
         <i class="fa-solid fa-spinner animate-spin mr-2"></i>加载中...
       </div>
 
-      <template v-else>
+      <template v-else-if="settingsTab==='general'">
         <!-- 注册与邀请返利 -->
         <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
           <h3 class="font-bold text-slate-700 text-sm border-b pb-2">注册与邀请返利</h3>
@@ -249,31 +264,30 @@ export default {
               <input v-model="form.free_top_n_charts" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
-              <span class="text-slate-500">（已废弃）定制每组只数</span>
-              <input v-model="form.custom_max_symbols" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm opacity-50">
+              <span class="text-slate-400">（废弃）定制每组只数</span>
+              <input v-model="form.custom_max_symbols" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm opacity-40">
             </label>
           </div>
-          <div class="border rounded-xl p-3 bg-slate-50/80 space-y-3">
+          <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4 space-y-3">
             <div class="text-xs font-bold text-slate-700">自主查询</div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label class="text-xs space-y-1">
-                <span class="text-slate-500">批量生成间隔（小时）</span>
+                <span class="text-slate-500">批量间隔（小时）</span>
                 <input v-model="form.chart_query_batch_hours" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
               </label>
               <label class="text-xs space-y-1">
                 <span class="text-slate-500">图片保留交易日</span>
                 <input v-model="form.chart_query_retain_trading_days" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
               </label>
-              <label class="text-xs space-y-1">
+              <label class="text-xs space-y-1 sm:col-span-2">
                 <span class="text-slate-500">开放周期 JSON</span>
-                <input v-model="form.chart_query_intervals" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-white" placeholder='["daily"]'>
-                <span class="text-[10px] text-slate-400">例 ["daily"] 或 ["half_day","daily","weekly"]</span>
+                <input v-model="form.chart_query_intervals" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-white">
               </label>
               <label class="text-xs space-y-1">
                 <span class="text-slate-500">扣次时机</span>
                 <select v-model="form.chart_query_deduct_on" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
-                  <option value="submit">提交时扣次</option>
-                  <option value="success">成功时扣次</option>
+                  <option value="submit">提交时</option>
+                  <option value="success">成功时</option>
                 </select>
               </label>
             </div>
