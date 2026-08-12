@@ -23,7 +23,7 @@ export default {
       tag: "",
       sort_order: 0,
       enabled: true,
-      plan_type: "both",
+      plan_type: "shared",
       isEdit: false,
     });
 
@@ -61,7 +61,7 @@ export default {
           tag: "",
           sort_order: 0,
           enabled: true,
-          plan_type: "both",
+          plan_type: "shared",
           isEdit: false,
         });
       }
@@ -96,11 +96,11 @@ export default {
 
     const getPlanTypeLabel = (type) => {
       const map = {
-        shared: "仅通用",
-        custom: "仅定制",
-        both: "通用+定制",
+        shared: "监控 VIP",
+        custom: "（旧）定制",
+        both: "监控 VIP",
       };
-      return map[type] || "通用+定制";
+      return map[type] || "监控 VIP";
     };
 
     onMounted(loadPlans);
@@ -124,13 +124,13 @@ export default {
         <div>
           <h2 class="text-xl font-bold text-slate-800">套餐管理</h2>
           <p class="text-xs text-slate-400 mt-0.5">
-            设置套餐上架范围：选择「通用+定制」可在前台两个分类下同时售卖
+            管理「监控 VIP」按天套餐（图表查询次数请到「自主查询」页配置）
           </p>
         </div>
         <div class="flex gap-2 flex-wrap">
           <div class="flex bg-white border border-slate-200 rounded-lg overflow-hidden text-xs">
             <button
-              v-for="s in [{k:'all',t:'全部'},{k:'both',t:'通用+定制'},{k:'shared',t:'仅通用'},{k:'custom',t:'仅定制'}]"
+              v-for="s in [{k:'all',t:'全部'},{k:'shared',t:'监控'},{k:'both',t:'监控(both)'}]"
               :key="s.k"
               @click="planTypeFilter = s.k"
               class="px-3 py-2 border-l first:border-0"
@@ -196,9 +196,8 @@ export default {
           <div>
             <label class="text-xs text-slate-500 mb-1 block font-bold">前台上架范围</label>
             <select v-model="planForm.plan_type" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none font-medium">
-              <option value="both">通用 + 定制（推荐）</option>
-              <option value="shared">仅监控列表分类</option>
-              <option value="custom">仅定制监控分类</option>
+              <option value="shared">监控 VIP</option>
+              <option value="both">监控 VIP（兼容 both）</option>
             </select>
           </div>
 
