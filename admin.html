@@ -53,7 +53,7 @@
     <div class="flex flex-1 overflow-hidden">
       <!-- 侧边导航（已对齐最新命名） -->
       <aside class="w-56 bg-white border-r py-4 flex flex-col shrink-0">
-        <nav class="flex-1 space-y-1 px-3 custom-scrollbar overflow-y-auto">
+                <nav class="flex-1 space-y-1 px-3 custom-scrollbar overflow-y-auto">
           <div @click="currentTab='dashboard'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='dashboard'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-chart-pie w-4"></i> 数据概览
           </div>
@@ -63,26 +63,23 @@
           <div @click="currentTab='orders'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='orders'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-file-invoice-dollar w-4"></i> 订单审核
           </div>
+          <div @click="currentTab='tickets'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='tickets'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
+            <i class="fa-solid fa-headset w-4"></i> 客服工单
+          </div>
           <div @click="currentTab='plans'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='plans'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-tags w-4"></i> 套餐管理
-          </div>
-          <div @click="currentTab='shared'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='shared'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-list w-4"></i> 监控列表
           </div>
           <div @click="currentTab='chartQuery'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='chartQuery'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-magnifying-glass-chart w-4"></i> 自主查询
           </div>
-          <div @click="currentTab='vote'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='vote'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-check-to-slot w-4"></i> 票选监控
-          </div>
-          <div @click="currentTab='promos'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='promos'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-percent w-4"></i> 优惠码管理
-          </div>
           <div @click="currentTab='settings'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='settings'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-gear w-4"></i> 系统设置
           </div>
-          <div @click="currentTab='tickets'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='tickets'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-headset w-4"></i> 客服工单
+          <div @click="currentTab='vote'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='vote'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
+            <i class="fa-solid fa-check-to-slot w-4"></i> 票选监控
+          </div>
+          <div @click="currentTab='shared'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='shared'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
+            <i class="fa-solid fa-list w-4"></i> 监控列表
           </div>
         </nav>
       </aside>
@@ -158,7 +155,6 @@
           shared:    "SharedWatch",
           chartQuery:"ChartQueryMgmt",
           vote:      "VoteMgmt",
-          promos:    "PromoMgmt",
           settings:  "SettingsMgmt",
           tickets:   "TicketMgmt",
         };
