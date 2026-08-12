@@ -365,7 +365,7 @@ export default {
 
         <div v-if="!store.isLoggedIn && payRegisterEnabled" class="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-2">
           <div class="text-xs font-bold text-amber-800">支付审核通过后将使用以下账号自动注册</div>
-          <input v-model="payRegister.username" @input="onRegisterUsernameInput" placeholder="账号（字母/数字）" class="w-full border rounded-lg px-3 py-2 text-sm">
+          <input v-model="payRegister.username" @input="onRegisterUsernameInput" placeholder="账号（6位以上字母或数字）" class="w-full border rounded-lg px-3 py-2 text-sm">
           <p v-if="usernameCheck.msg" class="text-[11px]" :class="usernameCheck.available?'text-emerald-600':'text-red-500'">{{ usernameCheck.msg }}</p>
           <input v-model="payRegister.password" type="password" placeholder="密码至少6位" class="w-full border rounded-lg px-3 py-2 text-sm">
           <input v-model="payRegister.refCode" placeholder="邀请码（选填）" class="w-full border rounded-lg px-3 py-2 text-sm">
