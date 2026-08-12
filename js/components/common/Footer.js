@@ -7,7 +7,8 @@
  */
 import { store } from "../../store.js";
 
-const { computed } = Vue;
+// 修复：改用 window.Vue
+const { computed } = window.Vue;
 
 export default {
   name: "Footer",
@@ -15,7 +16,8 @@ export default {
     const platforms = computed(() => {
       try {
         return store.getSocialPlatforms ? store.getSocialPlatforms() : [];
-      } catch {
+      // 修复：补充 err 绑定，防止严格 linter 报错
+      } catch (err) {
         return [];
       }
     });
