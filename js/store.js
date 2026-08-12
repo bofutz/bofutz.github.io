@@ -14,6 +14,7 @@ const state = reactive({
   referralCode: "",
   vipDaysLeft: 0,
   vipLevel: 0, // 0=无 1=月 2=季 3=半年 4=年
+  chartCredits: 0, // 自主查询剩余次数
 
   // 安全问题是否已设置（个人中心红条；登录后拉取）
   securitySet: true,
@@ -70,6 +71,8 @@ export const store = {
         state.vipLevel = parseLevel(
           localStorage.getItem(CONFIG.STORAGE_KEYS.VIP_LEVEL)
         );
+        state.chartCredits =
+          parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.CHART_CREDITS), 10) || 0;
         state.isVip = state.vipDaysLeft > 0;
       } else {
         this.clearUserState();
@@ -79,7 +82,7 @@ export const store = {
     }
   },
 
-  setUserState({ token, username, referralCode, vipDaysLeft, vipLevel }) {
+  setUserState({ token, username, referralCode, vipDaysLeft, vipLevel, chartCredits }) {
     if (token) localStorage.setItem(CONFIG.STORAGE_KEYS.TOKEN, token);
     if (username) localStorage.setItem(CONFIG.STORAGE_KEYS.USERNAME, username);
     if (referralCode != null)
@@ -90,6 +93,11 @@ export const store = {
       const lv = parseLevel(vipLevel);
       localStorage.setItem(CONFIG.STORAGE_KEYS.VIP_LEVEL, String(lv));
       state.vipLevel = lv;
+    }
+    if (chartCredits != null) {
+      const c = Math.max(0, parseInt(chartCredits, 10) || 0);
+      localStorage.setItem(CONFIG.STORAGE_KEYS.CHART_CREDITS, String(c));
+      state.chartCredits = c;
     }
 
     state.isLoggedIn = true;
@@ -112,11 +120,21 @@ export const store = {
     state.referralCode = "";
     state.vipDaysLeft = 0;
     state.vipLevel = 0;
+    state.chartCredits = 0;
+    localStorage.removeItem(CONFIG.STORAGE_KEYS.CHART_CREDITS);
     state.securitySet = true;
   },
 
   setSecuritySet(val) {
     state.securitySet = !!val;
+  },
+
+  setChartCredits(n) {
+    const c = Math.max(0, parseInt(n, 10) || 0);
+    state.chartCredits = c;
+    try {
+      localStorage.setItem(CONFIG.STORAGE_KEYS.CHART_CREDITS, String(c));
+    } catch (_) {}
   },
 
   showToast(msg, type = "success") {
