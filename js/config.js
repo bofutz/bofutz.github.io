@@ -45,14 +45,14 @@ export const CONFIG = {
   },
 
   USERNAME_PATTERN: /^[A-Za-z0-9]+$/,
-  USERNAME_MIN: 4,
+  USERNAME_MIN: 6,
   USERNAME_MAX: 32,
 
   DEFAULT_PUBLIC_SETTINGS: {
     gift_register_days: "1",
     gift_inviter_days: "0",
     gift_invitee_days: "3",
-    referral_code_min_len: "4",
+    referral_code_min_len: "8",
     referral_code_max_len: "16",
     referral_rebate_percent: "10",
     referral_rebate_min_days: "90",
