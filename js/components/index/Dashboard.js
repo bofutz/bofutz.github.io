@@ -10,7 +10,8 @@ import { etfApi } from "../../api/etf.js";
 import { watchlistApi } from "../../api/watchlist.js";
 import { CONFIG } from "../../config.js";
 
-const { ref, computed, onMounted } = Vue;
+// 修复：改用 window.Vue 防止 no-undef 报错
+const { ref, computed, onMounted } = window.Vue;
 
 function settingOn(val) {
   return val === "1" || val === 1 || val === true || val === "true";
@@ -95,7 +96,6 @@ export default {
       if (item.am_status && item.am_status !== "-" && item.am_status !== "--") return item.am_status;
       return null;
     };
-
 
     const getWeekDays = (dateStr) => {
       const [y, m, d] = parseYMD(dateStr);
@@ -201,7 +201,8 @@ export default {
           month: "2-digit",
           day: "2-digit",
         }).format(new Date(ts));
-      } catch {
+      // 修复：补充 catch 参数，防止部分 linter 报警告
+      } catch (err) {
         return new Date(ts).toISOString().slice(0, 10);
       }
     };
@@ -688,7 +689,8 @@ export default {
     <div class="max-w-7xl mx-auto space-y-3 sm:space-y-4 select-none">
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center w-full">
         <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3.5"></i>
-        <input v-model="searchQuery" type="search" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
+        <!-- 修复：补全 input 的自闭合斜杠 -->
+        <input v-model="searchQuery" type="search" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3" />
       </div>
 
       <div v-if="loading" class="text-center py-12 text-slate-400">
@@ -698,8 +700,6 @@ export default {
 
       <template v-else>
         <!-- 定制监控已下线 -->
-
-
 
         <!-- ===== 通用数据表 ===== -->
         <div v-if="!processedData.list.length" class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
@@ -805,11 +805,13 @@ export default {
           <p class="text-xs text-slate-500">{{ settings.tip_note || '自愿打赏，不解锁任何权限' }}</p>
           <div class="flex justify-center gap-4 flex-wrap">
             <div v-if="tipWechatSrc" class="space-y-1">
-              <img :src="tipWechatSrc" class="w-28 h-28 object-contain border rounded-lg" alt="微信">
+              <!-- 修复：补全 img 的自闭合斜杠 -->
+              <img :src="tipWechatSrc" class="w-28 h-28 object-contain border rounded-lg" alt="微信" />
               <div class="text-[11px] text-slate-500">微信</div>
             </div>
             <div v-if="tipAlipaySrc" class="space-y-1">
-              <img :src="tipAlipaySrc" class="w-28 h-28 object-contain border rounded-lg" alt="支付宝">
+              <!-- 修复：补全 img 的自闭合斜杠 -->
+              <img :src="tipAlipaySrc" class="w-28 h-28 object-contain border rounded-lg" alt="支付宝" />
               <div class="text-[11px] text-slate-500">支付宝</div>
             </div>
             <p v-if="!tipWechatSrc && !tipAlipaySrc" class="text-xs text-slate-400">后台尚未配置打赏收款码</p>
