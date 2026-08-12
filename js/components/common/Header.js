@@ -21,19 +21,22 @@ export default {
     // 桌面顶栏
     const nav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
+      { path: "#/profile", label: "个人中心", icon: "fa-solid fa-id-card" },
       { path: "#/query", label: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
-      { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
       { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
-      { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
+      { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
+      { path: "#/tickets", label: "客服工单", icon: "fa-solid fa-headset" },
+      { path: "#/guide", label: "图表说明", icon: "fa-solid fa-book-open" },
     ];
+    // 桌面与手机同一顺序
     const mobileNav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
-      { path: "#/query", label: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
       { path: "#/profile", label: "个人中心", icon: "fa-solid fa-id-card" },
-      { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
+      { path: "#/query", label: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
       { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
-      { path: "#/tickets", label: "工单反馈", icon: "fa-solid fa-headset" },
-      { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
+      { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
+      { path: "#/tickets", label: "客服工单", icon: "fa-solid fa-headset" },
+      { path: "#/guide", label: "图表说明", icon: "fa-solid fa-book-open" },
     ];
 
     // 响应式当前路由，保证导航高亮与页面同步
@@ -43,9 +46,11 @@ export default {
     };
 
     const isActive = (path) => {
-      const hash = (currentHash.value || "#/").split("?")[0];
-      if (path === "#/") return hash === "#/" || hash === "#" || hash === "";
-      return hash === path || hash.startsWith(path + "/");
+      let hash = (currentHash.value || "#/").split("?")[0];
+      if (!hash || hash === "#") hash = "#/";
+      if (path === "#/") return hash === "#/" || hash === "";
+      // 严格匹配，避免 "#/" 误匹配 "#/vote"
+      return hash === path;
     };
 
     const openAuth = (mode = "login") => {
@@ -82,9 +87,12 @@ export default {
 
     onMounted(() => {
       document.addEventListener("click", closeMenus);
+      window.addEventListener("hashchange", syncHash);
+      syncHash();
     });
     onUnmounted(() => {
       document.removeEventListener("click", closeMenus);
+      window.removeEventListener("hashchange", syncHash);
     });
 
     return {
