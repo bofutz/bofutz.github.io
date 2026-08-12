@@ -7,7 +7,8 @@ import { store } from "../../store.js";
 import { voteApi } from "../../api/vote.js";
 import { adminApi } from "../../api/admin.js";
 
-const { ref, reactive, onMounted, computed } = Vue;
+// 修复：改用 window.Vue
+const { ref, reactive, onMounted, computed } = window.Vue;
 
 export default {
   name: "VoteMgmt",
