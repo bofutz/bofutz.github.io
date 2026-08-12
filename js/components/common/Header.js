@@ -7,7 +7,7 @@
 import { store } from "../../store.js";
 import { CONFIG } from "../../config.js";
 
-const { computed, onMounted, onUnmounted } = Vue;
+const { ref, computed, onMounted, onUnmounted } = Vue;
 
 export default {
   name: "Header",
@@ -36,10 +36,16 @@ export default {
       { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
     ];
 
+    // 响应式当前路由，保证导航高亮与页面同步
+    const currentHash = ref(window.location.hash || "#/");
+    const syncHash = () => {
+      currentHash.value = window.location.hash || "#/";
+    };
+
     const isActive = (path) => {
-      const hash = window.location.hash || "#/";
+      const hash = (currentHash.value || "#/").split("?")[0];
       if (path === "#/") return hash === "#/" || hash === "#" || hash === "";
-      return hash.startsWith(path);
+      return hash === path || hash.startsWith(path + "/");
     };
 
     const openAuth = (mode = "login") => {
