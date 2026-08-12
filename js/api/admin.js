@@ -124,7 +124,29 @@ export const adminApi = {
     });
   },
 
-  // 6. 定制监控管理
+
+  // 自主查询 / 次数套餐
+  async fetchChartQueries(status = "") {
+    const q = status ? `?status=${encodeURIComponent(status)}` : "";
+    return request(`/api/admin/chart-queries${q}`);
+  },
+  async fetchChartCreditPlans() {
+    return request("/api/admin/chart-credit-plans");
+  },
+  async saveChartCreditPlan(data) {
+    return request("/api/admin/chart-credit-plans", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  async deleteChartCreditPlan(id) {
+    return request("/api/admin/chart-credit-plans", {
+      method: "DELETE",
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  // 6. 定制监控管理（兼容旧数据，前台已下线）
   async fetchCustomWatchlist() {
     return request("/api/admin/watchlist/custom");
   },
