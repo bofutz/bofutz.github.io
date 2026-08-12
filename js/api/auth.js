@@ -3,7 +3,7 @@
  * js/api/auth.js
  */
 import { request } from "./http.js";
-import { CONFIG } from "../config.js";
+// 已移除未使用的 CONFIG 导入，防止 Linter 抛出 no-unused-vars 告警中断编译
 
 export const authApi = {
 
@@ -18,7 +18,7 @@ export const authApi = {
     return request("/api/login", {
       method: "POST",
       body: JSON.stringify({
-        username: username.trim(),
+        username: String(username || "").trim(),
         password,
       }),
     });
@@ -29,10 +29,10 @@ export const authApi = {
     return request("/api/register", {
       method: "POST",
       body: JSON.stringify({
-        username: username.trim(),
+        username: String(username || "").trim(),
         password,
-        ref_code: refCode ? refCode.trim() : undefined,
-        code: emailCode ? emailCode.trim() : undefined,
+        ref_code: refCode ? String(refCode).trim() : undefined,
+        code: emailCode ? String(emailCode).trim() : undefined,
       }),
     });
   },
@@ -50,7 +50,7 @@ export const authApi = {
     return request("/api/send-code", {
       method: "POST",
       body: JSON.stringify({
-        email: email.trim(),
+        email: String(email || "").trim(),
         turnstileToken,
       }),
     });
