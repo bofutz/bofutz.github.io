@@ -2,10 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>波幅探长 - 波幅监控</title>
   <meta name="description" content="波幅探长：ETF 波幅监控、票选与定制图表服务" />
-  <link rel="icon" type="image/png" href="./logo.png">
+  <link rel="icon" type="image/png" href="./logo.png" />
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -16,8 +16,8 @@
   <!-- Viewer.js -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.js"></script>
-  <!-- Turnstile -->
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+  <!-- Turnstile: 移除 defer 以符合标准 -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async></script>
 
   <style>
     :root {
@@ -59,7 +59,6 @@
       .dash-board-table .dash-col-day { width: 72px; }
       .dash-board-table .dash-col-week { width: 80px; }
     }
-
   </style>
 </head>
 <body class="text-slate-800">
@@ -104,7 +103,8 @@
     import Guide from "./js/components/index/Guide.js";
     import Query from "./js/components/index/Query.js";
 
-    const { createApp, ref, computed, onMounted, watch } = Vue;
+    // 使用 window.Vue 防止部分静态代码检查工具报 no-undef 错
+    const { createApp, ref, computed, onMounted, watch } = window.Vue;
 
     const routes = {
       "/": "dashboard-view",
@@ -132,28 +132,39 @@
           routePath.value = parseHash();
           store.state.menuOpen = false;
           store.state.userMenuOpen = false;
-          window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+          // 改用标准支持的滚动行为参数
+          window.scrollTo({ top: 0, behavior: "auto" });
         };
 
-        /** 登录态刷新：天数 + 等级 + 安全问题标记 */
         const refreshMe = async () => {
           if (!store.state.isLoggedIn) return;
           try {
             const res = await authApi.getMe();
-            const d = res?.data || res;
+            const d = res ? (res.data || res) : null;
             if (!d) return;
+
+            // 移除 ?? 等新语法，改用兼容性更好的判断，避免部分 CI 工具解析崩溃
+            const vipDays = d.shared_vip_days !== undefined && d.shared_vip_days !== null 
+              ? d.shared_vip_days 
+              : (d.vip_days_left !== undefined && d.vip_days_left !== null ? d.vip_days_left : 0);
+              
+            const vLevel = d.vip_level !== undefined && d.vip_level !== null ? d.vip_level : 0;
+            const cCredits = d.chart_credits !== undefined && d.chart_credits !== null ? d.chart_credits : 0;
+
             store.setUserState({
               username: d.username,
               referralCode: d.referral_code,
-              vipDaysLeft: d.shared_vip_days ?? d.vip_days_left ?? 0,
-              vipLevel: d.vip_level ?? 0,
-              chartCredits: d.chart_credits ?? 0,
+              vipDaysLeft: vipDays,
+              vipLevel: vLevel,
+              chartCredits: cCredits,
             });
-            if (d.security_set != null) {
-              store.setSecuritySet?.(!!d.security_set);
+
+            if (d.security_set !== undefined && d.security_set !== null) {
+              if (store.setSecuritySet) {
+                store.setSecuritySet(!!d.security_set);
+              }
             }
           } catch (e) {
-            // token 失效
             if (String(e.message || "").includes("401") || e.status === 401) {
               store.clearUserState();
             }
