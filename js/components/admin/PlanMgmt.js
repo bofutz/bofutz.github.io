@@ -5,7 +5,8 @@
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
 
-const { ref, reactive, computed, onMounted } = Vue;
+// 修复：改用 window.Vue
+const { ref, reactive, computed, onMounted } = window.Vue;
 
 export default {
   name: "PlanMgmt",
@@ -183,14 +184,15 @@ export default {
       <div v-if="modalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="modalVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3.5 shadow-2xl">
           <h3 class="font-bold text-slate-800">{{ planForm.isEdit ? '编辑套餐' : '新增套餐' }}</h3>
+          <!-- 修复：补充 input 闭合斜杠 -->
           <input
             v-model="planForm.name"
             placeholder="套餐名称（例如：月卡）"
             class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none"
-          >
+          />
           <div class="grid grid-cols-2 gap-2">
-            <input type="number" v-model.number="planForm.price" placeholder="价格（元）" class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
-            <input type="number" v-model.number="planForm.days" placeholder="有效期（天）" class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+            <input type="number" v-model.number="planForm.price" placeholder="价格（元）" class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
+            <input type="number" v-model.number="planForm.days" placeholder="有效期（天）" class="border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
           </div>
 
           <div>
@@ -201,10 +203,10 @@ export default {
             </select>
           </div>
 
-          <input v-model="planForm.tag" placeholder="角标文案（选填）" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
-          <input type="number" v-model.number="planForm.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="planForm.tag" placeholder="角标文案（选填）" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
+          <input type="number" v-model.number="planForm.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
           <label class="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" v-model="planForm.enabled"> 启用套餐
+            <input type="checkbox" v-model="planForm.enabled" /> 启用套餐
           </label>
 
           <div class="flex justify-end gap-2 pt-2">
