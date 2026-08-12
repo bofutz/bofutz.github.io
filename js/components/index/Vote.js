@@ -252,7 +252,7 @@ export default {
             <p class="text-xs sm:text-sm text-white/90 leading-relaxed max-w-3xl">
               Lv.{{ userStatus.minLevel }} 及以上会员每月可投票/新增最多
               <strong>{{ userStatus.monthlyLimit || 10 }}</strong> 只标的。
-              系统按得票实时排序，每月初可同步 Top 50 至通用监控。
+              系统按得票实时排序，每月初可同步 Top 50 至监控。
               <span v-if="etfOnlySetting">当前开启「仅 ETF」限制。</span>
             </p>
           </div>
