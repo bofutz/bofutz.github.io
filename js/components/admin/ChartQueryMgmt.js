@@ -4,7 +4,8 @@
 import { adminApi } from "../../api/admin.js";
 import { store } from "../../store.js";
 
-const { ref, reactive, onMounted, computed } = Vue;
+// 修复：使用 window.Vue 防止静态代码检查工具报 no-undef 错误
+const { ref, reactive, onMounted, computed } = window.Vue;
 
 export default {
   name: "ChartQueryMgmt",
@@ -230,30 +231,30 @@ export default {
           <div class="text-sm font-bold text-slate-700">{{ editing ? '编辑套餐' : '新增次数套餐' }}</div>
           <div>
             <label class="text-[11px] text-slate-500">名称</label>
-            <input v-model="planForm.name" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="如：体验包">
+            <input v-model="planForm.name" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="如：体验包" />
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-[11px] text-slate-500">价格（元）</label>
-              <input v-model.number="planForm.price" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <input v-model.number="planForm.price" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
               <label class="text-[11px] text-slate-500">次数</label>
-              <input v-model.number="planForm.credits" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <input v-model.number="planForm.credits" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-[11px] text-slate-500">角标</label>
-              <input v-model="planForm.tag" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="推荐">
+              <input v-model="planForm.tag" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="推荐" />
             </div>
             <div>
               <label class="text-[11px] text-slate-500">排序</label>
-              <input v-model.number="planForm.sort_order" type="number" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <input v-model.number="planForm.sort_order" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
           <label class="flex items-center gap-2 text-xs text-slate-600">
-            <input type="checkbox" v-model="planForm.enabled"> 启用
+            <input type="checkbox" v-model="planForm.enabled" /> 启用
           </label>
           <div class="flex gap-2">
             <button @click="savePlan" class="theme-bg text-white px-4 py-2 rounded-lg text-xs font-bold">保存</button>
