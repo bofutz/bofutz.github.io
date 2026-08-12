@@ -356,7 +356,7 @@ export default {
     const copyReferralCode = async () => {
       const code = store.state.referralCode;
       if (!code) {
-        store.showToast("请先设置邀请码", "error");
+        store.showToast("暂无邀请码", "error");
         return;
       }
       try {
@@ -429,7 +429,7 @@ export default {
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <div class="flex items-center justify-between gap-3">
           <div>
-            <div class="text-xs text-slate-400 mb-1">通用监控 VIP 权限</div>
+            <div class="text-xs text-slate-400 mb-1">监控 VIP 权限</div>
             <div class="flex items-center gap-2 flex-wrap">
               <span class="text-xl sm:text-2xl font-bold" :class="store.isVip ? 'theme-text' : 'text-slate-400'">
                 {{ store.isVip ? '已开通' : '未开通' }}
@@ -448,62 +448,7 @@ export default {
           </a>
         </div>
       </div>
-
-      <!-- 我的定制监控 -->
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-        <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div class="font-bold text-slate-700 text-base">我的定制监控</div>
-            <p class="text-[11px] text-slate-400 mt-0.5">
-              可添加多只标的 · 每 {{ perGroup }} 只为 1 组（按组购买套餐）· 与通用独立 · 不解锁通用图表
-            </p>
-          </div>
-          <button @click="openCustomModal" class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg self-start font-bold hover:opacity-90">
-            <i class="fa-solid fa-plus mr-1"></i>添加标的
-          </button>
-        </div>
-
-        <div v-if="loading" class="p-8 text-center text-slate-400 text-sm">
-          <i class="fa-solid fa-circle-notch animate-spin theme-text mr-2"></i>加载中...
-        </div>
-        <div v-else-if="!customList.length" class="p-10 text-center text-sm text-slate-400 font-medium">
-          暂无定制标的
-        </div>
-        <div v-else class="overflow-x-auto">
-          <table class="w-full text-sm whitespace-nowrap text-left">
-            <thead class="bg-slate-50 text-xs text-slate-500 border-b">
-              <tr>
-                <th class="py-2.5 px-4">代码 / 名称</th>
-                <th class="py-2.5 px-3 text-center">状态</th>
-                <th class="py-2.5 px-3 text-center">到期</th>
-                <th class="py-2.5 px-4 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50">
-              <tr v-for="item in customList" :key="item.id">
-                <td class="py-3 px-4">
-                  <div class="font-mono font-bold text-slate-800">{{ item.etf_code }}</div>
-                  <div class="text-xs text-slate-500">{{ item.etf_name }}</div>
-                </td>
-                <td class="py-3 px-3 text-center">
-                  <span class="text-xs px-2.5 py-0.5 rounded-full font-bold"
-                        :class="item.status==='active'?'bg-emerald-50 text-emerald-600':(item.status==='pending'?'bg-orange-50 text-orange-600':'bg-slate-100 text-slate-400')">
-                    {{ item.status==='active'?'监控中':(item.status==='pending'?'待支付':item.status) }}
-                  </span>
-                </td>
-                <td class="py-3 px-3 text-center text-xs font-mono text-slate-400">
-                  {{ item.expire_at ? formatDateShort(item.expire_at) : '-' }}
-                </td>
-                <td class="py-3 px-4 text-right">
-                  <button @click="removeCustomItem(item)" class="text-xs text-slate-400 hover:text-red-500">移除</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 订单 -->
+<!-- 订单 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <div class="font-bold text-slate-700 text-base">我的订单</div>
@@ -530,7 +475,7 @@ export default {
                 </td>
                 <td class="py-3.5 px-4 font-medium text-slate-800">
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-bold">{{ order.plan_id }}</span>
-                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'custom_watchlist' ? '定制' : '通用' }})</span>
+                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'chart_credits' ? '查询次数' : order.order_type === 'custom_watchlist' ? '定制' : '监控VIP' }})</span>
                   <span v-if="order.order_type === 'custom_watchlist' && order.symbol_count" class="text-[10px] text-purple-500 ml-1 font-bold">
                     {{ order.symbol_count }}只
                   </span>
