@@ -9,7 +9,8 @@ import { store } from "../../store.js";
 import { voteApi } from "../../api/vote.js";
 import { CONFIG } from "../../config.js";
 
-const { ref, reactive, computed, onMounted, watch } = Vue;
+// 修复：改用 window.Vue 防止 no-undef 报错
+const { ref, reactive, computed, onMounted, watch } = window.Vue;
 
 function settingOn(val) {
   return val === "1" || val === 1 || val === true || val === "true";
@@ -63,7 +64,8 @@ export default {
         const text = new TextDecoder("gbk").decode(buffer);
         const match = text.match(/="[^~]+~([^~]+)/);
         return match ? match[1].trim() : "";
-      } catch {
+      // 修复：补充 err 参数防止严格 linter 告警
+      } catch (err) {
         return "";
       }
     };
@@ -263,7 +265,7 @@ export default {
             </template>
             <template v-else-if="!userStatus.hasQualified">
               <div class="text-sm font-bold text-amber-200 py-1 leading-snug">
-                暂无资格<br>
+                暂无资格<br />
                 <span class="text-[11px] opacity-80">
                   需 Lv.{{ userStatus.minLevel }}（当前 Lv.{{ userStatus.vipLevel || store.vipLevel || 0 }}）
                 </span>
@@ -312,8 +314,9 @@ export default {
         </div>
         <div class="w-full sm:w-72 relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+          <!-- 修复：补全 input 的自闭合斜杠 -->
           <input v-model="searchQuery" type="search" placeholder="搜索代码 / 名称..."
-                 class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:theme-border">
+                 class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:theme-border" />
         </div>
       </div>
 
@@ -386,18 +389,20 @@ export default {
           <div class="space-y-3">
             <div>
               <label class="text-xs font-bold text-slate-600 mb-1.5 block">标的代码（6位）</label>
+              <!-- 修复：补全 input 的自闭合斜杠 -->
               <input v-model="voteForm.etfCode" @input="onCodeInput" type="text" maxlength="6"
                      placeholder="例如：510300 / 159915"
-                     class="w-full border px-3 py-2.5 rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
+                     class="w-full border px-3 py-2.5 rounded-lg text-sm font-mono uppercase focus:theme-border outline-none" />
             </div>
             <div>
               <label class="text-xs font-bold text-slate-600 mb-1.5 block">
                 标的名称 <span class="font-normal text-slate-400">（自动识别，可修改）</span>
               </label>
               <div class="relative">
+                <!-- 修复：补全 input 的自闭合斜杠 -->
                 <input v-model="voteForm.etfName" type="text" placeholder="识别中或手动填写..."
                        class="w-full border px-3 py-2.5 rounded-lg text-sm focus:theme-border outline-none"
-                       :class="searchingName ? 'bg-slate-50' : ''">
+                       :class="searchingName ? 'bg-slate-50' : ''" />
                 <span v-if="searchingName" class="absolute right-3 top-2.5 text-xs text-slate-400">
                   <i class="fa-solid fa-spinner animate-spin"></i>
                 </span>
