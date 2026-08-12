@@ -67,7 +67,10 @@
             <i class="fa-solid fa-tags w-4"></i> 套餐管理
           </div>
           <div @click="currentTab='shared'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='shared'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-list w-4"></i> 通用监控
+            <i class="fa-solid fa-list w-4"></i> 监控列表
+          </div>
+          <div @click="currentTab='chartQuery'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='chartQuery'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
+            <i class="fa-solid fa-magnifying-glass-chart w-4"></i> 自主查询
           </div>
           <div @click="currentTab='vote'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='vote'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-check-to-slot w-4"></i> 票选监控
@@ -106,6 +109,7 @@
   import OrderMgmt from "./js/components/admin/OrderMgmt.js";
   import PlanMgmt from "./js/components/admin/PlanMgmt.js";
   import SharedWatch from "./js/components/admin/SharedWatch.js";
+    import ChartQueryMgmt from "./js/components/admin/ChartQueryMgmt.js";
     import VoteMgmt from "./js/components/admin/VoteMgmt.js";
   import PromoMgmt from "./js/components/admin/PromoMgmt.js";
   import SettingsMgmt from "./js/components/admin/SettingsMgmt.js";
@@ -121,6 +125,7 @@
       OrderMgmt,
       PlanMgmt,
       SharedWatch,
+      ChartQueryMgmt,
       VoteMgmt,
       PromoMgmt,
       SettingsMgmt,
@@ -151,6 +156,7 @@
           orders:    "OrderMgmt",
           plans:     "PlanMgmt",
           shared:    "SharedWatch",
+          chartQuery:"ChartQueryMgmt",
           vote:      "VoteMgmt",
           promos:    "PromoMgmt",
           settings:  "SettingsMgmt",
