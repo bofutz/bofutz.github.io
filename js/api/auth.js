@@ -6,6 +6,13 @@ import { request } from "./http.js";
 import { CONFIG } from "../config.js";
 
 export const authApi = {
+
+  /** 账号是否可用（纯字母数字 + 唯一） */
+  async checkUsername(username) {
+    const q = encodeURIComponent(String(username || "").trim());
+    return request(`/api/check-username?username=${q}`);
+  },
+
   /** 账号登录 */
   async login(username, password) {
     return request("/api/login", {
