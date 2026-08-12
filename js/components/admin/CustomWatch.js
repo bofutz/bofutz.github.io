@@ -5,7 +5,8 @@
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
 
-const { ref, reactive, onMounted } = Vue;
+// 修复：使用 window.Vue 防止静态代码检查工具报 no-undef 错误
+const { ref, reactive, onMounted } = window.Vue;
 
 export default {
   name: "CustomWatch",
@@ -135,12 +136,13 @@ export default {
           <p class="text-xs text-slate-400 mt-0.5">管理付费用户的独立定制监控列表与有效期</p>
         </div>
         <div class="flex gap-2">
+          <!-- 修复：补全 input 自闭合标签 -->
           <input
             v-model="searchQuery"
             type="text"
             placeholder="搜索用户 / 代码 / 名称"
             class="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:theme-border w-44"
-          >
+          />
           <button @click="loadCustom" class="bg-white border px-3 py-2 rounded-lg text-sm hover:bg-slate-50">
             <i class="fa-solid fa-rotate-right" :class="{'animate-spin': loading}"></i>
           </button>
@@ -199,8 +201,9 @@ export default {
       <div v-if="editVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="editVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3 shadow-2xl">
           <h3 class="font-bold text-slate-800">编辑定制标的</h3>
-          <input v-model="editForm.etf_code" placeholder="标的代码" class="w-full border px-3 py-2 rounded-lg text-sm font-mono focus:theme-border outline-none">
-          <input v-model="editForm.etf_name" placeholder="标的名称" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <!-- 修复：补全 input 自闭合标签 -->
+          <input v-model="editForm.etf_code" placeholder="标的代码" class="w-full border px-3 py-2 rounded-lg text-sm font-mono focus:theme-border outline-none" />
+          <input v-model="editForm.etf_name" placeholder="标的名称" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
           <select v-model="editForm.status" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
             <option value="active">监控中 (active)</option>
             <option value="pending">待支付 (pending)</option>
@@ -208,7 +211,8 @@ export default {
           </select>
           <div>
             <label class="text-xs text-slate-500 mb-1 block">到期时间</label>
-            <input type="datetime-local" v-model="editForm.expireLocal" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+            <!-- 修复：补全 input 自闭合标签 -->
+            <input type="datetime-local" v-model="editForm.expireLocal" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
           </div>
           <div class="flex justify-end gap-2 pt-2">
             <button @click="editVisible = false" class="px-4 py-2 text-sm text-slate-500">取消</button>
