@@ -7,7 +7,8 @@
 import { store } from "../../store.js";
 import { CONFIG } from "../../config.js";
 
-const { ref, computed, onMounted, onUnmounted } = Vue;
+// 修复：改用 window.Vue 防止 no-undef 报错
+const { ref, computed, onMounted, onUnmounted } = window.Vue;
 
 export default {
   name: "Header",
@@ -112,8 +113,9 @@ export default {
       <div class="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-3">
         <!-- Logo -->
         <a href="#/" class="flex items-center gap-2 shrink-0 no-underline">
+          <!-- 修复：补全 img 闭合斜杠 -->
           <img src="./logo.png" alt="波幅探长" class="w-8 h-8 rounded-lg object-cover shadow-sm bg-slate-100 shrink-0"
-               onerror="this.onerror=null;this.src='logo.png';">
+               onerror="this.onerror=null;this.src='logo.png';" />
           <span class="font-bold text-slate-800 text-sm sm:text-base tracking-wide">波幅探长</span>
         </a>
 
