@@ -69,9 +69,6 @@
           <div @click="currentTab='shared'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='shared'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-list w-4"></i> 通用监控
           </div>
-          <div @click="currentTab='custom'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='custom'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
-            <i class="fa-solid fa-user-tag w-4"></i> 定制监控
-          </div>
           <div @click="currentTab='vote'" class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-2" :class="currentTab==='vote'?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
             <i class="fa-solid fa-check-to-slot w-4"></i> 票选监控
           </div>
@@ -109,8 +106,7 @@
   import OrderMgmt from "./js/components/admin/OrderMgmt.js";
   import PlanMgmt from "./js/components/admin/PlanMgmt.js";
   import SharedWatch from "./js/components/admin/SharedWatch.js";
-  import CustomWatch from "./js/components/admin/CustomWatch.js";
-  import VoteMgmt from "./js/components/admin/VoteMgmt.js";
+    import VoteMgmt from "./js/components/admin/VoteMgmt.js";
   import PromoMgmt from "./js/components/admin/PromoMgmt.js";
   import SettingsMgmt from "./js/components/admin/SettingsMgmt.js";
   import TicketMgmt from "./js/components/admin/TicketMgmt.js";
@@ -125,7 +121,6 @@
       OrderMgmt,
       PlanMgmt,
       SharedWatch,
-      CustomWatch,
       VoteMgmt,
       PromoMgmt,
       SettingsMgmt,
@@ -156,7 +151,6 @@
           orders:    "OrderMgmt",
           plans:     "PlanMgmt",
           shared:    "SharedWatch",
-          custom:    "CustomWatch",
           vote:      "VoteMgmt",
           promos:    "PromoMgmt",
           settings:  "SettingsMgmt",
