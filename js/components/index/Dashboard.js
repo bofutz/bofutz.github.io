@@ -1,7 +1,7 @@
 /**
  * 波幅探长 - 数据看板（整合版）
  * - 通用表：免费 TOP3 + VIP 全量
- * - 登录后表格上方展示「我的定制监控」有效标的
+ * - 数据与图表分列：行情按采集日、图表按更新日落在对应周几列
  * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
  */
@@ -175,6 +175,55 @@ export default {
       }
       return -1;
     });
+
+    /** 解析图表记录：兼容 string url 或 { chart_url, updated_at } */
+    const resolveChartEntry = (code) => {
+      const raw = chartsMap.value?.[code] || chartsMap.value?.[String(code)];
+      if (!raw) return null;
+      if (typeof raw === "string") return { url: raw, updated_at: null };
+      return {
+        url: raw.chart_url || raw.url || "",
+        updated_at: raw.updated_at || null,
+      };
+    };
+
+    /** 图表更新日（北京日历 YYYY-MM-DD） */
+    const chartUpdateDay = (code) => {
+      const entry = resolveChartEntry(code);
+      if (!entry?.updated_at) return null;
+      let ts = Number(entry.updated_at);
+      if (!ts || isNaN(ts)) return null;
+      if (ts < 1e12) ts *= 1000;
+      try {
+        return new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(ts));
+      } catch {
+        return new Date(ts).toISOString().slice(0, 10);
+      }
+    };
+
+    /**
+     * 该标的日线图表图标应落在本周哪一列（0=周一…4=周五）
+     * 规则：有 updated_at 且在本周 → 对应列；否则不显示在日列（可点周线区）
+     */
+    const chartColIndexForCode = (etfCode) => {
+      if (!latestMonday.value) return -1;
+      const weekDays = getWeekDays(latestMonday.value);
+      if (weekDays.length < 5) return -1;
+      const day = chartUpdateDay(etfCode);
+      if (!day) return -1;
+      const idx = weekDays.indexOf(day);
+      return idx;
+    };
+
+    const hasChartForCode = (etfCode) => {
+      const e = resolveChartEntry(etfCode);
+      return !!(e && e.url);
+    };
 
     const handleSort = (column) => {
       if (sortColumn.value === column) {
@@ -613,6 +662,9 @@ export default {
       processedData,
       customRows,
       latestDailyColIndex,
+      chartColIndexForCode,
+      hasChartForCode,
+      chartUpdateDay,
       expandedRowKey,
       formatDateCN,
       formatDayCell,
@@ -645,58 +697,9 @@ export default {
       </div>
 
       <template v-else>
-        <!-- ===== 我的定制监控（表格上方） ===== -->
-        <div v-if="customRows.length" class="bg-white rounded-xl shadow-sm border border-purple-100 overflow-hidden">
-          <div class="px-4 py-2.5 bg-purple-50/80 border-b border-purple-100 flex items-center justify-between">
-            <div class="text-sm font-bold text-purple-800 flex items-center gap-2">
-              <i class="fa-solid fa-user-tag"></i> 我的定制监控
-              <span class="text-[10px] font-normal text-purple-500">有效期内可查看图表</span>
-            </div>
-            <a href="#/profile" class="text-[11px] text-purple-600 hover:underline">管理</a>
-          </div>
-          <div class="overflow-x-auto custom-scrollbar">
-            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max">
-              <thead class="bg-slate-50 border-b border-slate-100">
-                <tr class="text-xs text-slate-600 font-bold">
-                  <th class="py-2.5 px-4 text-left sticky left-0 bg-slate-50 z-10">标的名称</th>
-                  <th v-for="idx in 5" :key="'c'+idx" class="py-2.5 px-2">周{{ ['一','二','三','四','五'][idx-1] }}</th>
-                  <th class="py-2.5 px-4">周线</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-50 text-sm">
-                <tr v-for="item in customRows" :key="'custom-'+item.etf_code" class="hover:bg-purple-50/40">
-                  <td class="p-3 text-left sticky left-0 bg-white z-10">
-                    <div class="font-bold text-slate-800 flex items-center gap-1 flex-wrap">
-                      {{ item.etf_name }}
-                      <span class="text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded font-bold">定制</span>
-                      <span v-if="item._customMeta?.expire_at" class="text-[9px] text-slate-400 font-normal">
-                        {{ formatExpire(item._customMeta.expire_at) }}
-                      </span>
-                    </div>
-                    <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
-                  </td>
-                  <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(cellPrimaryStatus(item.days[idx-1]))">
-                    <div class="flex items-center justify-center gap-1">
-                      <span class="text-[11px] sm:text-sm font-mono tracking-tight">{{ formatDayCell(item.days[idx-1]) }}</span>
-                      <i v-if="(latestDailyColIndex >= 0 ? idx - 1 === latestDailyColIndex : idx === 5)"
-                         class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs shrink-0"
-                         :title="chartDateTitle(processedData.weekDays[idx-1] || item.days[idx-1]?.date)"
-                         @click.stop="openDailyChartViewer(item, true)"></i>
-                    </div>
-                  </td>
-                  <td class="p-3 font-medium" :class="getColorClass(item.week_status)">
-                    <div class="flex items-center justify-center gap-1">
-                      <span>{{ item.week_status || '-' }}</span>
-                      <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
-                         :title="chartDateTitle(processedData.weekStatusMonday) || '周线图表'"
-                         @click.stop="openWeeklyChartViewer(item, true)"></i>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <!-- 定制监控已下线 -->
+
+
 
         <!-- ===== 通用数据表 ===== -->
         <div v-if="!processedData.list.length" class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
@@ -743,9 +746,9 @@ export default {
                     <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(cellPrimaryStatus(item.days[idx-1]))">
                       <div class="flex items-center justify-center gap-1">
                         <span class="text-[11px] sm:text-sm font-mono tracking-tight">{{ formatDayCell(item.days[idx-1]) }}</span>
-                        <i v-if="(latestDailyColIndex >= 0 ? idx - 1 === latestDailyColIndex : idx === 5)"
+                        <i v-if="hasChartForCode(item.etf_code) && chartColIndexForCode(item.etf_code) === idx - 1"
                            class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs shrink-0"
-                           :title="chartDateTitle(processedData.weekDays[idx-1] || item.days[idx-1]?.date)"
+                           :title="chartDateTitle(chartUpdateDay(item.etf_code) || processedData.weekDays[idx-1])"
                            @click.stop="openDailyChartViewer(item, false)"></i>
                       </div>
                     </td>
@@ -783,7 +786,7 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center">
-          单元格格式：上午/下午|日线。未触发显示 “-”。有数据或图表任一更新即可查看；日线用于排序与免费 Top3。悬停图表图标显示「x月x日图表」。
+          单元格格式：上午/下午|日线。未触发显示 “-”。行情按采集日落列；图表按更新日落列（与触发数据独立）。日线用于排序与免费 Top3。
         </p>
 
         <!-- 打赏入口 -->
