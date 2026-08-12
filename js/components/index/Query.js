@@ -132,7 +132,7 @@ export default {
       const credits = store.state.chartCredits ?? 0;
       if (credits < 1) {
         store.showToast("查询次数不足，请先购买次数包", "error");
-        window.location.hash = "#/plan";
+        window.location.hash = "#/plan?tab=credits";
         return;
       }
 
@@ -235,7 +235,7 @@ export default {
           <span class="text-slate-500">剩余查询次数</span>
           <span class="text-2xl font-extrabold theme-text ml-2 font-mono">{{ store.chartCredits ?? 0 }}</span>
         </div>
-        <a href="#/plan" class="text-xs theme-bg text-white px-4 py-2 rounded-lg font-bold no-underline hover:opacity-90">
+        <a href="#/plan?tab=credits" class="text-xs theme-bg text-white px-4 py-2 rounded-lg font-bold no-underline hover:opacity-90">
           购买次数包
         </a>
       </div>
