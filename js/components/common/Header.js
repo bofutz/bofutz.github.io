@@ -21,15 +21,16 @@ export default {
     // 桌面顶栏
     const nav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
+      { path: "#/query", label: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
       { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
       { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
       { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
     ];
-    // 手机抽屉顺序：看板 → 个人中心 → 购买套餐 → 票选 → 工单 → 指南
     const mobileNav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
+      { path: "#/query", label: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
       { path: "#/profile", label: "个人中心", icon: "fa-solid fa-id-card" },
-      { path: "#/plan", label: "购买套餐", icon: "fa-solid fa-crown" },
+      { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
       { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
       { path: "#/tickets", label: "工单反馈", icon: "fa-solid fa-headset" },
       { path: "#/guide", label: "使用指南", icon: "fa-solid fa-book-open" },
