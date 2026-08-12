@@ -5,7 +5,8 @@
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
 
-const { ref, reactive, onMounted } = Vue;
+// 修复：改用 window.Vue
+const { ref, reactive, onMounted } = window.Vue;
 
 export default {
   name: "SharedWatch",
@@ -145,12 +146,13 @@ export default {
           <p class="text-xs text-slate-400 mt-0.5">管理前台通用公开监控标的 · 支持批量导入</p>
         </div>
         <div class="flex gap-2 flex-wrap">
+          <!-- 修复：补全 input 自闭合斜杠 -->
           <input
             v-model="searchQuery"
             type="text"
             placeholder="搜索代码 / 名称"
             class="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:theme-border w-40"
-          >
+          />
           <button @click="batchImportVisible = true" class="text-xs bg-slate-100 text-slate-700 px-3 py-2 rounded-lg font-bold hover:bg-slate-200">
             批量导入
           </button>
@@ -205,11 +207,12 @@ export default {
       <div v-if="modalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="modalVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3 shadow-2xl">
           <h3 class="font-bold text-slate-800">{{ form.id ? '编辑' : '添加' }}通用标的</h3>
-          <input v-model="form.etf_code" placeholder="标的代码（例如：510300）" class="w-full border px-3 py-2 rounded-lg text-sm font-mono focus:theme-border outline-none">
-          <input v-model="form.etf_name" placeholder="标的名称（例如：沪深300ETF）" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
-          <input type="number" v-model.number="form.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
+          <!-- 修复：补全 input 自闭合斜杠 -->
+          <input v-model="form.etf_code" placeholder="标的代码（例如：510300）" class="w-full border px-3 py-2 rounded-lg text-sm font-mono focus:theme-border outline-none" />
+          <input v-model="form.etf_name" placeholder="标的名称（例如：沪深300ETF）" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
+          <input type="number" v-model.number="form.sort_order" placeholder="排序" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none" />
           <label class="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" v-model="form.enabled"> 启用
+            <input type="checkbox" v-model="form.enabled" /> 启用
           </label>
           <div class="flex justify-end gap-2 pt-2">
             <button @click="modalVisible = false" class="px-4 py-2 text-sm text-slate-500">取消</button>
