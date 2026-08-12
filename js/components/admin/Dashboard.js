@@ -5,12 +5,14 @@
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
 
-const { ref, reactive, onMounted } = Vue;
+// 修复：使用 window.Vue 防止静态代码检查工具报 no-undef 错误
+const { ref, reactive, onMounted } = window.Vue;
 
 export default {
   name: "AdminDashboard",
   emits: ["switch-tab"],
-  setup(props, { emit }) {
+  // 修复：将未使用的 props 替换为 _，防止 no-unused-vars 告警
+  setup(_, { emit }) {
     const loading = ref(false);
     const stats = reactive({
       users: 0,
