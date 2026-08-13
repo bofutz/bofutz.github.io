@@ -4,13 +4,12 @@
 import { adminApi } from "../../api/admin.js";
 import { store } from "../../store.js";
 
-// 修复：使用 window.Vue 防止静态代码检查工具报 no-undef 错误
-const { ref, reactive, onMounted, computed } = window.Vue;
+const { ref, reactive, onMounted, computed } = Vue;
 
 export default {
   name: "ChartQueryMgmt",
   setup() {
-    const subTab = ref("queries"); // queries | plans
+    const subTab = ref("queries"); // 仅查询单；次数套餐已迁至套餐管理
     const loading = ref(false);
     const queries = ref([]);
     const statusFilter = ref("");
@@ -151,17 +150,14 @@ export default {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-lg font-bold text-slate-800">自主查询</h2>
-          <p class="text-xs text-slate-400 mt-0.5">次数套餐与用户出图排队单（与监控 VIP 独立计费）</p>
+          <p class="text-xs text-slate-400 mt-0.5">用户出图排队单（次数套餐请到「套餐管理」）</p>
         </div>
         <div class="flex gap-2 text-xs">
           <button @click="subTab='queries'; loadQueries()" class="px-3 py-1.5 rounded-lg border font-bold"
                   :class="subTab==='queries'?'theme-bg text-white border-transparent':'bg-white'">
             查询单 <span v-if="pendingCount" class="ml-1 opacity-90">({{ pendingCount }}待生成)</span>
           </button>
-          <button @click="subTab='plans'; loadPlans()" class="px-3 py-1.5 rounded-lg border font-bold"
-                  :class="subTab==='plans'?'theme-bg text-white border-transparent':'bg-white'">
-            次数套餐
-          </button>
+<!-- 次数套餐已移至 套餐管理 -->
         </div>
       </div>
 
@@ -225,36 +221,36 @@ export default {
         </div>
       </div>
 
-      <!-- 次数套餐 -->
-      <div v-else class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <!-- 次数套餐已移至套餐管理 -->
+      <div v-if="false" class="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div class="lg:col-span-2 bg-white rounded-xl border border-slate-100 p-4 space-y-3">
           <div class="text-sm font-bold text-slate-700">{{ editing ? '编辑套餐' : '新增次数套餐' }}</div>
           <div>
             <label class="text-[11px] text-slate-500">名称</label>
-            <input v-model="planForm.name" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="如：体验包" />
+            <input v-model="planForm.name" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="如：体验包">
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-[11px] text-slate-500">价格（元）</label>
-              <input v-model.number="planForm.price" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model.number="planForm.price" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
               <label class="text-[11px] text-slate-500">次数</label>
-              <input v-model.number="planForm.credits" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model.number="planForm.credits" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm">
             </div>
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-[11px] text-slate-500">角标</label>
-              <input v-model="planForm.tag" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="推荐" />
+              <input v-model="planForm.tag" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="推荐">
             </div>
             <div>
               <label class="text-[11px] text-slate-500">排序</label>
-              <input v-model.number="planForm.sort_order" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model.number="planForm.sort_order" type="number" class="w-full border rounded-lg px-3 py-2 text-sm">
             </div>
           </div>
           <label class="flex items-center gap-2 text-xs text-slate-600">
-            <input type="checkbox" v-model="planForm.enabled" /> 启用
+            <input type="checkbox" v-model="planForm.enabled"> 启用
           </label>
           <div class="flex gap-2">
             <button @click="savePlan" class="theme-bg text-white px-4 py-2 rounded-lg text-xs font-bold">保存</button>

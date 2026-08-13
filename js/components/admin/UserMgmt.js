@@ -1,7 +1,7 @@
 /**
  * 波幅探长 - 后台用户管理（整合版）
  * - 列表展示 VIP 天数 / 等级
- * - 充值天数、批量充值、重置密码、删除
+ * - 充值天数、批量充值、删除用户
  * - 手动设置会员等级 0~4
  * js/components/admin/UserMgmt.js
  */
@@ -306,10 +306,9 @@ export default {
                 <td class="py-2.5 px-3 text-xs text-slate-400">{{ formatDate(u.created_at) }}</td>
                 <td class="py-2.5 px-3 text-xs text-slate-400">{{ formatDate(u.last_login_at) }}</td>
                 <td class="py-2.5 px-3 text-right space-x-1">
-                  <button @click="openCharge(u,'add')" class="text-xs theme-text hover:underline">+天</button>
-                  <button @click="openCharge(u,'set')" class="text-xs text-slate-500 hover:underline">设天</button>
-                  <button @click="resetPwd(u)" class="text-xs text-amber-600 hover:underline">重置密</button>
-                  <button @click="removeUser(u)" class="text-xs text-red-500 hover:underline">删</button>
+                  <button @click="openCharge(u,'add')" class="text-xs theme-text hover:underline">添加天数</button>
+                  <button @click="openCharge(u,'set')" class="text-xs text-slate-500 hover:underline">设置天数</button>
+                  <button @click="removeUser(u)" class="text-xs text-red-500 hover:underline">删除</button>
                 </td>
               </tr>
               <tr v-if="!filtered.length">

@@ -8,8 +8,7 @@ import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
 import PromoMgmt from "./PromoMgmt.js";
 
-// 修复：改用 window.Vue
-const { ref, reactive, onMounted } = window.Vue;
+const { ref, reactive, onMounted } = Vue;
 
 const DEFAULT_PLATFORMS = [
   { key: "douyin", label: "抖音", icon: "fa-brands fa-tiktok", handle: "" },
@@ -98,8 +97,7 @@ export default {
                 ? JSON.parse(data.social_platforms)
                 : data.social_platforms;
             if (Array.isArray(arr) && arr.length) loaded = arr;
-          // 修复：空 catch 块中使用明确的 err，避免 no-unused-vars 告警
-          } catch (err) {}
+          } catch (_) {}
         }
         if (loaded) {
           platforms.value = loaded.map((p, i) => ({
@@ -198,77 +196,76 @@ export default {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-lg font-bold text-slate-800 tracking-tight">系统设置</h2>
-          <p class="text-[11px] text-slate-400 mt-0.5">注册 / 支付 / 查询 / 票选 / 广告；优惠码见右侧子页</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">优惠码 → 注册与邀请 → 自主查询 → 支付 → 票选 → 广告 → 社交</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-bold">
-            <button type="button" @click="settingsTab='general'" class="px-3 py-1.5 rounded-md"
-                    :class="settingsTab==='general' ? 'theme-bg text-white' : 'text-slate-500'">常规</button>
-            <button type="button" @click="settingsTab='promo'" class="px-3 py-1.5 rounded-md"
-                    :class="settingsTab==='promo' ? 'theme-bg text-white' : 'text-slate-500'">优惠码</button>
-          </div>
-          <button v-show="settingsTab==='general'" @click="loadSettings" class="text-xs text-slate-500 px-3 py-1.5 rounded-lg border hover:bg-slate-50">刷新</button>
-          <button v-show="settingsTab==='general'" @click="saveSettings" :disabled="saving"
+          <button  @click="loadSettings" class="text-xs text-slate-500 px-3 py-1.5 rounded-lg border hover:bg-slate-50">刷新</button>
+          <button  @click="saveSettings" :disabled="saving"
                   class="text-xs theme-bg text-white px-4 py-1.5 rounded-lg font-bold disabled:opacity-50">
             {{ saving ? '保存中...' : '保存全部' }}
           </button>
         </div>
       </div>
 
-      <div v-show="settingsTab==='promo'" class="bg-white rounded-2xl border border-slate-100 p-2 shadow-sm">
+      <div v-if="false" class="bg-white rounded-2xl border border-slate-100 p-2 shadow-sm">
         <PromoMgmt />
       </div>
 
-      <div v-if="loading && settingsTab==='general'" class="text-center py-10 text-slate-400 text-sm">
+      <div v-if="loading" class="text-center py-10 text-slate-400 text-sm">
         <i class="fa-solid fa-spinner animate-spin mr-2"></i>加载中...
       </div>
 
-      <template v-else-if="settingsTab==='general'">
+      <template v-else>
+        <!-- 优惠码（内嵌于系统设置首位） -->
+        <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-3 shadow-sm">
+          <h3 class="font-bold text-slate-700 text-sm border-b pb-2">优惠码</h3>
+          <PromoMgmt />
+        </section>
+
         <!-- 注册与邀请返利 -->
         <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
           <h3 class="font-bold text-slate-700 text-sm border-b pb-2">注册与邀请返利</h3>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label class="text-xs space-y-1">
               <span class="text-slate-500">注册赠送天数</span>
-              <!-- 修复：补全 input 自闭合斜杠 -->
-              <input v-model="form.gift_register_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.gift_register_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-500">邀请人注册赠送（建议 0）</span>
-              <input v-model="form.gift_inviter_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.gift_inviter_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-500">被邀请人注册赠送</span>
-              <input v-model="form.gift_invitee_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.gift_invitee_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <label class="text-xs space-y-1">
               <span class="text-slate-500">邀请码最短位数</span>
-              <input v-model="form.referral_code_min_len" type="number" min="4" max="16" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.referral_code_min_len" type="number" min="4" max="16" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-500">邀请码最长位数</span>
-              <input v-model="form.referral_code_max_len" type="number" min="4" max="32" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.referral_code_max_len" type="number" min="4" max="32" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-500">付费返利比例 %</span>
-              <input v-model="form.referral_rebate_percent" type="number" min="0" max="100" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.referral_rebate_percent" type="number" min="0" max="100" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-500">返利门槛（套餐天数≥）</span>
-              <input v-model="form.referral_rebate_min_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.referral_rebate_min_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
               <span class="text-[10px] text-slate-400">如 90=季付起；邀请人仅在好友付费后获天数返利</span>
             </label>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="text-xs space-y-1">
               <span class="text-slate-500">免费可看图表 TOP N</span>
-              <input v-model="form.free_top_n_charts" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.free_top_n_charts" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-400">（废弃）定制每组只数</span>
-              <input v-model="form.custom_max_symbols" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm opacity-40" />
+              <input v-model="form.custom_max_symbols" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm opacity-40">
             </label>
           </div>
           <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4 space-y-3">
@@ -276,15 +273,15 @@ export default {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label class="text-xs space-y-1">
                 <span class="text-slate-500">批量间隔（小时）</span>
-                <input v-model="form.chart_query_batch_hours" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white" />
+                <input v-model="form.chart_query_batch_hours" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
               </label>
               <label class="text-xs space-y-1">
                 <span class="text-slate-500">图片保留交易日</span>
-                <input v-model="form.chart_query_retain_trading_days" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white" />
+                <input v-model="form.chart_query_retain_trading_days" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
               </label>
               <label class="text-xs space-y-1 sm:col-span-2">
                 <span class="text-slate-500">开放周期 JSON</span>
-                <input v-model="form.chart_query_intervals" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-white" />
+                <input v-model="form.chart_query_intervals" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-white">
               </label>
               <label class="text-xs space-y-1">
                 <span class="text-slate-500">扣次时机</span>
@@ -298,12 +295,12 @@ export default {
           <div class="flex flex-wrap gap-4 text-xs">
             <label class="inline-flex items-center gap-2 cursor-pointer">
               <input type="checkbox" :checked="form.pay_register_enabled==='1'"
-                     @change="form.pay_register_enabled = $event.target.checked ? '1' : '0'" />
+                     @change="form.pay_register_enabled = $event.target.checked ? '1' : '0'">
               允许游客支付即注册
             </label>
             <label class="inline-flex items-center gap-2 cursor-pointer">
               <input type="checkbox" :checked="form.promo_enabled==='1'"
-                     @change="form.promo_enabled = $event.target.checked ? '1' : '0'" />
+                     @change="form.promo_enabled = $event.target.checked ? '1' : '0'">
               启用优惠码
             </label>
           </div>
@@ -321,11 +318,11 @@ export default {
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">微信收款码 URL（图片直链或支付链接）</span>
-            <input v-model="form.wechat_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+            <input v-model="form.wechat_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">支付宝收款码 URL</span>
-            <input v-model="form.alipay_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+            <input v-model="form.alipay_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
         </section>
 
@@ -335,16 +332,16 @@ export default {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="text-xs space-y-1">
               <span class="text-slate-500">每月投票上限（只）</span>
-              <input v-model="form.vote_monthly_limit" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.vote_monthly_limit" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-500">最低会员等级（1月 2季 3半年 4年）</span>
-              <input v-model="form.vote_min_level" type="number" min="0" max="4" class="w-full border rounded-lg px-3 py-2 text-sm" />
+              <input v-model="form.vote_min_level" type="number" min="0" max="4" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
           </div>
           <label class="inline-flex items-center gap-2 text-xs cursor-pointer">
             <input type="checkbox" :checked="form.vote_etf_only==='1'"
-                   @change="form.vote_etf_only = $event.target.checked ? '1' : '0'" />
+                   @change="form.vote_etf_only = $event.target.checked ? '1' : '0'">
             仅允许名称含「ETF」的标的（关闭则不限制）
           </label>
         </section>
@@ -354,20 +351,20 @@ export default {
           <h3 class="font-bold text-slate-700 text-sm border-b pb-2">打赏（自愿）</h3>
           <label class="inline-flex items-center gap-2 text-xs cursor-pointer">
             <input type="checkbox" :checked="form.tip_enabled==='1'"
-                   @change="form.tip_enabled = $event.target.checked ? '1' : '0'" />
+                   @change="form.tip_enabled = $event.target.checked ? '1' : '0'">
             开启打赏入口（看板底部文案）
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">引导文案</span>
-            <input v-model="form.tip_note" type="text" class="w-full border rounded-lg px-3 py-2 text-sm" />
+            <input v-model="form.tip_note" type="text" class="w-full border rounded-lg px-3 py-2 text-sm">
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">打赏 · 微信收款码 URL</span>
-            <input v-model="form.tip_wechat_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+            <input v-model="form.tip_wechat_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">打赏 · 支付宝收款码 URL</span>
-            <input v-model="form.tip_alipay_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+            <input v-model="form.tip_alipay_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
         </section>
 
@@ -376,12 +373,12 @@ export default {
           <h3 class="font-bold text-slate-700 text-sm border-b pb-2">弹窗广告</h3>
           <label class="inline-flex items-center gap-2 text-xs cursor-pointer">
             <input type="checkbox" :checked="form.ad_enabled==='1'"
-                   @change="form.ad_enabled = $event.target.checked ? '1' : '0'" />
+                   @change="form.ad_enabled = $event.target.checked ? '1' : '0'">
             启用弹窗广告
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">标题</span>
-            <input v-model="form.ad_title" type="text" class="w-full border rounded-lg px-3 py-2 text-sm" />
+            <input v-model="form.ad_title" type="text" class="w-full border rounded-lg px-3 py-2 text-sm">
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">正文</span>
@@ -389,20 +386,20 @@ export default {
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">图片 URL（可选）</span>
-            <input v-model="form.ad_image_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+            <input v-model="form.ad_image_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">跳转链接（可选）</span>
-            <input v-model="form.ad_link_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+            <input v-model="form.ad_link_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="text-xs space-y-1">
               <span class="text-slate-500">开始时间（时间戳 ms 或空）</span>
-              <input v-model="form.ad_start_at" type="text" placeholder="留空=立即" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+              <input v-model="form.ad_start_at" type="text" placeholder="留空=立即" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
             </label>
             <label class="text-xs space-y-1">
               <span class="text-slate-500">结束时间（时间戳 ms 或空）</span>
-              <input v-model="form.ad_end_at" type="text" placeholder="留空=不限" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+              <input v-model="form.ad_end_at" type="text" placeholder="留空=不限" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
             </label>
           </div>
           <label class="text-xs space-y-1 block">
@@ -429,15 +426,15 @@ export default {
                  class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end border border-slate-100 rounded-lg p-3">
               <label class="text-xs space-y-1 sm:col-span-3">
                 <span class="text-slate-500">显示名称</span>
-                <input v-model="p.label" type="text" class="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                <input v-model="p.label" type="text" class="w-full border rounded-lg px-2 py-1.5 text-sm">
               </label>
               <label class="text-xs space-y-1 sm:col-span-4">
                 <span class="text-slate-500">图标 class（Font Awesome）</span>
-                <input v-model="p.icon" type="text" placeholder="fa-brands fa-tiktok" class="w-full border rounded-lg px-2 py-1.5 text-sm font-mono" />
+                <input v-model="p.icon" type="text" placeholder="fa-brands fa-tiktok" class="w-full border rounded-lg px-2 py-1.5 text-sm font-mono">
               </label>
               <label class="text-xs space-y-1 sm:col-span-4">
                 <span class="text-slate-500">账号</span>
-                <input v-model="p.handle" type="text" placeholder="波幅探长" class="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                <input v-model="p.handle" type="text" placeholder="波幅探长" class="w-full border rounded-lg px-2 py-1.5 text-sm">
               </label>
               <button type="button" @click="removePlatform(idx)"
                       class="sm:col-span-1 text-slate-400 hover:text-red-500 text-sm py-2">

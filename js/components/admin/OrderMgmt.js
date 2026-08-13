@@ -5,8 +5,7 @@
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
 
-// 修复：改用 window.Vue
-const { ref, computed, onMounted } = window.Vue;
+const { ref, computed, onMounted } = Vue;
 
 export default {
   name: "OrderMgmt",
@@ -107,13 +106,12 @@ export default {
               {{ s.t }}
             </button>
           </div>
-          <!-- 修复：补充 input 闭合斜杠 -->
           <input
             v-model="searchQuery"
             type="text"
             placeholder="账号 / 单号 / 套餐"
             class="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:theme-border w-40"
-          />
+          >
           <button @click="loadOrders" class="bg-white border px-3 py-2 rounded-lg text-sm hover:bg-slate-50">
             <i class="fa-solid fa-rotate-right" :class="{'animate-spin': loading}"></i>
           </button>
