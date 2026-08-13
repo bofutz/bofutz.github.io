@@ -207,15 +207,15 @@ export default {
       return bjYmd(ts);
     };
 
-    /** 上一北京交易日（仅作接口全失败时的兜底，保证 icon 仍显示） */
-    const prevTradingDayBj = () => {
-      for (let i = 1; i <= 7; i++) {
+    /** 北京最近交易日：若今天是工作日用今天，否则往前找（周末用周五） */
+    const latestTradingDayBj = () => {
+      for (let i = 0; i <= 7; i++) {
         const ms = Date.now() - i * 24 * 3600 * 1000;
         const day = bjYmd(ms);
         const wd = new Date(day + "T12:00:00+08:00").getDay();
         if (wd !== 0 && wd !== 6) return day;
       }
-      return bjYmd(Date.now() - 86400000);
+      return bjYmd(Date.now());
     };
 
     const resolveChartEntry = (code) => {
@@ -262,7 +262,7 @@ export default {
 
     /**
      * 解析全局图表采集日
-     * 优先级：接口 chart_date > charts 内 max(updated_at) > 上一交易日兜底
+     * 优先级：接口 chart_date > charts 内 max(updated_at) > 北京最近交易日（今天若工作日）
      * （浏览器无法可靠读 R2 Last-Modified，故不以浏览器 HEAD 为准）
      */
     const resolveGlobalChartDay = async (sampleCodes = [], apiChartDate = null) => {
@@ -285,8 +285,8 @@ export default {
         globalChartDay.value = bjYmd(maxTs);
         return globalChartDay.value;
       }
-      // 兜底：上一交易日（今天周四 → 周三，与当前 R2 上传日一致）
-      globalChartDay.value = prevTradingDayBj();
+      // 兜底：北京最近交易日（工作日=今天；与「每日出图」一致，避免永远偏前一天）
+      globalChartDay.value = latestTradingDayBj();
       return globalChartDay.value;
     };
 
