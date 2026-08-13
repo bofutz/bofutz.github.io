@@ -48,20 +48,24 @@ export default {
     const intervalLabel = (k) =>
       (CONFIG.CHART_INTERVALS && CONFIG.CHART_INTERVALS[k]) || k;
 
+    /** 下一场出图批次提示（交易日 15:40 / 18:00 / 20:00 / 22:00） */
     const nextBatchHint = computed(() => {
-      const h = batchHours.value;
       const now = new Date();
-      const slot = Math.ceil((now.getHours() + now.getMinutes() / 60) / h) * h;
-      const next = new Date(now);
-      if (slot >= 24) {
-        next.setDate(next.getDate() + 1);
-        next.setHours(0, 0, 0, 0);
-      } else {
-        next.setHours(slot, 0, 0, 0);
-        if (next <= now) next.setHours(next.getHours() + h);
+      // 用本地时区；站点用户主要为国内
+      const mins = now.getHours() * 60 + now.getMinutes();
+      const slots = [15 * 60 + 40, 18 * 60, 20 * 60, 22 * 60]; // 15:40, 18, 20, 22
+      const wd = now.getDay(); // 0 Sun
+      const isWeekend = wd === 0 || wd === 6;
+      const fmt = (totalMin) => {
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      };
+      if (isWeekend) return "下一交易日 15:40";
+      for (const s of slots) {
+        if (mins < s) return fmt(s);
       }
-      const p = (n) => String(n).padStart(2, "0");
-      return `${p(next.getHours())}:00`;
+      return "下一交易日 15:40";
     });
 
     const fetchStockNameByCode = async (symbolStr) => {
@@ -222,10 +226,11 @@ export default {
       <div>
         <h2 class="text-2xl font-bold text-slate-800">自主查询</h2>
         <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-          输入任意股票/ETF 代码，按次消耗查询次数。系统每
-          <strong class="text-slate-600">{{ batchHours }}</strong> 小时批量生成图表，
+          输入任意股票/ETF 代码，按次消耗查询次数。
+          交易日约 <strong class="text-slate-600">15:40</strong> 生成收盘日线；若之后提交，将在
+          <strong class="text-slate-600">18:00 / 20:00 / 22:00</strong> 批次处理（预计下场
+          <strong class="theme-text">{{ nextBatchHint }}</strong>）。
           图片约保留 <strong class="text-slate-600">{{ retainDays }}</strong> 个交易日。
-          非实时；盘中可能使用上一完整周期图表。
         </p>
       </div>
 
