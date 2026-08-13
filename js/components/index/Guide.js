@@ -6,8 +6,7 @@
  */
 import { store } from "../../store.js";
 
-// 修复：改用 window.Vue 防止 no-undef 报错
-const { ref } = window.Vue;
+const { ref } = Vue;
 
 export default {
   name: "Guide",
@@ -195,11 +194,10 @@ export default {
 
           <!-- 图 1 -->
           <figure class="space-y-2">
-            <!-- 修复：补全 img 闭合斜杠 -->
             <img src="./chart1.png" alt="双趋势线与评分示例图一"
                  class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[480px]"
                  loading="lazy"
-                 onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');" />
+                 onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');">
             <div style="display:none" class="text-xs text-slate-400 text-center py-8 border border-dashed rounded-xl">
               请将 chart1.png 上传到网站根目录（与 index.html 同级）
             </div>
@@ -208,11 +206,10 @@ export default {
 
           <!-- 图 2 -->
           <figure class="space-y-2">
-            <!-- 修复：补全 img 闭合斜杠 -->
             <img src="./chart2.png" alt="上涨标签和下涨标签示例图二"
                  class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[480px]"
                  loading="lazy"
-                 onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');" />
+                 onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');">
             <div style="display:none" class="text-xs text-slate-400 text-center py-8 border border-dashed rounded-xl">
               请将 chart2.png 上传到网站根目录（与 index.html 同级）
             </div>

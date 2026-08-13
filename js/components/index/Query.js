@@ -8,8 +8,7 @@ import { store } from "../../store.js";
 import { chartQueryApi } from "../../api/chartQuery.js";
 import { CONFIG } from "../../config.js";
 
-// 修复：改用 window.Vue 防止 no-undef 报错
-const { ref, reactive, computed, onMounted } = window.Vue;
+const { ref, reactive, computed, onMounted } = Vue;
 
 function settingOn(val) {
   return val === "1" || val === 1 || val === true || val === "true";
@@ -42,8 +41,7 @@ export default {
       try {
         const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
         if (Array.isArray(arr) && arr.length) return arr;
-      // 修复：补充 err 参数防止严格 linter 告警
-      } catch (err) {}
+      } catch (_) {}
       return ["daily"];
     });
 
@@ -78,8 +76,7 @@ export default {
         const text = new TextDecoder("gbk").decode(buffer);
         const match = text.match(/="[^~]+~([^~]+)/);
         return match ? match[1].trim() : "";
-      // 修复：补充 err 参数防止严格 linter 告警
-      } catch (err) {
+      } catch {
         return "";
       }
     };
@@ -252,10 +249,9 @@ export default {
         <template v-else>
           <div>
             <label class="text-xs font-bold text-slate-600 mb-1.5 block">标的代码（6 位）</label>
-            <!-- 修复：补全 input 的自闭合斜杠 -->
             <input v-model="form.etfCode" @input="onCodeInput" maxlength="6"
                    placeholder="例如：510300"
-                   class="w-full border px-3 py-2.5 rounded-lg text-sm font-mono uppercase focus:theme-border outline-none" />
+                   class="w-full border px-3 py-2.5 rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
             <p v-if="searchingName" class="text-xs text-slate-400 mt-1"><i class="fa-solid fa-spinner animate-spin mr-1"></i>识别名称中…</p>
             <p v-else-if="form.etfName" class="text-xs theme-text mt-1 font-bold"><i class="fa-solid fa-circle-check mr-1"></i>{{ form.etfName }}</p>
             <p v-else-if="nameError" class="text-xs text-amber-600 mt-1">{{ nameError }}</p>

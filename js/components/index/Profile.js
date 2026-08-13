@@ -12,8 +12,7 @@ import { planApi } from "../../api/plan.js";
 import { watchlistApi } from "../../api/watchlist.js";
 import { CONFIG } from "../../config.js";
 
-// 修复：改用 window.Vue 防止 no-undef 报错
-const { ref, reactive, computed, onMounted } = window.Vue;
+const { ref, reactive, computed, onMounted } = Vue;
 
 export default {
   name: "Profile",
@@ -110,8 +109,7 @@ export default {
         const cached = sessionStorage.getItem("draft_custom_symbols");
         draftSymbols.value = cached ? JSON.parse(cached) : [];
         if (!Array.isArray(draftSymbols.value)) draftSymbols.value = [];
-      // 修复：补充 err 参数防止严格 linter 告警
-      } catch (err) {
+      } catch {
         draftSymbols.value = [];
       }
       customModalVisible.value = true;
@@ -450,7 +448,7 @@ export default {
           </a>
         </div>
       </div>
-      <!-- 订单 -->
+<!-- 订单 -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <div class="font-bold text-slate-700 text-base">我的订单</div>
@@ -512,19 +510,13 @@ export default {
             <div class="text-xs text-slate-400 mb-1">您的专属邀请码</div>
             <span class="font-mono text-2xl font-extrabold text-slate-800 tracking-widest">{{ store.referralCode || '未设置' }}</span>
             <div class="flex flex-wrap gap-2 mt-3 items-center">
-              <!-- 修复：补全 input 闭合斜杠 -->
-              <input v-model="referralEdit" maxlength="32" placeholder="自设邀请码（字母数字）"
-                     class="border rounded-lg px-3 py-1.5 text-sm font-mono w-44 uppercase" />
-              <button type="button" @click="saveReferralCode" :disabled="referralSaving"
-                      class="text-xs theme-bg text-white px-3 py-1.5 rounded-lg font-bold disabled:opacity-50">
-                {{ store.referralCode ? '更换' : '设置' }}
-              </button>
+              
               <button type="button" v-if="store.referralCode" @click="copyReferralCode"
                       class="text-xs border px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:bg-slate-50">
                 复制
               </button>
             </div>
-            <p class="text-[10px] text-slate-400 mt-1">长度 {{ settings.referral_code_min_len || 6 }}～{{ settings.referral_code_max_len || 8 }} 位，仅英文与数字</p>
+            <p class="text-[10px] text-slate-400 mt-1">系统自动分配 · 格式 BOFUTZ-XXX（输入时空格可忽略）</p>
           </div>
           <div class="sm:text-right text-xs theme-text font-medium leading-relaxed">
             <div>邀请规则：注册送被邀请人体验 · 付费返利给邀请人</div>
@@ -577,28 +569,22 @@ export default {
 
         <div v-if="secEditing || !securitySet" class="space-y-3 max-w-xl">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <!-- 修复：补全 input 闭合斜杠 -->
             <input v-model="secForm.q1" type="text" placeholder="问题1（如：小学班主任姓氏）"
-                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
-            <!-- 修复：补全 input 闭合斜杠 -->
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
             <input v-model="secForm.a1" type="text" placeholder="答案1"
-                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <!-- 修复：补全 input 闭合斜杠 -->
             <input v-model="secForm.q2" type="text" placeholder="问题2（如：第一只宠物名字）"
-                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
-            <!-- 修复：补全 input 闭合斜杠 -->
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
             <input v-model="secForm.a2" type="text" placeholder="答案2"
-                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <!-- 修复：补全 input 闭合斜杠 -->
             <input v-model="secForm.q3" type="text" placeholder="问题3（如：最喜欢的城市）"
-                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
-            <!-- 修复：补全 input 闭合斜杠 -->
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
             <input v-model="secForm.a3" type="text" placeholder="答案3"
-                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+                   class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
           </div>
           <p class="text-[11px] text-slate-400">答案不区分大小写与空格；请务必记住，找回时无法查看原答案。</p>
           <div class="flex flex-wrap gap-2">
@@ -624,12 +610,9 @@ export default {
       <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100">
         <h3 class="font-bold text-slate-700 text-base mb-4">修改账号密码</h3>
         <div class="space-y-3 max-w-md">
-          <!-- 修复：补全 input 闭合斜杠 -->
-          <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
-          <!-- 修复：补全 input 闭合斜杠 -->
-          <input v-model="pwdForm.newPassword" type="password" placeholder="新密码(至少6位)" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
-          <!-- 修复：补全 input 闭合斜杠 -->
-          <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+          <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.newPassword" type="password" placeholder="新密码(至少6位)" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
           <button @click="changePassword" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 hover:opacity-90 shadow-sm">
             {{ pwdLoading ? '保存中...' : '确认修改' }}
           </button>
@@ -650,8 +633,7 @@ export default {
           <div class="space-y-2">
             <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
             <div class="flex gap-2">
-              <!-- 修复：补全 input 闭合斜杠 -->
-              <input v-model="inputCode" @input="onCodeInput" placeholder="如：563300" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none" />
+              <input v-model="inputCode" @input="onCodeInput" placeholder="如：563300" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
               <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
                 {{ searchingName ? '识别中...' : '添加' }}
               </button>

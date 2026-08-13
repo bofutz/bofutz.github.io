@@ -10,8 +10,7 @@ import { etfApi } from "../../api/etf.js";
 import { watchlistApi } from "../../api/watchlist.js";
 import { CONFIG } from "../../config.js";
 
-// 修复：改用 window.Vue 防止 no-undef 报错
-const { ref, computed, onMounted } = window.Vue;
+const { ref, computed, onMounted } = Vue;
 
 function settingOn(val) {
   return val === "1" || val === 1 || val === true || val === "true";
@@ -25,7 +24,6 @@ export default {
     const chartsMap = ref({});
     const customList = ref([]);
     const sharedList = ref([]);  // 通用监控全量（无论是否触发）
-    const chartBaseDate = ref(""); // 新增：保存后台返回的图表全局采集基准日
 
     const searchQuery = ref("");
     const expandedRowKey = ref(null);
@@ -98,6 +96,7 @@ export default {
       return null;
     };
 
+
     const getWeekDays = (dateStr) => {
       const [y, m, d] = parseYMD(dateStr);
       if (!y) return [];
@@ -132,9 +131,10 @@ export default {
       return match ? parseFloat(match[0]) : -9999;
     };
 
+    /** 本周一（本地日历），行情为空时仍能展示监控列表 */
     const calendarMonday = () => {
       const d = new Date();
-      const day = d.getDay();
+      const day = d.getDay(); // 0=Sun
       const diff = day === 0 ? -6 : 1 - day;
       d.setDate(d.getDate() + diff);
       const y = d.getFullYear();
@@ -144,6 +144,7 @@ export default {
     };
 
     const latestMonday = computed(() => {
+      // 优先：行情里最新有效日期所在周；否则用本周一（保证无触发也出表）
       const validDates = [
         ...new Set(
           allData.value
@@ -175,67 +176,83 @@ export default {
       return -1;
     });
 
-    /** 修复：兼容云端存储 API 常见的 last_modified 字段 */
-    const resolveChartEntry = (code) => {
-      const raw = chartsMap.value?.[code] || chartsMap.value?.[String(code)];
-      if (!raw) return null;
-      if (typeof raw === "string") return { url: raw, updated_at: null };
-      return {
-        url: raw.chart_url || raw.url || "",
-        updated_at: raw.updated_at || raw.last_modified || null,
-      };
-    };
-
-    /** 核心修复：更鲁棒的时间解析与 8 小时交易日回拨 */
-    const chartUpdateDay = (code) => {
-      const entry = resolveChartEntry(code);
-      if (!entry) return null;
-
-      let ts = Number(entry.updated_at);
-      
-      // 处理 updated_at 为 ISO 日期字符串（如 "2026-08-13T01:23:45Z"）的情况，避免 NaN
-      if (!ts || isNaN(ts)) {
-        const parsed = Date.parse(entry.updated_at);
-        if (!isNaN(parsed)) {
-          ts = parsed;
-        } else {
-          // 如果依然解析失败，降级使用 API 接口返回的基准采集日期
-          return chartBaseDate.value && isValidDate(chartBaseDate.value) ? chartBaseDate.value : null;
-        }
-      }
-
-      if (ts < 1e12) ts *= 1000;
-
-      // 重点：图表经常在收盘后、甚至次日凌晨生成完毕。
-      // 为防止新一日的 00:00 - 08:00 生成的图表跨天计算到第二天（导致日期不匹配周末/工作日列），
-      // 向后回拨 8 小时，确保图表准确落在上一交易日的列中。
-      const adjustedTs = ts - 8 * 3600 * 1000;
-
+    /** 北京日历 YYYY-MM-DD */
+    const bjYmd = (ms = Date.now()) => {
       try {
         return new Intl.DateTimeFormat("en-CA", {
           timeZone: "Asia/Shanghai",
           year: "numeric",
           month: "2-digit",
           day: "2-digit",
-        }).format(new Date(adjustedTs));
-      } catch (err) {
-        return new Date(adjustedTs).toISOString().slice(0, 10);
+        }).format(new Date(ms));
+      } catch (_) {
+        const d = new Date(ms);
+        return d.toISOString().slice(0, 10);
       }
     };
 
+    /** 解析图表记录：兼容 string url 或 { chart_url, updated_at } */
+    const resolveChartEntry = (code) => {
+      if (code == null) return null;
+      const key = String(code).replace(/\D/g, "").slice(-6) || String(code);
+      const raw =
+        chartsMap.value?.[key] ||
+        chartsMap.value?.[String(code)] ||
+        chartsMap.value?.[code];
+      if (!raw) return null;
+      if (typeof raw === "string") return { url: raw, updated_at: null };
+      return {
+        url: raw.chart_url || raw.url || "",
+        updated_at: raw.updated_at || null,
+      };
+    };
+
+    /** 图表更新日（北京日历）；无时间戳则退回今天 */
+    const chartUpdateDay = (code) => {
+      const entry = resolveChartEntry(code);
+      if (!entry) return null;
+      if (entry.updated_at) {
+        let ts = Number(entry.updated_at);
+        if (ts && !isNaN(ts)) {
+          if (ts < 1e12) ts *= 1000;
+          return bjYmd(ts);
+        }
+      }
+      return bjYmd(Date.now());
+    };
+
+    /**
+     * 日线图表图标列：按图表更新日落在本周对应周几（与行情触发无关）。
+     * 有图即可显示；更新日不在本周则落到本周最近已过交易日列。
+     */
     const chartColIndexForCode = (etfCode) => {
       if (!latestMonday.value) return -1;
       const weekDays = getWeekDays(latestMonday.value);
-      if (weekDays.length < 5) return -1;
+      if (!weekDays.length) return -1;
       const day = chartUpdateDay(etfCode);
       if (!day) return -1;
-      const idx = weekDays.indexOf(day);
-      return idx;
+      let idx = weekDays.indexOf(day);
+      if (idx >= 0) return idx;
+      // 更新日不在本周展示周：落到本周「今天或之前」最后一列
+      const today = bjYmd(Date.now());
+      for (let i = weekDays.length - 1; i >= 0; i--) {
+        if (weekDays[i] <= today) return i;
+      }
+      return 0;
     };
 
     const hasChartForCode = (etfCode) => {
       const e = resolveChartEntry(etfCode);
       return !!(e && e.url);
+    };
+
+    /** 无 DB 映射时仍可用 R2 公共路径出图，图标按「今天」列展示 */
+    const showDailyChartIcon = (etfCode, colIdx) => {
+      const target = chartColIndexForCode(etfCode);
+      if (target !== colIdx) return false;
+      if (hasChartForCode(etfCode)) return true;
+      // 监控列表内标的默认认为有图（R2 按日更新），仍按列显示入口
+      return true;
     };
 
     const handleSort = (column) => {
@@ -267,6 +284,7 @@ export default {
     const hasCurrentWeekStatus = (etfMap) =>
       Object.values(etfMap).some((r) => r.week_status_from === "current");
 
+    /** 从全量行情中拼出某一代码本周行 */
     const buildRowForCode = (etfCode, etfName) => {
       if (!latestMonday.value) return null;
       const weekDays = getWeekDays(latestMonday.value);
@@ -350,6 +368,7 @@ export default {
         ? latestMonday.value
         : prevMonday;
 
+      // ★ 关键并入通用监控列表：无触发数据的标的也要占一行（可看图表）
       (sharedList.value || []).forEach((s) => {
         const code = String(s.etf_code || s.code || "").replace(/\D/g, "").slice(-6);
         if (code.length !== 6) return;
@@ -366,6 +385,7 @@ export default {
         }
       });
 
+      // 行情里出现过、但不在本周格子里的代码也并入（跨周兜底）
       allData.value.forEach((item) => {
         const code = String(item.etf_code || "").replace(/\D/g, "").slice(-6);
         if (code.length !== 6) return;
@@ -453,6 +473,7 @@ export default {
       };
     });
 
+    /** 定制标的：合并行情行 */
     const customRows = computed(() => {
       if (!store.state.isLoggedIn || !customList.value.length) return [];
       const now = Date.now();
@@ -474,7 +495,7 @@ export default {
     });
 
     const canViewChart = (etfCode, isCustom = false) => {
-      if (isCustom) return true;
+      if (isCustom) return true; // 有效定制期内可看图
       if (store.state.isVip) return true;
       return processedData.value.freeTop3Codes.includes(etfCode);
     };
@@ -646,11 +667,7 @@ export default {
         const chartsRes = results[1];
         const sharedRes = results[2];
         if (Array.isArray(data)) allData.value = data;
-        
         chartsMap.value = chartsRes.charts || chartsRes || {};
-        // 保存接口可能下发的基准日期，作为时间戳解析失败的兜底策略
-        chartBaseDate.value = chartsRes.date || chartsRes.base_date || chartsRes.update_date || "";
-        
         const sharedRaw = sharedRes?.data ?? sharedRes;
         sharedList.value = Array.isArray(sharedRaw) ? sharedRaw : [];
         if (store.state.isLoggedIn && results[3]) {
@@ -677,6 +694,7 @@ export default {
       latestDailyColIndex,
       chartColIndexForCode,
       hasChartForCode,
+      showDailyChartIcon,
       chartUpdateDay,
       expandedRowKey,
       formatDateCN,
@@ -701,8 +719,7 @@ export default {
     <div class="max-w-7xl mx-auto space-y-3 sm:space-y-4 select-none">
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center w-full">
         <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3.5"></i>
-        <!-- 修复：补全 input 自闭合斜杠 -->
-        <input v-model="searchQuery" type="search" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3" />
+        <input v-model="searchQuery" type="search" placeholder="搜索 标的代码/名称..." class="w-full bg-transparent border-none outline-none text-sm py-2.5 px-3">
       </div>
 
       <div v-if="loading" class="text-center py-12 text-slate-400">
@@ -711,6 +728,10 @@ export default {
       </div>
 
       <template v-else>
+        <!-- 定制监控已下线 -->
+
+
+
         <!-- ===== 通用数据表 ===== -->
         <div v-if="!processedData.list.length" class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
           <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-40"></i>
@@ -756,7 +777,7 @@ export default {
                     <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(cellPrimaryStatus(item.days[idx-1]))">
                       <div class="flex items-center justify-center gap-1">
                         <span class="text-[11px] sm:text-sm font-mono tracking-tight">{{ formatDayCell(item.days[idx-1]) }}</span>
-                        <i v-if="hasChartForCode(item.etf_code) && chartColIndexForCode(item.etf_code) === idx - 1"
+                        <i v-if="showDailyChartIcon(item.etf_code, idx - 1)"
                            class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs shrink-0"
                            :title="chartDateTitle(chartUpdateDay(item.etf_code) || processedData.weekDays[idx-1])"
                            @click.stop="openDailyChartViewer(item, false)"></i>
@@ -815,13 +836,11 @@ export default {
           <p class="text-xs text-slate-500">{{ settings.tip_note || '自愿打赏，不解锁任何权限' }}</p>
           <div class="flex justify-center gap-4 flex-wrap">
             <div v-if="tipWechatSrc" class="space-y-1">
-              <!-- 修复：补全 img 自闭合斜杠 -->
-              <img :src="tipWechatSrc" class="w-28 h-28 object-contain border rounded-lg" alt="微信" />
+              <img :src="tipWechatSrc" class="w-28 h-28 object-contain border rounded-lg" alt="微信">
               <div class="text-[11px] text-slate-500">微信</div>
             </div>
             <div v-if="tipAlipaySrc" class="space-y-1">
-              <!-- 修复：补全 img 自闭合斜杠 -->
-              <img :src="tipAlipaySrc" class="w-28 h-28 object-contain border rounded-lg" alt="支付宝" />
+              <img :src="tipAlipaySrc" class="w-28 h-28 object-contain border rounded-lg" alt="支付宝">
               <div class="text-[11px] text-slate-500">支付宝</div>
             </div>
             <p v-if="!tipWechatSrc && !tipAlipaySrc" class="text-xs text-slate-400">后台尚未配置打赏收款码</p>
