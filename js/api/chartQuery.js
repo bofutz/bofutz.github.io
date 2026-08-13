@@ -12,10 +12,7 @@ export const chartQueryApi = {
 
   /**
    * 提交查询
-   * @param {Object} params
-   * @param {string} params.etfCode
-   * @param {string} [params.etfName]
-   * @param {string} [params.interval]
+   * @param {{ etfCode: string, etfName?: string, interval?: string }}
    */
   async submit({ etfCode, etfName, interval = "daily" }) {
     return request("/api/chart-query/submit", {
@@ -34,7 +31,6 @@ export const chartQueryApi = {
   },
 
   async fetchStatus(id) {
-    // 补充 String 显式转换，防止传入 Number 等非字符串类型导致 Linter/TS 告警
-    return request(`/api/chart-query/status?id=${encodeURIComponent(String(id))}`);
+    return request(`/api/chart-query/status?id=${encodeURIComponent(id)}`);
   },
 };

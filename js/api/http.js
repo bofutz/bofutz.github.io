@@ -8,7 +8,7 @@ import { store } from "../store.js";
 /**
  * 通用 Fetch 请求
  * @param {string} endpoint - API 路径
- * @param {object} [options={}] - Fetch 配置项
+ * @param {object} options - Fetch 配置项
  * @returns {Promise<any>}
  */
 export async function request(endpoint, options = {}) {
@@ -18,21 +18,16 @@ export async function request(endpoint, options = {}) {
     ...options.headers,
   };
 
-  // 安全嗅探：防止在 Node.js 自动化测试或 SSR 环境中因 localStorage 未定义而引发红叉报错
-  const isBrowser = typeof localStorage !== "undefined";
+  // 注入用户 Token
+  const token = localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN);
+  if (token && !headers["Authorization"]) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
 
-  if (isBrowser) {
-    // 注入用户 Token
-    const token = localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN);
-    if (token && !headers["Authorization"]) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-
-    // 注入管理员密钥
-    const adminSecret = localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
-    if (adminSecret && !headers["Admin-Secret"]) {
-      headers["Admin-Secret"] = adminSecret;
-    }
+  // 注入管理员密钥
+  const adminSecret = localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
+  if (adminSecret && !headers["Admin-Secret"]) {
+    headers["Admin-Secret"] = adminSecret;
   }
 
   try {
@@ -42,9 +37,7 @@ export async function request(endpoint, options = {}) {
     if (response.status === 401 && !endpoint.includes("/api/login")) {
       if (endpoint.startsWith("/api/admin/")) {
         store.state.isAdminAuthenticated = false;
-        if (isBrowser) {
-          localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
-        }
+        localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
         throw new Error("管理员鉴权失败或已过期");
       } else {
         store.clearUserState();

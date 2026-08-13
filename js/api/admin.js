@@ -64,7 +64,7 @@ export const adminApi = {
 
   // 3. 订单审核
   async fetchOrders(status = "") {
-    const query = status ? `?status=${encodeURIComponent(String(status))}` : "";
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
     return request(`/api/admin/orders${query}`);
   },
   async approveOrder(orderId, userId, addDays) {
@@ -85,7 +85,7 @@ export const adminApi = {
   },
 
   // 4. 套餐管理 (支持 shared / custom / both)
-  async fetchPlans() {
+  async fetchPlansAdmin() {
     return request("/api/admin/plans");
   },
   async savePlan(planData) {
@@ -124,9 +124,10 @@ export const adminApi = {
     });
   },
 
+
   // 自主查询 / 次数套餐
   async fetchChartQueries(status = "") {
-    const q = status ? `?status=${encodeURIComponent(String(status))}` : "";
+    const q = status ? `?status=${encodeURIComponent(status)}` : "";
     return request(`/api/admin/chart-queries${q}`);
   },
   async fetchChartCreditPlans() {
