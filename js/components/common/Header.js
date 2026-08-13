@@ -7,8 +7,7 @@
 import { store } from "../../store.js";
 import { CONFIG } from "../../config.js";
 
-// 修复：改用 window.Vue 防止 no-undef 报错
-const { ref, computed, onMounted, onUnmounted } = window.Vue;
+const { ref, computed, onMounted, onUnmounted } = Vue;
 
 export default {
   name: "Header",
@@ -22,14 +21,12 @@ export default {
     // 桌面顶栏
     const nav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
-      { path: "#/profile", label: "个人中心", icon: "fa-solid fa-id-card" },
       { path: "#/query", label: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
       { path: "#/vote", label: "票选监控", icon: "fa-solid fa-check-to-slot" },
       { path: "#/plan", label: "开通套餐", icon: "fa-solid fa-crown" },
-      { path: "#/tickets", label: "客服工单", icon: "fa-solid fa-headset" },
       { path: "#/guide", label: "图表说明", icon: "fa-solid fa-book-open" },
     ];
-    // 桌面与手机同一顺序
+    // 手机抽屉：补个人中心、客服工单（顶栏不重复）
     const mobileNav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
       { path: "#/profile", label: "个人中心", icon: "fa-solid fa-id-card" },
@@ -113,9 +110,8 @@ export default {
       <div class="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-3">
         <!-- Logo -->
         <a href="#/" class="flex items-center gap-2 shrink-0 no-underline">
-          <!-- 修复：补全 img 闭合斜杠 -->
           <img src="./logo.png" alt="波幅探长" class="w-8 h-8 rounded-lg object-cover shadow-sm bg-slate-100 shrink-0"
-               onerror="this.onerror=null;this.src='logo.png';" />
+               onerror="this.onerror=null;this.src='logo.png';">
           <span class="font-bold text-slate-800 text-sm sm:text-base tracking-wide">波幅探长</span>
         </a>
 
@@ -158,7 +154,7 @@ export default {
                   <div class="text-xs text-slate-400">当前身份</div>
                   <div class="text-sm font-bold text-slate-800 mt-0.5">{{ levelLabel }}</div>
                   <div class="text-[11px] text-slate-500 mt-0.5">
-                    通用 VIP：
+                    监控 VIP：
                     <span :class="store.isVip ? 'text-emerald-600 font-bold' : 'text-slate-400'">
                       {{ store.isVip ? ('剩余 ' + store.vipDaysLeft + ' 天') : '未开通' }}
                     </span>
@@ -173,11 +169,7 @@ export default {
                 </a>
                 <a href="#/tickets" @click="store.userMenuOpen=false"
                    class="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 no-underline">
-                  <i class="fa-solid fa-headset w-4 text-slate-400"></i>工单反馈
-                </a>
-                <a href="#/plan" @click="store.userMenuOpen=false"
-                   class="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 no-underline">
-                  <i class="fa-solid fa-crown w-4 text-amber-500"></i>开通 / 续费
+                  <i class="fa-solid fa-headset w-4 text-slate-400"></i>客服工单
                 </a>
                 <button type="button" @click="logout"
                         class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 text-left">

@@ -6,8 +6,7 @@ import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
 import { CONFIG } from "../../config.js";
 
-// 修复：改用 window.Vue 防止 no-undef 报错
-const { ref, reactive, nextTick, watch, computed } = window.Vue;
+const { ref, reactive, nextTick, watch, computed } = Vue;
 
 export default {
   name: "AuthModal",
@@ -297,17 +296,15 @@ export default {
             新注册即送通用 VIP <strong>{{ settings.gift_register_days || 1 }}</strong> 天
           </div>
 
-          <!-- 修复：补全 input 闭合斜杠 -->
           <input v-model="form.username" type="email" :placeholder="store.authMode==='register'?'注册电子邮箱':'你的注册账号'"
-                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
 
           <div v-show="store.authMode==='register'" class="flex justify-center min-h-[65px]">
             <div id="turnstile-container"></div>
           </div>
 
           <div v-if="store.authMode==='register'" class="flex gap-2">
-            <!-- 修复：补全 input 闭合斜杠 -->
-            <input v-model="form.emailCode" type="text" placeholder="6位邮箱验证码" class="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm font-mono" />
+            <input v-model="form.emailCode" type="text" placeholder="6位邮箱验证码" class="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm font-mono">
             <button @click="sendEmailCode" type="button" :disabled="sendCodeLoading||countdown>0"
                     class="px-3 py-2 text-xs theme-bg text-white rounded-lg disabled:opacity-50 whitespace-nowrap">
               {{ countdown > 0 ? countdown + 's' : (sendCodeLoading ? '发送中...' : '获取验证码') }}
@@ -318,9 +315,8 @@ export default {
             验证码可能被拦截，若收件箱没有，请到<strong class="text-slate-500">垃圾邮件</strong>中查看。
           </p>
 
-          <!-- 修复：补全 input 闭合斜杠 -->
           <input v-model="form.password" type="password" :placeholder="store.authMode==='register'?'设置密码(至少6位)':'输入密码'"
-                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
 
           <div v-if="store.authMode==='login'" class="flex justify-end -mt-1">
             <button type="button" @click="openForgot" class="text-xs text-slate-400 hover:theme-text">
@@ -328,9 +324,8 @@ export default {
             </button>
           </div>
 
-          <!-- 修复：补全 input 闭合斜杠 -->
           <input v-if="store.authMode==='register'" v-model="form.refCode" type="text" placeholder="推荐码(选填)"
-                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
 
           <p v-if="store.authMode==='register' && form.refCode" class="text-[11px] text-slate-400">
             填写邀请码后，您可额外获得 {{ settings.gift_invitee_days || 3 }} 天体验（含注册赠送共约 {{ (Number(settings.gift_register_days)||1) + (Number(settings.gift_invitee_days)||3) }} 天）。邀请人将在您购买达到门槛的套餐后获得天数返利。
@@ -350,10 +345,9 @@ export default {
 
           <!-- 步骤1：输入账号 -->
           <template v-if="resetStep === 'account'">
-            <!-- 修复：补全 input 闭合斜杠 -->
             <input v-model="resetForm.username" type="text" placeholder="请输入账号"
                    class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
-                   @keyup.enter="startReset" />
+                   @keyup.enter="startReset">
             <button @click="startReset" :disabled="resetLoading"
                     class="w-full theme-bg text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-50 hover:opacity-90 flex justify-center items-center">
               <i v-if="resetLoading" class="fa-solid fa-circle-notch animate-spin mr-2"></i>
@@ -365,19 +359,16 @@ export default {
           <template v-else-if="resetStep === 'questions'">
             <div v-for="q in resetForm.questions" :key="q.id" class="space-y-1">
               <label class="text-xs font-medium text-slate-600 block">{{ q.question }}</label>
-              <!-- 修复：补全 input 闭合斜杠 -->
               <input v-model="resetForm.answers[q.id]" type="text" placeholder="请输入答案"
-                     class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
+                     class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
             </div>
 
             <div class="border-t border-slate-100 pt-3 space-y-3">
-              <!-- 修复：补全 input 闭合斜杠 -->
               <input v-model="resetForm.newPassword" type="password" placeholder="新密码（至少6位）"
-                     class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none" />
-              <!-- 修复：补全 input 闭合斜杠 -->
+                     class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
               <input v-model="resetForm.confirmPassword" type="password" placeholder="再次输入新密码"
                      class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
-                     @keyup.enter="confirmReset" />
+                     @keyup.enter="confirmReset">
             </div>
 
             <button @click="confirmReset" :disabled="resetLoading"
