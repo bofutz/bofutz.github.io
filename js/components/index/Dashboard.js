@@ -194,7 +194,6 @@ export default {
 
     const R2_CHART_BASE = "https://pub-973330e118204686a625fe51431d4336.r2.dev/charts";
 
-    /** 解析图表记录 */
     const resolveChartEntry = (code) => {
       if (code == null) return null;
       const rawCode = String(code);
@@ -209,7 +208,7 @@ export default {
       };
     };
 
-    /** 时间戳/日期字符串 → 北京 YYYY-MM-DD；无效返回 null（绝不退回今天） */
+    /** 任意时间值 → 北京日；无效返回 null（不用今天凑） */
     const toBjDay = (val) => {
       if (val == null || val === "") return null;
       if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
@@ -226,28 +225,27 @@ export default {
     };
 
     /**
-     * 单个标的图表采集日：只认 updated_at / 全局采集日
-     * 没有就返回 null → 不显示日线 icon（避免错列）
+     * 图表采集日：单标的 updated_at > 全局 globalChartDay
+     * 全局来自接口 chart_date（Worker 已用 R2 Last-Modified 补全）
      */
     const chartUpdateDay = (code) => {
+      // 全局采集日（接口 chart_date / R2 Last-Modified）优先，整表同一天、与图床一致
+      if (globalChartDay.value) return globalChartDay.value;
       const entry = resolveChartEntry(code);
       if (entry && entry.updated_at != null && entry.updated_at !== "") {
         const d = toBjDay(entry.updated_at);
         if (d) return d;
       }
-      return globalChartDay.value || null;
+      return null;
     };
 
-    /**
-     * 日线 icon 列：必须与采集日一致；采集日不在本周则不显示
-     */
     const chartColIndexForCode = (etfCode) => {
       if (!latestMonday.value) return -1;
       const weekDays = getWeekDays(latestMonday.value);
       if (!weekDays.length) return -1;
       const day = chartUpdateDay(etfCode);
       if (!day) return -1;
-      return weekDays.indexOf(day);
+      return weekDays.indexOf(day); // 不在本周则 -1，不显示
     };
 
     const hasChartForCode = (etfCode) => {
@@ -255,85 +253,60 @@ export default {
       return !!(e && e.url);
     };
 
-    /** 仅当采集日 == 该列日期时显示 */
+    /**
+     * 日线 icon：采集日对应列才显示
+     * 有全局/单标的采集日即可显示（图在 R2，不强制要求 chartsMap 有记录）
+     */
     const showDailyChartIcon = (etfCode, colIdx) => {
       if (colIdx < 0) return false;
       const target = chartColIndexForCode(etfCode);
       return target === colIdx && target >= 0;
     };
 
-    /**
-     * 从 chartsMap 取最大 updated_at 作为全局采集日；
-     * 若无，则 HEAD 探测 R2 日线图 Last-Modified（与上传日一致）
-     */
-    const resolveGlobalChartDay = async (sampleCodes = []) => {
+    /** 应用接口 chart_date；若仍空再尝试浏览器读 R2（多数情况 Worker 已给） */
+    const resolveGlobalChartDay = async (sampleCodes = [], apiChartDate = null) => {
+      if (apiChartDate) {
+        const d = toBjDay(apiChartDate);
+        if (d) {
+          globalChartDay.value = d;
+          return d;
+        }
+      }
       let maxTs = 0;
-      const map = chartsMap.value || {};
-      Object.values(map).forEach((raw) => {
+      Object.values(chartsMap.value || {}).forEach((raw) => {
         if (!raw || typeof raw === "string") return;
         const u = raw.updated_at || raw.last_modified;
         if (u == null || u === "") return;
         let ts = Number(u);
-        if (!ts || isNaN(ts)) {
-          ts = Date.parse(String(u));
-        } else if (ts < 1e12) {
-          ts *= 1000;
-        }
+        if (!ts || isNaN(ts)) ts = Date.parse(String(u));
+        else if (ts < 1e12) ts *= 1000;
         if (ts && !isNaN(ts) && ts > maxTs) maxTs = ts;
       });
       if (maxTs > 0) {
         globalChartDay.value = bjYmd(maxTs);
         return globalChartDay.value;
       }
-
       const codes = (sampleCodes || [])
         .map((c) => String(c || "").replace(/\D/g, "").slice(-6))
         .filter((c) => c.length === 6);
-      const tryList = codes.length
-        ? codes.slice(0, 8)
-        : ["159201", "159206", "513350", "518880", "512400"];
-
+      const tryList = (codes.length ? codes : ["159201", "513350", "518880"]).slice(0, 6);
       for (const code of tryList) {
-        const url = `${R2_CHART_BASE}/${code}_daily.png`;
         try {
-          const res = await fetch(url, { method: "HEAD", mode: "cors", cache: "no-store" });
+          const res = await fetch(`${R2_CHART_BASE}/${code}_daily.png`, {
+            method: "HEAD",
+            mode: "cors",
+            cache: "no-store",
+          });
           if (!res.ok) continue;
           const lm = res.headers.get("Last-Modified") || res.headers.get("last-modified");
-          if (lm) {
-            const ts = Date.parse(lm);
-            if (!isNaN(ts)) {
-              globalChartDay.value = bjYmd(ts);
-              return globalChartDay.value;
-            }
-          }
-        } catch (_) {
-          /* CORS 或网络失败则试下一个 */
-        }
-      }
-
-      // 最后：用 GET 取一张图的 blob 不划算；改为用 range 失败则放弃
-      // 若 HEAD 被 CORS 挡住，尝试 GET 只为读 header（部分 CDN 对 GET 放宽）
-      for (const code of tryList.slice(0, 3)) {
-        const url = `${R2_CHART_BASE}/${code}_daily.png`;
-        try {
-          const res = await fetch(url, { method: "GET", mode: "cors", cache: "no-store" });
-          if (!res.ok) continue;
-          const lm = res.headers.get("Last-Modified") || res.headers.get("last-modified");
-          if (lm) {
-            const ts = Date.parse(lm);
-            if (!isNaN(ts)) {
-              globalChartDay.value = bjYmd(ts);
-              // 不读 body，尽快取消
-              try {
-                if (res.body && res.body.cancel) res.body.cancel();
-              } catch (_) {}
-              return globalChartDay.value;
-            }
-          }
+          if (!lm) continue;
+          const ts = Date.parse(lm);
+          if (isNaN(ts)) continue;
+          globalChartDay.value = bjYmd(ts);
+          return globalChartDay.value;
         } catch (_) {}
       }
-      globalChartDay.value = null;
-      return null;
+      return globalChartDay.value;
     };
 
     const handleSort = (column) => {
@@ -759,9 +732,6 @@ export default {
         const sharedRes = results[2];
         if (Array.isArray(data)) allData.value = data;
         chartsMap.value = chartsRes.charts || chartsRes || {};
-        if (chartsRes && chartsRes.chart_date) {
-          globalChartDay.value = toBjDay(chartsRes.chart_date) || chartsRes.chart_date;
-        }
         const sharedRaw = sharedRes?.data ?? sharedRes;
         sharedList.value = Array.isArray(sharedRaw) ? sharedRaw : [];
         if (store.state.isLoggedIn && results[3]) {
@@ -771,7 +741,7 @@ export default {
         const sampleCodes = (sharedList.value || [])
           .map((s) => s.etf_code || s.code)
           .concat((allData.value || []).map((i) => i.etf_code));
-        await resolveGlobalChartDay(sampleCodes);
+        await resolveGlobalChartDay(sampleCodes, chartsRes && chartsRes.chart_date);
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
