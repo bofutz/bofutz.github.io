@@ -42,6 +42,8 @@ export default {
       default_pay_channel: "wechat",
       custom_max_symbols: "3",
       chart_query_batch_hours: "2",
+      chart_run_slots: '[{"time":"15:40","mode":"all","enabled":true},{"time":"18:00","mode":"query","enabled":true},{"time":"20:00","mode":"query","enabled":true},{"time":"22:00","mode":"query","enabled":true}]',
+      chart_run_window_minutes: "25",
       chart_query_retain_trading_days: "2",
       chart_query_intervals: '["daily"]',
       chart_query_deduct_on: "submit",
@@ -270,10 +272,24 @@ export default {
           </div>
           <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4 space-y-3">
             <div class="text-xs font-bold text-slate-700">自主查询</div>
+            <div class="space-y-2">
+              <div class="text-[11px] text-slate-500 leading-relaxed">
+                <strong>出图场次</strong>（北京时间）：GitHub Actions 会定时「醒来」，仅当当前时刻落在某场次 ±窗口分钟内才真正跑 charts。
+                mode：<code class="bg-white px-1 rounded">all</code>=监控+查询，
+                <code class="bg-white px-1 rounded">query</code>=仅自主查询，
+                <code class="bg-white px-1 rounded">shared</code>=仅监控。
+                增删改下方 JSON 后保存即可，无需改仓库 cron 表达式。
+              </div>
+              <label class="text-xs space-y-1 block">
+                <span class="text-slate-500">出图场次 JSON（chart_run_slots）</span>
+                <textarea v-model="form.chart_run_slots" rows="5" class="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-white leading-relaxed"></textarea>
+              </label>
+            </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label class="text-xs space-y-1">
-                <span class="text-slate-500">批量间隔（小时）</span>
-                <input v-model="form.chart_query_batch_hours" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                <span class="text-slate-500">匹配窗口（分钟）</span>
+                <input v-model="form.chart_run_window_minutes" type="number" min="5" max="60" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                <span class="text-[10px] text-slate-400">例：25 表示 15:40 场次在 15:15–16:05 醒来均可命中</span>
               </label>
               <label class="text-xs space-y-1">
                 <span class="text-slate-500">图片保留交易日</span>
