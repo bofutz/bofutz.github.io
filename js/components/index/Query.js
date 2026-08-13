@@ -48,24 +48,38 @@ export default {
     const intervalLabel = (k) =>
       (CONFIG.CHART_INTERVALS && CONFIG.CHART_INTERVALS[k]) || k;
 
-    /** 下一场出图批次提示（交易日 15:40 / 18:00 / 20:00 / 22:00） */
+    /** 下一场出图：读后台 chart_run_slots，默认 15:40/18/20/22 */
     const nextBatchHint = computed(() => {
       const now = new Date();
-      // 用本地时区；站点用户主要为国内
       const mins = now.getHours() * 60 + now.getMinutes();
-      const slots = [15 * 60 + 40, 18 * 60, 20 * 60, 22 * 60]; // 15:40, 18, 20, 22
-      const wd = now.getDay(); // 0 Sun
+      const wd = now.getDay();
       const isWeekend = wd === 0 || wd === 6;
+      let slots = [];
+      try {
+        const raw = settings.value.chart_run_slots;
+        const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (Array.isArray(arr)) {
+          for (const s of arr) {
+            if (!s || s.enabled === false) continue;
+            const t = String(s.time || "");
+            const m = t.match(/^(\d{1,2}):(\d{2})$/);
+            if (!m) continue;
+            slots.push(parseInt(m[1], 10) * 60 + parseInt(m[2], 10));
+          }
+        }
+      } catch (_) {}
+      if (!slots.length) slots = [15 * 60 + 40, 18 * 60, 20 * 60, 22 * 60];
+      slots.sort((a, b) => a - b);
       const fmt = (totalMin) => {
         const h = Math.floor(totalMin / 60);
         const m = totalMin % 60;
         return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
       };
-      if (isWeekend) return "下一交易日 15:40";
+      if (isWeekend) return "下一交易日 " + fmt(slots[0]);
       for (const s of slots) {
         if (mins < s) return fmt(s);
       }
-      return "下一交易日 15:40";
+      return "下一交易日 " + fmt(slots[0]);
     });
 
     const fetchStockNameByCode = async (symbolStr) => {
@@ -227,8 +241,7 @@ export default {
         <h2 class="text-2xl font-bold text-slate-800">自主查询</h2>
         <p class="text-xs text-slate-400 mt-1 leading-relaxed">
           输入任意股票/ETF 代码，按次消耗查询次数。
-          交易日约 <strong class="text-slate-600">15:40</strong> 生成收盘日线；若之后提交，将在
-          <strong class="text-slate-600">18:00 / 20:00 / 22:00</strong> 批次处理（预计下场
+          出图时间由后台「系统设置 → 自主查询 → 出图场次」配置（默认交易日 15:40 / 18:00 / 20:00 / 22:00）。预计下场
           <strong class="theme-text">{{ nextBatchHint }}</strong>）。
           图片约保留 <strong class="text-slate-600">{{ retainDays }}</strong> 个交易日。
         </p>
