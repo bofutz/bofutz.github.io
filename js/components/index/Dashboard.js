@@ -22,6 +22,8 @@ export default {
     const loading = ref(false);
     const allData = ref([]);
     const chartsMap = ref({});
+    /** 图表统一采集日 YYYY-MM-DD（北京）；仅来自 updated_at 或 R2 Last-Modified，绝不使用「今天」凑数 */
+    const globalChartDay = ref(null);
     const customList = ref([]);
     const sharedList = ref([]);  // 通用监控全量（无论是否触发）
 
@@ -190,7 +192,9 @@ export default {
       }
     };
 
-    /** 解析图表记录：兼容 string / {chart_url, updated_at} */
+    const R2_CHART_BASE = "https://pub-973330e118204686a625fe51431d4336.r2.dev/charts";
+
+    /** 解析图表记录 */
     const resolveChartEntry = (code) => {
       if (code == null) return null;
       const rawCode = String(code);
@@ -205,17 +209,15 @@ export default {
       };
     };
 
-    /**
-     * 图表应对应的采集/更新日期（北京日）
-     * 规则：用 updated_at 的日历日（不做 8 小时回拨，下午上传就落当天）
-     * 无时间戳 → 不瞎猜成「有数据的那天」，由 chartColIndex 再 fallback
-     */
-    const chartUpdateDay = (code) => {
-      const entry = resolveChartEntry(code);
-      if (!entry || entry.updated_at == null || entry.updated_at === "") return null;
-      let ts = Number(entry.updated_at);
+    /** 时间戳/日期字符串 → 北京 YYYY-MM-DD；无效返回 null（绝不退回今天） */
+    const toBjDay = (val) => {
+      if (val == null || val === "") return null;
+      if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+        return val.trim();
+      }
+      let ts = Number(val);
       if (!ts || isNaN(ts)) {
-        const parsed = Date.parse(String(entry.updated_at));
+        const parsed = Date.parse(String(val));
         if (isNaN(parsed)) return null;
         ts = parsed;
       }
@@ -223,33 +225,29 @@ export default {
       return bjYmd(ts);
     };
 
-    /** 本周展示列中「今天或之前」的最后一列，用作无 updated_at 时的落点 */
-    const fallbackChartColIndex = () => {
-      if (!latestMonday.value) return -1;
-      const weekDays = getWeekDays(latestMonday.value);
-      if (!weekDays.length) return -1;
-      const today = bjYmd(Date.now());
-      for (let i = weekDays.length - 1; i >= 0; i--) {
-        if (weekDays[i] <= today) return i;
+    /**
+     * 单个标的图表采集日：只认 updated_at / 全局采集日
+     * 没有就返回 null → 不显示日线 icon（避免错列）
+     */
+    const chartUpdateDay = (code) => {
+      const entry = resolveChartEntry(code);
+      if (entry && entry.updated_at != null && entry.updated_at !== "") {
+        const d = toBjDay(entry.updated_at);
+        if (d) return d;
       }
-      return 0;
+      return globalChartDay.value || null;
     };
 
     /**
-     * 日线图表 icon 落在哪一列（0=周一 … 4=周五）
-     * 1) 有 updated_at 且落在本周 → 该列
-     * 2) 否则 → 本周「今天及之前」最后交易日列（图表每日都有，与行情阈值无关）
+     * 日线 icon 列：必须与采集日一致；采集日不在本周则不显示
      */
     const chartColIndexForCode = (etfCode) => {
       if (!latestMonday.value) return -1;
       const weekDays = getWeekDays(latestMonday.value);
       if (!weekDays.length) return -1;
       const day = chartUpdateDay(etfCode);
-      if (day) {
-        const idx = weekDays.indexOf(day);
-        if (idx >= 0) return idx;
-      }
-      return fallbackChartColIndex();
+      if (!day) return -1;
+      return weekDays.indexOf(day);
     };
 
     const hasChartForCode = (etfCode) => {
@@ -257,13 +255,85 @@ export default {
       return !!(e && e.url);
     };
 
-    /**
-     * 是否在该日列显示日线图表 icon
-     * 与行情是否触发无关：监控列表标的每个交易日都应有入口（点开再探 R2）
-     */
+    /** 仅当采集日 == 该列日期时显示 */
     const showDailyChartIcon = (etfCode, colIdx) => {
       if (colIdx < 0) return false;
-      return chartColIndexForCode(etfCode) === colIdx;
+      const target = chartColIndexForCode(etfCode);
+      return target === colIdx && target >= 0;
+    };
+
+    /**
+     * 从 chartsMap 取最大 updated_at 作为全局采集日；
+     * 若无，则 HEAD 探测 R2 日线图 Last-Modified（与上传日一致）
+     */
+    const resolveGlobalChartDay = async (sampleCodes = []) => {
+      let maxTs = 0;
+      const map = chartsMap.value || {};
+      Object.values(map).forEach((raw) => {
+        if (!raw || typeof raw === "string") return;
+        const u = raw.updated_at || raw.last_modified;
+        if (u == null || u === "") return;
+        let ts = Number(u);
+        if (!ts || isNaN(ts)) {
+          ts = Date.parse(String(u));
+        } else if (ts < 1e12) {
+          ts *= 1000;
+        }
+        if (ts && !isNaN(ts) && ts > maxTs) maxTs = ts;
+      });
+      if (maxTs > 0) {
+        globalChartDay.value = bjYmd(maxTs);
+        return globalChartDay.value;
+      }
+
+      const codes = (sampleCodes || [])
+        .map((c) => String(c || "").replace(/\D/g, "").slice(-6))
+        .filter((c) => c.length === 6);
+      const tryList = codes.length
+        ? codes.slice(0, 8)
+        : ["159201", "159206", "513350", "518880", "512400"];
+
+      for (const code of tryList) {
+        const url = `${R2_CHART_BASE}/${code}_daily.png`;
+        try {
+          const res = await fetch(url, { method: "HEAD", mode: "cors", cache: "no-store" });
+          if (!res.ok) continue;
+          const lm = res.headers.get("Last-Modified") || res.headers.get("last-modified");
+          if (lm) {
+            const ts = Date.parse(lm);
+            if (!isNaN(ts)) {
+              globalChartDay.value = bjYmd(ts);
+              return globalChartDay.value;
+            }
+          }
+        } catch (_) {
+          /* CORS 或网络失败则试下一个 */
+        }
+      }
+
+      // 最后：用 GET 取一张图的 blob 不划算；改为用 range 失败则放弃
+      // 若 HEAD 被 CORS 挡住，尝试 GET 只为读 header（部分 CDN 对 GET 放宽）
+      for (const code of tryList.slice(0, 3)) {
+        const url = `${R2_CHART_BASE}/${code}_daily.png`;
+        try {
+          const res = await fetch(url, { method: "GET", mode: "cors", cache: "no-store" });
+          if (!res.ok) continue;
+          const lm = res.headers.get("Last-Modified") || res.headers.get("last-modified");
+          if (lm) {
+            const ts = Date.parse(lm);
+            if (!isNaN(ts)) {
+              globalChartDay.value = bjYmd(ts);
+              // 不读 body，尽快取消
+              try {
+                if (res.body && res.body.cancel) res.body.cancel();
+              } catch (_) {}
+              return globalChartDay.value;
+            }
+          }
+        } catch (_) {}
+      }
+      globalChartDay.value = null;
+      return null;
     };
 
     const handleSort = (column) => {
@@ -689,12 +759,19 @@ export default {
         const sharedRes = results[2];
         if (Array.isArray(data)) allData.value = data;
         chartsMap.value = chartsRes.charts || chartsRes || {};
+        if (chartsRes && chartsRes.chart_date) {
+          globalChartDay.value = toBjDay(chartsRes.chart_date) || chartsRes.chart_date;
+        }
         const sharedRaw = sharedRes?.data ?? sharedRes;
         sharedList.value = Array.isArray(sharedRaw) ? sharedRaw : [];
         if (store.state.isLoggedIn && results[3]) {
           const raw = results[3].data ?? results[3];
           customList.value = Array.isArray(raw) ? raw : [];
         }
+        const sampleCodes = (sharedList.value || [])
+          .map((s) => s.etf_code || s.code)
+          .concat((allData.value || []).map((i) => i.etf_code));
+        await resolveGlobalChartDay(sampleCodes);
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
@@ -717,6 +794,7 @@ export default {
       hasChartForCode,
       showDailyChartIcon,
       chartUpdateDay,
+      globalChartDay,
       expandedRowKey,
       formatDateCN,
       formatDayCell,
