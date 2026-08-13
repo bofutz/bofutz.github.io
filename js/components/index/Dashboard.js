@@ -186,54 +186,48 @@ export default {
           day: "2-digit",
         }).format(new Date(ms));
       } catch (_) {
-        const d = new Date(ms);
-        return d.toISOString().slice(0, 10);
+        return new Date(ms).toISOString().slice(0, 10);
       }
     };
 
-    /** 解析图表记录：兼容 string url 或 { chart_url, updated_at } */
+    /** 解析图表记录：兼容 string / {chart_url, updated_at} */
     const resolveChartEntry = (code) => {
       if (code == null) return null;
-      const key = String(code).replace(/\D/g, "").slice(-6) || String(code);
-      const raw =
-        chartsMap.value?.[key] ||
-        chartsMap.value?.[String(code)] ||
-        chartsMap.value?.[code];
+      const rawCode = String(code);
+      const key6 = rawCode.replace(/\D/g, "").slice(-6) || rawCode;
+      const map = chartsMap.value || {};
+      const raw = map[key6] || map[rawCode] || map[code];
       if (!raw) return null;
       if (typeof raw === "string") return { url: raw, updated_at: null };
       return {
         url: raw.chart_url || raw.url || "",
-        updated_at: raw.updated_at || null,
+        updated_at: raw.updated_at || raw.last_modified || null,
       };
     };
 
-    /** 图表更新日（北京日历）；无时间戳则退回今天 */
+    /**
+     * 图表应对应的采集/更新日期（北京日）
+     * 规则：用 updated_at 的日历日（不做 8 小时回拨，下午上传就落当天）
+     * 无时间戳 → 不瞎猜成「有数据的那天」，由 chartColIndex 再 fallback
+     */
     const chartUpdateDay = (code) => {
       const entry = resolveChartEntry(code);
-      if (!entry) return null;
-      if (entry.updated_at) {
-        let ts = Number(entry.updated_at);
-        if (ts && !isNaN(ts)) {
-          if (ts < 1e12) ts *= 1000;
-          return bjYmd(ts);
-        }
+      if (!entry || entry.updated_at == null || entry.updated_at === "") return null;
+      let ts = Number(entry.updated_at);
+      if (!ts || isNaN(ts)) {
+        const parsed = Date.parse(String(entry.updated_at));
+        if (isNaN(parsed)) return null;
+        ts = parsed;
       }
-      return bjYmd(Date.now());
+      if (ts < 1e12) ts *= 1000;
+      return bjYmd(ts);
     };
 
-    /**
-     * 日线图表图标列：按图表更新日落在本周对应周几（与行情触发无关）。
-     * 有图即可显示；更新日不在本周则落到本周最近已过交易日列。
-     */
-    const chartColIndexForCode = (etfCode) => {
+    /** 本周展示列中「今天或之前」的最后一列，用作无 updated_at 时的落点 */
+    const fallbackChartColIndex = () => {
       if (!latestMonday.value) return -1;
       const weekDays = getWeekDays(latestMonday.value);
       if (!weekDays.length) return -1;
-      const day = chartUpdateDay(etfCode);
-      if (!day) return -1;
-      let idx = weekDays.indexOf(day);
-      if (idx >= 0) return idx;
-      // 更新日不在本周展示周：落到本周「今天或之前」最后一列
       const today = bjYmd(Date.now());
       for (let i = weekDays.length - 1; i >= 0; i--) {
         if (weekDays[i] <= today) return i;
@@ -241,18 +235,35 @@ export default {
       return 0;
     };
 
+    /**
+     * 日线图表 icon 落在哪一列（0=周一 … 4=周五）
+     * 1) 有 updated_at 且落在本周 → 该列
+     * 2) 否则 → 本周「今天及之前」最后交易日列（图表每日都有，与行情阈值无关）
+     */
+    const chartColIndexForCode = (etfCode) => {
+      if (!latestMonday.value) return -1;
+      const weekDays = getWeekDays(latestMonday.value);
+      if (!weekDays.length) return -1;
+      const day = chartUpdateDay(etfCode);
+      if (day) {
+        const idx = weekDays.indexOf(day);
+        if (idx >= 0) return idx;
+      }
+      return fallbackChartColIndex();
+    };
+
     const hasChartForCode = (etfCode) => {
       const e = resolveChartEntry(etfCode);
       return !!(e && e.url);
     };
 
-    /** 无 DB 映射时仍可用 R2 公共路径出图，图标按「今天」列展示 */
+    /**
+     * 是否在该日列显示日线图表 icon
+     * 与行情是否触发无关：监控列表标的每个交易日都应有入口（点开再探 R2）
+     */
     const showDailyChartIcon = (etfCode, colIdx) => {
-      const target = chartColIndexForCode(etfCode);
-      if (target !== colIdx) return false;
-      if (hasChartForCode(etfCode)) return true;
-      // 监控列表内标的默认认为有图（R2 按日更新），仍按列显示入口
-      return true;
+      if (colIdx < 0) return false;
+      return chartColIndexForCode(etfCode) === colIdx;
     };
 
     const handleSort = (column) => {
@@ -589,21 +600,31 @@ export default {
 
     const openDailyChartViewer = async (item, isCustom = false) => {
       if (!canViewChart(item.etf_code, isCustom)) {
-        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
+        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通监控 VIP？")) {
           window.location.hash = "#/plan";
         }
         return;
       }
+      const entry = resolveChartEntry(item.etf_code);
+      const r2Daily = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png`;
+      const r2Half = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png`;
       const candidates = [
         {
           title: `${item.etf_name} (${item.etf_code}) 日线图表`,
-          url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png`,
+          url: (entry && entry.url) || r2Daily,
         },
         {
           title: `${item.etf_name} (${item.etf_code}) 半日线图表`,
-          url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png`,
+          url: r2Half,
         },
       ];
+      // 若 DB 链接与默认 R2 不同，再补一条 R2 日线兜底
+      if (entry && entry.url && entry.url !== r2Daily) {
+        candidates.splice(1, 0, {
+          title: `${item.etf_name} (${item.etf_code}) 日线图表(R2)`,
+          url: r2Daily,
+        });
+      }
       const images = [];
       for (const c of candidates) {
         if (await probeImage(c.url)) images.push(c);
