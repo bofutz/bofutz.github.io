@@ -437,30 +437,49 @@ export default {
 
       let items = Object.values(etfMap);
 
+      // 最新有日线数据的列（0=周一 … 4=周五）
       let latestIdx = 4;
       while (latestIdx >= 0) {
         const has = items.some(
-          (i) => i.days[latestIdx]?.day_status && i.days[latestIdx].day_status !== "-"
+          (i) =>
+            i.days[latestIdx]?.day_status &&
+            i.days[latestIdx].day_status !== "-" &&
+            i.days[latestIdx].day_status !== "--"
         );
         if (has) break;
         latestIdx--;
       }
 
-      const useWeeklyRank = hasCurrentWeekStatus(etfMap);
-      const rankBy = useWeeklyRank ? "weekly" : "daily";
+      // 是否有可用周线
+      const hasAnyWeek = items.some(
+        (i) => i.week_status && i.week_status !== "-" && i.week_status !== "--"
+      );
 
-      const absRankVal = (row) => {
-        if (useWeeklyRank) {
-          return row.week_status ? Math.abs(getStatusVal(row.week_status)) : -9999;
+      // ★ 默认排序 / 免费 Top3：按「当前最新一档数据」的绝对值
+      //   - 有最新日线 → 用该日 day_status 绝对值
+      //   - 否则若有周线 → 用 week_status 绝对值
+      //   （有日线时不让周线抢走默认顺序）
+      const rankBy = latestIdx >= 0 ? "daily" : hasAnyWeek ? "weekly" : "daily";
+
+      const absLatestVal = (row) => {
+        if (rankBy === "weekly") {
+          const s = row.week_status;
+          if (!s || s === "-" || s === "--") return -9999;
+          const v = getStatusVal(s);
+          return v === -9999 ? -9999 : Math.abs(v);
         }
         if (latestIdx < 0) return -9999;
         const s = row.days[latestIdx]?.day_status;
-        return s && s !== "-" ? Math.abs(getStatusVal(s)) : -9999;
+        if (!s || s === "-" || s === "--") return -9999;
+        const v = getStatusVal(s);
+        return v === -9999 ? -9999 : Math.abs(v);
       };
 
-      const sortedByAbs = [...items].sort((a, b) => absRankVal(b) - absRankVal(a));
+      const absRankVal = (row) => absLatestVal(row);
+
+      const sortedByAbs = [...items].sort((a, b) => absLatestVal(b) - absLatestVal(a));
       const freeTop3Codes = sortedByAbs
-        .filter((i) => absRankVal(i) > -9999)
+        .filter((i) => absLatestVal(i) > -9999)
         .slice(0, 3)
         .map((i) => i.etf_code);
 
@@ -472,15 +491,20 @@ export default {
           }
           if (sortColumn.value.startsWith("d")) {
             const idx = parseInt(sortColumn.value.substring(1), 10);
-            const valA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
-            const valB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
+            // 按日线绝对值排序（与默认规则一致）
+            const rawA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
+            const rawB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
+            const valA = rawA === -9999 ? -9999 : Math.abs(rawA);
+            const valB = rawB === -9999 ? -9999 : Math.abs(rawB);
             if (valA === -9999 && valB !== -9999) return 1;
             if (valB === -9999 && valA !== -9999) return -1;
             return sortOrder.value === "desc" ? valB - valA : valA - valB;
           }
           if (sortColumn.value === "week_status") {
-            const valA = getStatusVal(a.week_status);
-            const valB = getStatusVal(b.week_status);
+            const rawA = getStatusVal(a.week_status);
+            const rawB = getStatusVal(b.week_status);
+            const valA = rawA === -9999 ? -9999 : Math.abs(rawA);
+            const valB = rawB === -9999 ? -9999 : Math.abs(rawB);
             if (valA === -9999 && valB !== -9999) return 1;
             if (valB === -9999 && valA !== -9999) return -1;
             return sortOrder.value === "desc" ? valB - valA : valA - valB;
@@ -799,11 +823,11 @@ export default {
                   </th>
                   <th v-for="idx in 5" :key="idx" class="py-3 px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('d'+(idx-1))">
                     周{{ ['一','二','三','四','五'][idx-1] }}
-                    <i v-if="sortColumn==='d'+(idx-1)" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
+                    <i v-if="sortColumn==='d'+(idx-1) || (!sortColumn && processedData.rankDailyIdx===(idx-1))" class="fa-solid text-[10px] ml-1" :class="sortColumn==='d'+(idx-1) && sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
                   <th class="py-3 px-4 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('week_status')">
                     周线
-                    <i v-if="sortColumn==='week_status'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
+                    <i v-if="sortColumn==='week_status' || (!sortColumn && processedData.rankBy==='weekly')" class="fa-solid text-[10px] ml-1" :class="sortColumn==='week_status' && sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
                 </tr>
               </thead>
@@ -867,7 +891,7 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center">
-          单元格格式：上午/下午|日线。未触发显示 “-”。行情按采集日落列；图表按更新日落列（与触发数据独立）。日线用于排序与免费 Top3。
+          单元格格式：上午/下午|日线。未触发显示 “-”。行情按采集日落列；图表按更新日落列（与触发数据独立）。默认按最新一档数据（有日线用日线，否则用周线）绝对值排序；前 3 名可免费看图。
         </p>
 
         <!-- 打赏入口 -->
