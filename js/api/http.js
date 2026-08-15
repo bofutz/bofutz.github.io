@@ -25,7 +25,7 @@ export async function request(endpoint, options = {}) {
   }
 
   // 注入管理员密钥
-  const adminSecret = localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
+  const adminSecret = (localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "").trim();
   if (adminSecret && !headers["Admin-Secret"]) {
     headers["Admin-Secret"] = adminSecret;
   }
@@ -38,7 +38,7 @@ export async function request(endpoint, options = {}) {
       if (endpoint.startsWith("/api/admin/")) {
         store.state.isAdminAuthenticated = false;
         localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
-        throw new Error("管理员鉴权失败或已过期");
+        throw new Error("管理员鉴权失败或已过期，请重新输入 Admin-Secret（须与 Cloudflare Worker 中一致）");
       } else {
         store.clearUserState();
         throw new Error("登录状态已过期，请重新登录");
