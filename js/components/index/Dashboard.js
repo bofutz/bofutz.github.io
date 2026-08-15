@@ -124,20 +124,20 @@ export default {
 
     /** 周线数据悬停文案 */
     const weekDataTitle = (item) => {
-      if (!item) return "";
-      const d = item.week_status_date || processedData.value.weekStatusMonday;
-      const cn = formatDateCN(d);
-      if (!cn) return item.week_status_from === "prev" ? "上周周线" : "周线";
-      // 不再写「上周」干扰：以数据真实日期为准
-      return cn + "周线";
+      if (!item || !item.week_status) return "";
+      const cn = formatDateCN(item.week_status_date);
+      return cn ? cn + "周线" : "周线";
     };
 
-    /** 周线图表悬停：优先全局图表采集日（R2 更新日），否则周线数据日 */
-    const weekChartTitle = (item) => {
-      const chartDay = globalChartDay.value || chartUpdateDay(item && item.etf_code);
-      if (chartDay) return chartDateTitle(chartDay);
-      if (item && item.week_status_date) return chartDateTitle(item.week_status_date);
-      return "周线图表";
+    /** 日线图表悬停：仅日线图表采集日 */
+    const dailyChartTitle = (etfCode, colDate) => {
+      const d = chartUpdateDay(etfCode) || globalChartDay.value || colDate;
+      return chartDateTitle(d);
+    };
+
+    /** 周线图表悬停：仅周线图表采集日（与数据日期脱钩） */
+    const weekChartTitle = () => {
+      return chartDateTitle(weeklyChartDay.value || globalChartDay.value) || "周线图表";
     };
 
     /** 单元格主色：优先日线，其次下午、上午 */
@@ -433,19 +433,12 @@ export default {
           if (item.etf_name) row.etf_name = item.etf_name;
         }
       });
+      // 主表只展示本周周线，不回退上周
       const cur = findWeekStatusForMonday(etfCode, latestMonday.value);
       if (cur) {
         row.week_status = cur.status;
         row.week_status_date = cur.date;
         row.week_status_from = "current";
-      } else {
-        const latest = findLatestWeekStatus(etfCode);
-        if (latest) {
-          const mon = getWeekDays(latest.date)[0];
-          row.week_status = latest.status;
-          row.week_status_date = latest.date;
-          row.week_status_from = mon === latestMonday.value ? "current" : "prev";
-        }
       }
       return row;
     };
@@ -520,32 +513,23 @@ export default {
         }
       });
 
-      // ④ 周线：按自然周归属（含周六日写入），避免「刚更新仍显示上周」
-      const applyWeek = (row, packed, from) => {
-        if (!packed) return;
-        row.week_status = packed.status;
-        row.week_status_date = packed.date;
-        row.week_status_from = from;
-      };
+      // ④ 周线：主表只展示「当前展示周」最新一条（含本周六日写入）；没有则「-」，绝不回退上周数据
       Object.values(etfMap).forEach((row) => {
         const cur = findWeekStatusForMonday(row.etf_code, latestMonday.value);
         if (cur) {
-          applyWeek(row, cur, "current");
-          return;
-        }
-        const latest = findLatestWeekStatus(row.etf_code);
-        if (!latest) return;
-        const latestMon = getWeekDays(latest.date)[0];
-        if (latestMon === latestMonday.value) {
-          applyWeek(row, latest, "current");
+          row.week_status = cur.status;
+          row.week_status_date = cur.date;
+          row.week_status_from = "current";
         } else {
-          applyWeek(row, latest, "prev");
+          row.week_status = null;
+          row.week_status_date = null;
+          row.week_status_from = null;
         }
       });
 
-      const weekStatusMonday = hasCurrentWeekStatus(etfMap)
-        ? latestMonday.value
-        : prevMonday;
+      // 与日线同一周；不因缺周线改成上周周一
+      const weekStatusMonday = latestMonday.value;
+
 
       let items = Object.values(etfMap);
 
@@ -768,20 +752,21 @@ export default {
       const entry = resolveChartEntry(item.etf_code);
       const r2Daily = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png`;
       const r2Half = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png`;
+      const dayLabel = formatDateCN(chartUpdateDay(item.etf_code) || globalChartDay.value) || "";
       const candidates = [
         {
-          title: `${item.etf_name} (${item.etf_code}) 日线图表`,
+          title: `${item.etf_name} (${item.etf_code}) ${dayLabel}日线图表`.replace(/\s+/g, " ").trim(),
           url: (entry && entry.url) || r2Daily,
         },
         {
-          title: `${item.etf_name} (${item.etf_code}) 半日线图表`,
+          title: `${item.etf_name} (${item.etf_code}) ${dayLabel}半日线图表`.replace(/\s+/g, " ").trim(),
           url: r2Half,
         },
       ];
       // 若 DB 链接与默认 R2 不同，再补一条 R2 日线兜底
       if (entry && entry.url && entry.url !== r2Daily) {
         candidates.splice(1, 0, {
-          title: `${item.etf_name} (${item.etf_code}) 日线图表(R2)`,
+          title: `${item.etf_name} (${item.etf_code}) ${dayLabel}日线图表(R2)`.replace(/\s+/g, " ").trim(),
           url: r2Daily,
         });
       }
@@ -860,6 +845,10 @@ export default {
           .map((s) => s.etf_code || s.code)
           .concat((allData.value || []).map((i) => i.etf_code));
         await resolveGlobalChartDay(sampleCodes, chartsRes && chartsRes.chart_date);
+        await resolveWeeklyChartDay(
+          chartsRes && (chartsRes.weekly_chart_date || chartsRes.week_chart_date),
+          chartsRes && chartsRes.chart_date
+        );
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
@@ -901,8 +890,10 @@ export default {
       formatDayCell,
       chartDateTitle,
       dataDateTitle,
+      dailyChartTitle,
       weekDataTitle,
       weekChartTitle,
+      weeklyChartDay,
       cellPrimaryStatus,
       formatExpire,
       openDailyChartViewer,
@@ -993,7 +984,7 @@ export default {
                       <div class="flex items-center justify-center gap-1" :title="weekDataTitle(item)">
                         <span>{{ item.week_status || '-' }}</span>
                         <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
-                           :title="weekChartTitle(item)"
+                           :title="weekChartTitle()"
                            @click.stop="openWeeklyChartViewer(item, false)"></i>
                       </div>
                     </td>
