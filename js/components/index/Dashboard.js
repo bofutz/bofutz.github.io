@@ -24,6 +24,8 @@ export default {
     const chartsMap = ref({});
     /** 图表统一采集日 YYYY-MM-DD（北京）；仅来自 updated_at 或 R2 Last-Modified，绝不使用「今天」凑数 */
     const globalChartDay = ref(null);
+    /** 周线图表采集日（与日线独立） */
+    const weeklyChartDay = ref(null);
     const customList = ref([]);
     const sharedList = ref([]);  // 通用监控全量（无论是否触发）
 
@@ -354,6 +356,23 @@ export default {
       globalChartDay.value = latestTradingDayBj();
       return globalChartDay.value;
     };
+
+    /** 周线图表日期：与日线独立，不回退到「上周周一」 */
+    const resolveWeeklyChartDay = async (apiWeeklyChartDate = null, apiChartDate = null) => {
+      const fromWeekly = toBjDay(apiWeeklyChartDate);
+      if (fromWeekly) {
+        weeklyChartDay.value = fromWeekly;
+        return fromWeekly;
+      }
+      const fromDaily = toBjDay(apiChartDate) || globalChartDay.value;
+      if (fromDaily) {
+        weeklyChartDay.value = fromDaily;
+        return fromDaily;
+      }
+      weeklyChartDay.value = latestTradingDayBj();
+      return weeklyChartDay.value;
+    };
+
 
     const handleSort = (column) => {
       if (sortColumn.value === column) {
