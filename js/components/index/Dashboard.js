@@ -8,6 +8,21 @@
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
 import { watchlistApi } from "../../api/watchlist.js";
+import { request } from "../../api/http.js";
+
+const dashboardPrefsApi = {
+  fetch: () => request("/api/user/dashboard-prefs"),
+  toggleFavorite: (etfCode) =>
+    request("/api/user/dashboard-prefs", {
+      method: "POST",
+      body: JSON.stringify({ action: "toggle_favorite", etf_code: etfCode }),
+    }),
+  saveOrder: (order, favorites) =>
+    request("/api/user/dashboard-prefs", {
+      method: "POST",
+      body: JSON.stringify({ order, favorites }),
+    }),
+};
 import { CONFIG } from "../../config.js";
 
 const { ref, computed, onMounted, nextTick, watch } = Vue;
@@ -28,6 +43,11 @@ export default {
     const weeklyChartDay = ref(null);
     const customList = ref([]);
     const sharedList = ref([]);  // 通用监控全量（无论是否触发）
+    /** 会员收藏 / 自定义排序 */
+    const favCodes = ref(new Set());
+    const userOrder = ref([]);
+    const dragCode = ref(null);
+    const prefsSaving = ref(false);
 
     const searchQuery = ref("");
     const expandedRowKey = ref(null);
@@ -1086,9 +1106,14 @@ export default {
           tasks.push(watchlistApi.fetchUserCustomWatchlist().catch(() => ({ data: [] })));
         }
         const results = await Promise.all(tasks);
-        if (store.state.isLoggedIn && store.state.isVip) {
-          await loadDashboardPrefs();
-        } else {
+        try {
+          if (store.state.isLoggedIn && store.state.isVip) {
+            await loadDashboardPrefs();
+          } else {
+            favCodes.value = new Set();
+            userOrder.value = [];
+          }
+        } catch (_) {
           favCodes.value = new Set();
           userOrder.value = [];
         }
