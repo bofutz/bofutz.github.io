@@ -1,6 +1,6 @@
 /**
  * 波幅探长 - 后台系统设置（整合版）
- * 含：注册赠送、免费 TOP、收款码、定制每组只数、
+ * 含：注册赠送、免费 TOP、收款码、
  *     票选门槛/仅ETF、打赏、弹窗广告、社交平台 JSON
  * js/components/admin/SettingsMgmt.js
  */
@@ -28,8 +28,7 @@ export default {
 
     const form = reactive({
       gift_register_days: "1",
-      gift_inviter_days: "0",
-      gift_invitee_days: "3",
+            gift_invitee_days: "3",
       referral_code_min_len: "6",
       referral_code_max_len: "8",
       referral_rebate_percent: "10",
@@ -40,7 +39,6 @@ export default {
       alipay_qr_url: "",
       wechat_qr_url: "",
       default_pay_channel: "wechat",
-      custom_max_symbols: "3",
       chart_query_batch_hours: "2",
       chart_run_slots: '[{"time":"15:40","mode":"all","enabled":true},{"time":"18:00","mode":"query","enabled":true},{"time":"20:00","mode":"query","enabled":true},{"time":"22:00","mode":"query","enabled":true}]',
       chart_run_window_minutes: "25",
@@ -227,93 +225,35 @@ export default {
         <!-- 注册与邀请返利 -->
         <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
           <h3 class="font-bold text-slate-700 text-sm border-b pb-2">注册与邀请返利</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <label class="text-xs space-y-1">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <label class="text-xs space-y-1.5 block">
               <span class="text-slate-500">注册赠送天数</span>
               <input v-model="form.gift_register_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
-            <label class="text-xs space-y-1">
+            <label class="text-xs space-y-1.5 block">
               <span class="text-slate-500">被邀请人注册赠送</span>
               <input v-model="form.gift_invitee_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <label class="text-xs space-y-1">
-              <span class="text-slate-500">邀请码最短位数</span>
-              <input v-model="form.referral_code_min_len" type="number" min="4" max="16" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </label>
-            <label class="text-xs space-y-1">
-              <span class="text-slate-500">邀请码最长位数</span>
-              <input v-model="form.referral_code_max_len" type="number" min="4" max="32" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </label>
-            <label class="text-xs space-y-1">
-              <span class="text-slate-500">付费返利比例 %</span>
-              <input v-model="form.referral_rebate_percent" type="number" min="0" max="100" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </label>
-            <label class="text-xs space-y-1">
-              <span class="text-slate-500">返利门槛（套餐天数≥）</span>
-              <input v-model="form.referral_rebate_min_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
-              <span class="text-[10px] text-slate-400">如 90=季付起；邀请人仅在好友付费后获天数返利</span>
-            </label>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label class="text-xs space-y-1">
+            <label class="text-xs space-y-1.5 block">
               <span class="text-slate-500">免费可看图表 TOP N</span>
               <input v-model="form.free_top_n_charts" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
-            <label class="text-xs space-y-1">
-              <span class="text-slate-400">（废弃）定制每组只数</span>
-              <input v-model="form.custom_max_symbols" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm opacity-40">
+            <label class="text-xs space-y-1.5 block">
+              <span class="text-slate-500">邀请码最短位数</span>
+              <input v-model="form.referral_code_min_len" type="number" min="4" max="16" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
-          </div>
-          <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4 space-y-3">
-            <div class="text-xs font-bold text-slate-700">自主查询</div>
-            <div class="space-y-2">
-              <div class="text-[11px] text-slate-500 leading-relaxed">
-                <strong>出图场次</strong>（北京时间）：GitHub Actions 会定时「醒来」，仅当当前时刻落在某场次 ±窗口分钟内才真正跑 charts。
-                mode：<code class="bg-white px-1 rounded">all</code>=监控+查询，
-                <code class="bg-white px-1 rounded">query</code>=仅自主查询，
-                <code class="bg-white px-1 rounded">shared</code>=仅监控。
-                增删改下方 JSON 后保存即可，无需改仓库 cron 表达式。
-              </div>
-              <label class="text-xs space-y-1 block">
-                <span class="text-slate-500">出图场次 JSON（chart_run_slots）</span>
-                <textarea v-model="form.chart_run_slots" rows="5" class="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-white leading-relaxed"></textarea>
-              </label>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label class="text-xs space-y-1">
-                <span class="text-slate-500">匹配窗口（分钟）</span>
-                <input v-model="form.chart_run_window_minutes" type="number" min="5" max="60" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
-                <span class="text-[10px] text-slate-400">例：25 表示 15:40 场次在 15:15–16:05 醒来均可命中</span>
-              </label>
-              <label class="text-xs space-y-1">
-                <span class="text-slate-500">图片保留交易日</span>
-                <input v-model="form.chart_query_retain_trading_days" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
-              </label>
-              <label class="text-xs space-y-1 sm:col-span-2">
-                <span class="text-slate-500">开放周期 JSON</span>
-                <input v-model="form.chart_query_intervals" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-white">
-              </label>
-              <label class="text-xs space-y-1">
-                <span class="text-slate-500">扣次时机</span>
-                <select v-model="form.chart_query_deduct_on" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
-                  <option value="submit">提交时</option>
-                  <option value="success">成功时</option>
-                </select>
-              </label>
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-4 text-xs">
-            <label class="inline-flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" :checked="form.pay_register_enabled==='1'"
-                     @change="form.pay_register_enabled = $event.target.checked ? '1' : '0'">
-              允许游客支付即注册
+            <label class="text-xs space-y-1.5 block">
+              <span class="text-slate-500">邀请码最长位数</span>
+              <input v-model="form.referral_code_max_len" type="number" min="4" max="32" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
-            <label class="inline-flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" :checked="form.promo_enabled==='1'"
-                     @change="form.promo_enabled = $event.target.checked ? '1' : '0'">
-              启用优惠码
+            <label class="text-xs space-y-1.5 block">
+              <span class="text-slate-500">付费返利比例 %</span>
+              <input v-model="form.referral_rebate_percent" type="number" min="0" max="100" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </label>
+            <label class="text-xs space-y-1.5 block sm:col-span-2 lg:col-span-1">
+              <span class="text-slate-500">返利门槛（套餐天数 ≥）</span>
+              <input v-model="form.referral_rebate_min_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <span class="text-[10px] text-slate-400 mt-1 block">如 90=季付起；邀请人仅在好友付费后获天数返利</span>
             </label>
           </div>
         </section>

@@ -12,7 +12,119 @@ export default {
     const subTab = ref("queries"); // 仅查询单；次数套餐已迁至套餐管理
     const loading = ref(false);
     const queries = ref([]);
+
     const statusFilter = ref("");
+
+    const INTERVAL_LABELS = {
+      half_day: "半日线",
+      half: "半日线",
+      daily: "日线",
+      day: "日线",
+      weekly: "周线",
+      week: "周线",
+    };
+    const intervalLabel = (k) => INTERVAL_LABELS[String(k || "").toLowerCase()] || k || "—";
+
+    const ensureViewerNavStyle = () => {
+      if (document.getElementById("bofutz-viewer-nav-style")) return;
+      const style = document.createElement("style");
+      style.id = "bofutz-viewer-nav-style";
+      style.textContent = `
+        .bofutz-viewer-nav {
+          position: absolute; top: 50%; transform: translateY(-50%); z-index: 30;
+          width: 52px; height: 52px; border-radius: 999px;
+          border: 2.5px solid rgba(255,255,255,0.92);
+          background: rgba(15, 23, 42, 0.45); color: #fff;
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 6px 20px rgba(0,0,0,.28); backdrop-filter: blur(6px);
+          -webkit-tap-highlight-color: transparent; user-select: none; padding: 0;
+        }
+        .bofutz-viewer-nav:hover { background: rgba(15, 23, 42, 0.7); }
+        .bofutz-viewer-nav svg { width: 22px; height: 22px; fill: none; stroke: currentColor;
+          stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+        .bofutz-viewer-prev { left: 16px; } .bofutz-viewer-next { right: 16px; }
+        @media (max-width: 640px) {
+          .bofutz-viewer-nav { width: 46px; height: 46px; }
+          .bofutz-viewer-prev { left: 8px; } .bofutz-viewer-next { right: 8px; }
+        }
+      `;
+      document.head.appendChild(style);
+    };
+
+    const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
+      if (!imgList || !imgList.length) return;
+      const container = document.createElement("div");
+      container.style.display = "none";
+      imgList.forEach((item) => {
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.title || "";
+        container.appendChild(img);
+      });
+      document.body.appendChild(container);
+      const isMulti = imgList.length > 1;
+      if (window.Viewer) {
+        ensureViewerNavStyle();
+        let navPrev = null, navNext = null;
+        const clearNav = () => {
+          try { navPrev && navPrev.remove(); navNext && navNext.remove(); } catch (_) {}
+          navPrev = navNext = null;
+        };
+        const viewer = new window.Viewer(container, {
+          hidden: () => { clearNav(); viewer.destroy(); container.remove(); },
+          title: (image) => image.alt || "",
+          navbar: isMulti, tooltip: true, movable: true, zoomable: true,
+          rotatable: false, scalable: false, transition: true,
+          keyboard: isMulti, loop: isMulti,
+          initialViewIndex: Math.min(initialIndex, imgList.length - 1),
+          toolbar: {
+            zoomIn: 1, zoomOut: 1, oneToOne: 1, reset: 1,
+            prev: isMulti ? 1 : 0, play: 0, next: isMulti ? 1 : 0,
+            rotateLeft: 0, rotateRight: 0, flipHorizontal: 0, flipVertical: 0,
+          },
+          ready() {
+            if (!isMulti) return;
+            const root = (viewer && viewer.viewer) || document.querySelector(".viewer-container");
+            if (!root) return;
+            if (getComputedStyle(root).position === "static") root.style.position = "relative";
+            clearNav();
+            navPrev = document.createElement("button");
+            navPrev.type = "button";
+            navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
+            navPrev.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="15 6 9 12 15 18"></polyline></svg>';
+            navPrev.onclick = (e) => { e.preventDefault(); e.stopPropagation(); try { viewer.prev(true); } catch (_) {} };
+            navNext = document.createElement("button");
+            navNext.type = "button";
+            navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
+            navNext.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+            navNext.onclick = (e) => { e.preventDefault(); e.stopPropagation(); try { viewer.next(true); } catch (_) {} };
+            root.appendChild(navPrev);
+            root.appendChild(navNext);
+          },
+        });
+        viewer.show();
+      } else {
+        window.open(imgList[initialIndex]?.url, "_blank");
+      }
+    };
+
+    /** 打开当前单，并尽量带上同用户同代码的其它周期图便于翻页 */
+    const openChartGallery = (row) => {
+      if (!row || !row.chart_url) return;
+      const code = String(row.etf_code || "");
+      const same = (queries.value || []).filter(
+        (q) => q.chart_url && String(q.etf_code) === code && q.status === "done"
+      );
+      const order = { half_day: 0, half: 0, daily: 1, day: 1, weekly: 2, week: 2 };
+      same.sort((a, b) => (order[a.interval] ?? 9) - (order[b.interval] ?? 9));
+      const list = (same.length ? same : [row]).map((q) => ({
+        url: q.chart_url,
+        title: `${q.etf_name || ""} (${q.etf_code}) ${intervalLabel(q.interval)}`.trim(),
+      }));
+      const idx = Math.max(0, list.findIndex((x) => x.url === row.chart_url));
+      showViewerWithMultiImages(list, idx);
+    };
+
     const creditPlans = ref([]);
     const planForm = reactive({
       id: "",
@@ -135,6 +247,8 @@ export default {
       planForm,
       editing,
       loadQueries,
+      intervalLabel,
+      openChartGallery,
       loadPlans,
       statusLabel,
       formatTime,
@@ -182,11 +296,10 @@ export default {
                 <th class="py-2.5 px-3">ID</th>
                 <th class="py-2.5 px-3">用户</th>
                 <th class="py-2.5 px-3">代码</th>
-                <th class="py-2.5 px-3">周期</th>
                 <th class="py-2.5 px-3">状态</th>
                 <th class="py-2.5 px-3">提交</th>
                 <th class="py-2.5 px-3">有效期</th>
-                <th class="py-2.5 px-3">图表</th>
+                <th class="py-2.5 px-3 text-right">图表</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
@@ -197,8 +310,7 @@ export default {
                   <div class="font-mono font-bold">{{ q.etf_code }}</div>
                   <div class="text-[11px] text-slate-400">{{ q.etf_name }}</div>
                 </td>
-                <td class="py-2 px-3 text-xs">{{ q.interval }}</td>
-                <td class="py-2 px-3">
+                                <td class="py-2 px-3">
                   <span class="text-[11px] font-bold px-2 py-0.5 rounded-full"
                         :class="{
                           'bg-orange-50 text-orange-600': q.status==='pending',
@@ -209,12 +321,13 @@ export default {
                 <td class="py-2 px-3 text-xs font-mono text-slate-400">{{ formatTime(q.created_at) }}</td>
                 <td class="py-2 px-3 text-xs font-mono text-slate-400">{{ formatTime(q.expire_at) }}</td>
                 <td class="py-2 px-3">
-                  <a v-if="q.chart_url" :href="q.chart_url" target="_blank" class="text-xs theme-text font-bold">打开</a>
+                  <button type="button" v-if="q.chart_url" @click="openChartGallery(q)"
+                          class="text-xs theme-text font-bold hover:underline">{{ intervalLabel(q.interval) }}</button>
                   <span v-else class="text-xs text-slate-300">—</span>
                 </td>
               </tr>
               <tr v-if="!queries.length">
-                <td colspan="8" class="py-10 text-center text-slate-400 text-sm">暂无记录</td>
+                <td colspan="7" class="py-10 text-center text-slate-400 text-sm">暂无记录</td>
               </tr>
             </tbody>
           </table>
