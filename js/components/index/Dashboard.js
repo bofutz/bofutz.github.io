@@ -80,12 +80,13 @@ export default {
         String(url).trim()
       )}`;
     const tipWechatSrc = computed(() => {
-      const u = settings.value.tip_wechat_qr_url || "";
+      // 与开通套餐共用收款码（兼容旧 tip_* 字段）
+      const u = settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "";
       if (!u) return "";
       return isImageUrl(u) ? u : linkToQrSrc(u);
     });
     const tipAlipaySrc = computed(() => {
-      const u = settings.value.tip_alipay_qr_url || "";
+      const u = settings.value.alipay_qr_url || settings.value.tip_alipay_qr_url || "";
       if (!u) return "";
       return isImageUrl(u) ? u : linkToQrSrc(u);
     });
@@ -646,6 +647,28 @@ export default {
         );
       }
 
+
+      // 会员自定义排序（未点列排序时生效）；收藏不强制置顶，仅标记星标
+      if (
+        store.state.isVip &&
+        store.state.isLoggedIn &&
+        !sortColumn.value &&
+        userOrder.value &&
+        userOrder.value.length
+      ) {
+        const orderMap = new Map(
+          userOrder.value.map((c, idx) => [String(c), idx])
+        );
+        items.sort((a, b) => {
+          const ca = String(a.etf_code);
+          const cb = String(b.etf_code);
+          const ia = orderMap.has(ca) ? orderMap.get(ca) : 100000;
+          const ib = orderMap.has(cb) ? orderMap.get(cb) : 100000;
+          if (ia !== ib) return ia - ib;
+          return absRankVal(b) - absRankVal(a);
+        });
+      }
+
       return {
         list: items,
         freeTop3Codes,
@@ -730,35 +753,153 @@ export default {
           position: absolute;
           top: 50%;
           transform: translateY(-50%);
-          z-index: 20;
-          width: 48px;
-          height: 48px;
+          z-index: 30;
+          width: 52px;
+          height: 52px;
           border-radius: 999px;
-          border: none;
-          background: rgba(15, 23, 42, 0.72);
+          border: 2.5px solid rgba(255,255,255,0.92);
+          background: rgba(15, 23, 42, 0.45);
           color: #fff;
-          font-size: 32px;
-          line-height: 1;
-          font-weight: 700;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 14px rgba(0,0,0,.35);
+          box-shadow: 0 6px 20px rgba(0,0,0,.28);
           -webkit-tap-highlight-color: transparent;
           user-select: none;
+          backdrop-filter: blur(6px);
+          transition: background .15s ease, transform .15s ease, border-color .15s ease;
+          padding: 0;
         }
-        .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.96); }
-        .bofutz-viewer-prev { left: 10px; }
-        .bofutz-viewer-next { right: 10px; }
+        .bofutz-viewer-nav:hover {
+          background: rgba(15, 23, 42, 0.7);
+          border-color: #fff;
+        }
+        .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.94); }
+        .bofutz-viewer-nav svg {
+          width: 22px;
+          height: 22px;
+          display: block;
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 2.6;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .bofutz-viewer-prev { left: 16px; }
+        .bofutz-viewer-next { right: 16px; }
         @media (max-width: 640px) {
-          .bofutz-viewer-nav { width: 44px; height: 44px; font-size: 28px; }
-          .bofutz-viewer-prev { left: 6px; }
-          .bofutz-viewer-next { right: 6px; }
+          .bofutz-viewer-nav { width: 46px; height: 46px; }
+          .bofutz-viewer-nav svg { width: 20px; height: 20px; }
+          .bofutz-viewer-prev { left: 8px; }
+          .bofutz-viewer-next { right: 8px; }
         }
       `;
       document.head.appendChild(style);
     };
+
+
+    const isFavorite = (code) => favCodes.value.has(String(code));
+
+    const canCustomizeBoard = computed(
+      () => !!(store.state.isLoggedIn && store.state.isVip)
+    );
+
+    const loadDashboardPrefs = async () => {
+      if (!canCustomizeBoard.value) {
+        favCodes.value = new Set();
+        userOrder.value = [];
+        return;
+      }
+      try {
+        const res = await dashboardPrefsApi.fetch();
+        const data = (res && res.data) || res || {};
+        favCodes.value = new Set(
+          (data.favorites || []).map((c) => String(c).replace(/\D/g, "").slice(-6))
+        );
+        userOrder.value = (data.order || []).map((c) =>
+          String(c).replace(/\D/g, "").slice(-6)
+        );
+      } catch (e) {
+        console.log("dashboard prefs", e && e.message);
+      }
+    };
+
+    const toggleFavorite = async (item, ev) => {
+      if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      if (!canCustomizeBoard.value) {
+        store.showToast("登录会员后可收藏标的", "error");
+        return;
+      }
+      const code = String(item.etf_code || "").replace(/\D/g, "").slice(-6);
+      if (code.length !== 6) return;
+      try {
+        const res = await dashboardPrefsApi.toggleFavorite(code);
+        const on = !!(res && (res.favorite === true || res.favorite === 1));
+        const next = new Set(favCodes.value);
+        if (on) next.add(code);
+        else next.delete(code);
+        favCodes.value = next;
+        store.showToast(on ? "已收藏" : "已取消收藏");
+      } catch (err) {
+        store.showToast(err.message || "收藏失败", "error");
+      }
+    };
+
+    const onDragStart = (item, ev) => {
+      if (!canCustomizeBoard.value) {
+        ev.preventDefault();
+        return;
+      }
+      dragCode.value = String(item.etf_code);
+      try {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(item.etf_code));
+      } catch (_) {}
+    };
+
+    const onDragOver = (ev) => {
+      if (!canCustomizeBoard.value) return;
+      ev.preventDefault();
+      try {
+        ev.dataTransfer.dropEffect = "move";
+      } catch (_) {}
+    };
+
+    const onDropRow = async (targetItem, ev) => {
+      if (!canCustomizeBoard.value) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const from =
+        dragCode.value ||
+        (ev.dataTransfer && ev.dataTransfer.getData("text/plain"));
+      const to = String(targetItem.etf_code);
+      dragCode.value = null;
+      if (!from || from === to) return;
+
+      const list = (processedData.value.list || []).map((x) => String(x.etf_code));
+      const next = list.slice();
+      const fi = next.indexOf(String(from));
+      const ti = next.indexOf(to);
+      if (fi < 0 || ti < 0) return;
+      next.splice(fi, 1);
+      next.splice(ti, 0, String(from));
+      userOrder.value = next;
+      // 立刻反映：依赖 processedData 读 userOrder
+      if (prefsSaving.value) return;
+      prefsSaving.value = true;
+      try {
+        await dashboardPrefsApi.saveOrder(next, Array.from(favCodes.value));
+      } catch (err) {
+        store.showToast(err.message || "排序保存失败", "error");
+      } finally {
+        prefsSaving.value = false;
+      }
+    };
+
 
     const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
       if (!imgList || !imgList.length) return;
@@ -827,7 +968,7 @@ export default {
             navPrev.type = "button";
             navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
             navPrev.setAttribute("aria-label", "上一张");
-            navPrev.innerHTML = "&lt;";
+            navPrev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 6 9 12 15 18"></polyline></svg>';
             navPrev.addEventListener("click", (e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -839,7 +980,7 @@ export default {
             navNext.type = "button";
             navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
             navNext.setAttribute("aria-label", "下一张");
-            navNext.innerHTML = "&gt;";
+            navNext.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
             navNext.addEventListener("click", (e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -945,6 +1086,12 @@ export default {
           tasks.push(watchlistApi.fetchUserCustomWatchlist().catch(() => ({ data: [] })));
         }
         const results = await Promise.all(tasks);
+        if (store.state.isLoggedIn && store.state.isVip) {
+          await loadDashboardPrefs();
+        } else {
+          favCodes.value = new Set();
+          userOrder.value = [];
+        }
         const data = results[0];
         const chartsRes = results[1];
         const sharedRes = results[2];
@@ -1003,6 +1150,14 @@ export default {
       expandedRowKey,
       formatDateCN,
       formatEtfName,
+      isFavorite,
+      toggleFavorite,
+      onDragStart,
+      onDragOver,
+      onDropRow,
+      canCustomizeBoard,
+      dragCode,
+
       formatDayCell,
       chartDateTitle,
       dataDateTitle,
@@ -1071,18 +1226,34 @@ export default {
               </thead>
               <tbody class="divide-y divide-slate-50 text-sm">
                 <template v-for="item in processedData.list" :key="item.etf_code">
-                  <tr class="hover:bg-[#4da6a0]/5 transition-colors group cursor-pointer" @click="toggleRow(item)">
+                  <tr class="hover:bg-[#4da6a0]/5 transition-colors group cursor-pointer"
+                      :class="{ 'opacity-60': dragCode === item.etf_code }"
+                      :draggable="canCustomizeBoard ? true : false"
+                      @dragstart="onDragStart(item, $event)"
+                      @dragover="onDragOver($event)"
+                      @drop="onDropRow(item, $event)"
+                      @click="toggleRow(item)">
                     <td class="p-3 text-left relative sticky left-0 bg-white group-hover:bg-[#f6faf9] z-10 etf-name-column dash-col-name border-r border-slate-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
                       <div v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="absolute left-0 top-0 bottom-0 w-1 theme-bg"></div>
-                      <div class="flex items-center justify-between">
-                        <div>
-                          <div class="font-bold text-slate-800 group-hover:theme-text flex items-center gap-1">
-                            {{ formatEtfName(item.etf_name) }}
-                            <span v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.2 rounded font-bold">免费</span>
+                      <div class="flex items-center justify-between gap-1">
+                        <div class="flex items-start gap-1.5 min-w-0">
+                          <button type="button"
+                                  class="mt-0.5 shrink-0 p-0.5 leading-none"
+                                  :title="canCustomizeBoard ? (isFavorite(item.etf_code) ? '取消收藏' : '收藏') : '会员可收藏'"
+                                  @click="toggleFavorite(item, $event)">
+                            <i class="fa-solid fa-star text-sm"
+                               :class="isFavorite(item.etf_code) ? 'text-amber-400' : 'text-slate-300'"></i>
+                          </button>
+                          <div class="min-w-0">
+                            <div class="font-bold text-slate-800 group-hover:theme-text flex items-center gap-1 flex-wrap">
+                              <span v-if="canCustomizeBoard" class="text-slate-300 text-[10px] cursor-grab active:cursor-grabbing select-none" title="拖动排序">⋮⋮</span>
+                              {{ formatEtfName(item.etf_name) }}
+                              <span v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.2 rounded font-bold">免费</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                           </div>
-                          <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                         </div>
-                        <i class="fa-solid text-[10px] text-slate-300 mr-2" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
+                        <i class="fa-solid text-[10px] text-slate-300 mr-1 shrink-0" :class="expandedRowKey === item.etf_code ? 'fa-chevron-down theme-text' : 'fa-chevron-right'"></i>
                       </div>
                     </td>
 
