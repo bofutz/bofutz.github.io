@@ -38,10 +38,7 @@ export default {
       isEdit: false,
     });
 
-    const filteredPlans = computed(() => {
-      if (planTypeFilter.value === "all") return plans.value;
-      return plans.value.filter((p) => (p.plan_type || "both") === planTypeFilter.value);
-    });
+    const filteredPlans = computed(() => plans.value || []);
 
     const loadPlans = async () => {
       loading.value = true;
@@ -316,11 +313,6 @@ export default {
       <!-- 监控 VIP -->
       <div v-show="mainTab==='vip'">
         <div class="flex justify-end mb-3 gap-2">
-          <div class="flex bg-white border border-slate-200 rounded-lg overflow-hidden text-xs">
-            <button type="button" v-for="s in [{k:'all',t:'全部'},{k:'shared',t:'监控'},{k:'both',t:'both'}]" :key="s.k"
-                    @click="planTypeFilter = s.k" class="px-3 py-2 border-l first:border-0"
-                    :class="planTypeFilter === s.k ? 'theme-bg text-white font-bold' : 'text-slate-600'">{{ s.t }}</button>
-          </div>
           <button type="button" @click="openModal()" class="theme-bg text-white px-4 py-2 rounded-lg text-xs font-bold">新增套餐</button>
         </div>
         <div v-if="loading" class="text-center py-10 text-slate-400 text-sm">加载中…</div>
@@ -351,7 +343,6 @@ export default {
             <input v-model="planForm.tag" placeholder="角标" class="w-full border rounded-lg px-3 py-2 text-sm">
             <select v-model="planForm.plan_type" class="w-full border rounded-lg px-3 py-2 text-sm">
               <option value="shared">监控 VIP</option>
-              <option value="both">监控 VIP（both 兼容）</option>
             </select>
             <label class="text-xs flex items-center gap-2"><input type="checkbox" v-model="planForm.enabled"> 启用</label>
             <div class="flex justify-end gap-2 pt-2">
