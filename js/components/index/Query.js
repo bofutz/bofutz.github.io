@@ -223,6 +223,30 @@ export default {
         img.src = url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
       });
 
+    const ensureViewerNavStyle = () => {
+      if (document.getElementById("bofutz-viewer-nav-style")) return;
+      const style = document.createElement("style");
+      style.id = "bofutz-viewer-nav-style";
+      style.textContent = `
+        .bofutz-viewer-nav {
+          position: absolute; top: 50%; transform: translateY(-50%); z-index: 20;
+          width: 48px; height: 48px; border-radius: 999px; border: none;
+          background: rgba(15, 23, 42, 0.72); color: #fff; font-size: 32px; line-height: 1;
+          font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 4px 14px rgba(0,0,0,.35); -webkit-tap-highlight-color: transparent; user-select: none;
+        }
+        .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.96); }
+        .bofutz-viewer-prev { left: 10px; }
+        .bofutz-viewer-next { right: 10px; }
+        @media (max-width: 640px) {
+          .bofutz-viewer-nav { width: 44px; height: 44px; font-size: 28px; }
+          .bofutz-viewer-prev { left: 6px; }
+          .bofutz-viewer-next { right: 6px; }
+        }
+      `;
+      document.head.appendChild(style);
+    };
+
     const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
       if (!imgList || !imgList.length) return;
       const container = document.createElement("div");
@@ -236,8 +260,16 @@ export default {
       document.body.appendChild(container);
       const isMulti = imgList.length > 1;
       if (window.Viewer) {
+        ensureViewerNavStyle();
+        let navPrev = null;
+        let navNext = null;
+        const clearNav = () => {
+          try { navPrev && navPrev.remove(); navNext && navNext.remove(); } catch (_) {}
+          navPrev = navNext = null;
+        };
         const viewer = new window.Viewer(container, {
           hidden: () => {
+            clearNav();
             viewer.destroy();
             container.remove();
           },
@@ -253,17 +285,36 @@ export default {
           loop: isMulti,
           initialViewIndex: Math.min(initialIndex, imgList.length - 1),
           toolbar: {
-            zoomIn: 1,
-            zoomOut: 1,
-            oneToOne: 1,
-            reset: 1,
-            prev: isMulti ? 1 : 0,
-            play: 0,
-            next: isMulti ? 1 : 0,
-            rotateLeft: 0,
-            rotateRight: 0,
-            flipHorizontal: 0,
-            flipVertical: 0,
+            zoomIn: 1, zoomOut: 1, oneToOne: 1, reset: 1,
+            prev: isMulti ? 1 : 0, play: 0, next: isMulti ? 1 : 0,
+            rotateLeft: 0, rotateRight: 0, flipHorizontal: 0, flipVertical: 0,
+          },
+          ready() {
+            if (!isMulti) return;
+            const root = (viewer && viewer.viewer) || document.querySelector(".viewer-container");
+            if (!root) return;
+            if (getComputedStyle(root).position === "static") root.style.position = "relative";
+            clearNav();
+            navPrev = document.createElement("button");
+            navPrev.type = "button";
+            navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
+            navPrev.setAttribute("aria-label", "上一张");
+            navPrev.innerHTML = "&lt;";
+            navPrev.addEventListener("click", (e) => {
+              e.preventDefault(); e.stopPropagation();
+              try { viewer.prev(true); } catch (_) {}
+            });
+            navNext = document.createElement("button");
+            navNext.type = "button";
+            navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
+            navNext.setAttribute("aria-label", "下一张");
+            navNext.innerHTML = "&gt;";
+            navNext.addEventListener("click", (e) => {
+              e.preventDefault(); e.stopPropagation();
+              try { viewer.next(true); } catch (_) {}
+            });
+            root.appendChild(navPrev);
+            root.appendChild(navNext);
           },
         });
         viewer.show();
@@ -463,7 +514,6 @@ export default {
                   <div class="font-mono font-bold text-slate-800">{{ r.etf_code }}</div>
                   <div class="text-xs text-slate-500">{{ r.etf_name || '-' }}</div>
                 </td>
-                <td class="py-3 px-3 text-xs">{{ intervalLabel(r.interval) }}</td>
                 <td class="py-3 px-3 text-xs font-mono text-slate-400">{{ formatTime(r.created_at) }}</td>
                 <td class="py-3 px-3">
                   <span class="text-xs font-bold px-2 py-0.5 rounded-full"
@@ -481,7 +531,7 @@ export default {
                 <td class="py-3 px-4 text-right">
                   <button type="button" v-if="r.status==='done' && r.chart_url && !isExpired(r)"
                      @click="openChartGallery(r)"
-                     class="text-xs theme-text font-bold hover:underline">打开</button>
+                     class="text-xs theme-text font-bold hover:underline">{{ intervalLabel(r.interval) }}</button>
                   <span v-else class="text-xs text-slate-300">—</span>
                 </td>
               </tr>

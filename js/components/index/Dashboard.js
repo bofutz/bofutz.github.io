@@ -35,6 +35,7 @@ export default {
     const sortOrder = ref("desc");
 
     const tipVisible = ref(false);
+    const tipChannel = ref("wechat"); // wechat | alipay
     const tableScrollEl = ref(null);
 
     /** 手机端：横向滚到「最新有数据或有图表」的那一列（名称列固定后可见） */
@@ -720,6 +721,45 @@ export default {
         img.src = url;
       });
 
+    const ensureViewerNavStyle = () => {
+      if (document.getElementById("bofutz-viewer-nav-style")) return;
+      const style = document.createElement("style");
+      style.id = "bofutz-viewer-nav-style";
+      style.textContent = `
+        .bofutz-viewer-nav {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 20;
+          width: 48px;
+          height: 48px;
+          border-radius: 999px;
+          border: none;
+          background: rgba(15, 23, 42, 0.72);
+          color: #fff;
+          font-size: 32px;
+          line-height: 1;
+          font-weight: 700;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 14px rgba(0,0,0,.35);
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+        }
+        .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.96); }
+        .bofutz-viewer-prev { left: 10px; }
+        .bofutz-viewer-next { right: 10px; }
+        @media (max-width: 640px) {
+          .bofutz-viewer-nav { width: 44px; height: 44px; font-size: 28px; }
+          .bofutz-viewer-prev { left: 6px; }
+          .bofutz-viewer-next { right: 6px; }
+        }
+      `;
+      document.head.appendChild(style);
+    };
+
     const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
       if (!imgList || !imgList.length) return;
       const container = document.createElement("div");
@@ -733,8 +773,19 @@ export default {
       document.body.appendChild(container);
       const isMulti = imgList.length > 1;
       if (window.Viewer) {
+        ensureViewerNavStyle();
+        let navPrev = null;
+        let navNext = null;
+        const clearNav = () => {
+          try {
+            navPrev && navPrev.remove();
+            navNext && navNext.remove();
+          } catch (_) {}
+          navPrev = navNext = null;
+        };
         const viewer = new window.Viewer(container, {
           hidden: () => {
+            clearNav();
             viewer.destroy();
             container.remove();
           },
@@ -761,6 +812,43 @@ export default {
             rotateRight: 0,
             flipHorizontal: 0,
             flipVertical: 0,
+          },
+          ready() {
+            if (!isMulti) return;
+            const root =
+              (viewer && viewer.viewer) ||
+              document.querySelector(".viewer-container");
+            if (!root) return;
+            if (getComputedStyle(root).position === "static") {
+              root.style.position = "relative";
+            }
+            clearNav();
+            navPrev = document.createElement("button");
+            navPrev.type = "button";
+            navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
+            navPrev.setAttribute("aria-label", "上一张");
+            navPrev.innerHTML = "&lt;";
+            navPrev.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                viewer.prev(true);
+              } catch (_) {}
+            });
+            navNext = document.createElement("button");
+            navNext.type = "button";
+            navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
+            navNext.setAttribute("aria-label", "下一张");
+            navNext.innerHTML = "&gt;";
+            navNext.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                viewer.next(true);
+              } catch (_) {}
+            });
+            root.appendChild(navPrev);
+            root.appendChild(navNext);
           },
         });
         viewer.show();
@@ -931,6 +1019,7 @@ export default {
       getPastWeeks,
       tipEnabled,
       tipVisible,
+      tipChannel,
       tableScrollEl,
       tipWechatSrc,
       tipAlipaySrc,
@@ -1043,7 +1132,7 @@ export default {
 
         <!-- 打赏入口 -->
         <div v-if="tipEnabled" class="text-center pt-2">
-          <button type="button" @click="tipVisible = true"
+          <button type="button" @click="tipChannel = tipWechatSrc ? 'wechat' : (tipAlipaySrc ? 'alipay' : 'wechat'); tipVisible = true"
                   class="text-xs text-slate-400 hover:theme-text underline">
             {{ settings.tip_note || '觉得有用？请作者喝杯咖啡' }}
           </button>
@@ -1055,16 +1144,24 @@ export default {
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl text-center">
           <h3 class="font-bold text-slate-800">感谢支持</h3>
           <p class="text-xs text-slate-500">{{ settings.tip_note || '自愿打赏，不解锁任何权限' }}</p>
-          <div class="flex justify-center gap-4 flex-wrap">
-            <div v-if="tipWechatSrc" class="space-y-1">
-              <img :src="tipWechatSrc" class="w-28 h-28 object-contain border rounded-lg" alt="微信">
-              <div class="text-[11px] text-slate-500">微信</div>
+          <div class="flex justify-center gap-2 mb-1" v-if="tipWechatSrc || tipAlipaySrc">
+            <button type="button" v-if="tipWechatSrc" @click="tipChannel='wechat'"
+                    class="px-3 py-1 rounded-full text-xs border transition"
+                    :class="tipChannel==='wechat' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200'">微信</button>
+            <button type="button" v-if="tipAlipaySrc" @click="tipChannel='alipay'"
+                    class="px-3 py-1 rounded-full text-xs border transition"
+                    :class="tipChannel==='alipay' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200'">支付宝</button>
+          </div>
+          <div class="flex justify-center">
+            <div v-if="tipChannel==='wechat' && tipWechatSrc" class="space-y-1">
+              <img :src="tipWechatSrc" class="w-40 h-40 object-contain border rounded-lg mx-auto" alt="微信收款码">
+              <div class="text-[11px] text-slate-500">微信扫码</div>
             </div>
-            <div v-if="tipAlipaySrc" class="space-y-1">
-              <img :src="tipAlipaySrc" class="w-28 h-28 object-contain border rounded-lg" alt="支付宝">
-              <div class="text-[11px] text-slate-500">支付宝</div>
+            <div v-else-if="tipChannel==='alipay' && tipAlipaySrc" class="space-y-1">
+              <img :src="tipAlipaySrc" class="w-40 h-40 object-contain border rounded-lg mx-auto" alt="支付宝收款码">
+              <div class="text-[11px] text-slate-500">支付宝扫码</div>
             </div>
-            <p v-if="!tipWechatSrc && !tipAlipaySrc" class="text-xs text-slate-400">后台尚未配置打赏收款码</p>
+            <p v-else class="text-xs text-slate-400">后台尚未配置打赏收款码</p>
           </div>
           <button type="button" @click="tipVisible = false" class="text-sm text-slate-500">关闭</button>
         </div>

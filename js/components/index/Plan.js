@@ -85,6 +85,21 @@ export default {
       return (Number(base) + cents).toFixed(2);
     };
 
+
+    const pickDefaultVipPlan = (list) => {
+      if (!list || !list.length) return null;
+      // 优先月卡（约 30 天）
+      const byDays = list.find((p) => Number(p.duration_days || p.days || p.valid_days || 0) === 30);
+      if (byDays) return byDays;
+      const byName = list.find((p) => /月卡|月度|30\s*天/.test(String(p.name || "")));
+      if (byName) return byName;
+      const byLv = list.find((p) => /lv\.?1/i.test(String(p.id || "")) || /lv\.?1/i.test(String(p.name || "")));
+      if (byLv) return byLv;
+      // 跳过「体验/7天」优先第二档
+      if (list.length >= 2 && /体验|7\s*天|试用/.test(String(list[0].name || ""))) return list[1];
+      return list[0];
+    };
+
     const selectPlan = (plan) => {
       if (!plan) return;
       topUpForm.planId = plan.id;
@@ -114,7 +129,11 @@ export default {
         );
         creditPlans.value = creditRes.data || creditRes || [];
         const list = displayPlans.value;
-        if (list.length) selectPlan(list[0]);
+        if (list.length) {
+          const def =
+            planTab.value === "vip" ? pickDefaultVipPlan(list) : list[0];
+          selectPlan(def || list[0]);
+        }
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
@@ -135,7 +154,10 @@ export default {
         }
       } catch (_) {}
       const list = displayPlans.value;
-      if (list.length) selectPlan(list[0]);
+      if (list.length) {
+        const def = planTab.value === "vip" ? pickDefaultVipPlan(list) : list[0];
+        selectPlan(def || list[0]);
+      }
       else {
         topUpForm.planId = "";
       }
