@@ -963,18 +963,18 @@ export default {
 
         <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div ref="tableScrollEl" class="overflow-x-auto custom-scrollbar dash-table-scroll">
-            <table class="w-full text-center border-collapse whitespace-nowrap min-w-max dash-board-table">
+            <table class="text-center border-collapse whitespace-nowrap min-w-max dash-board-table">
               <thead class="bg-slate-50 border-b border-slate-100">
                 <tr class="text-xs text-slate-600 font-bold select-none">
                   <th class="py-3 px-4 text-left etf-name-column dash-col-name sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" @click="handleSort('etf_name')">
                     标的名称
                     <i v-if="sortColumn==='etf_name'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
-                  <th v-for="idx in 5" :key="idx" class="py-3 px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('d'+(idx-1))">
+                  <th v-for="idx in 5" :key="idx" class="py-3 px-1.5 sm:px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200 dash-col-day" @click="handleSort('d'+(idx-1))">
                     周{{ ['一','二','三','四','五'][idx-1] }}
                     <i v-if="sortColumn==='d'+(idx-1) || (!sortColumn && processedData.rankDailyIdx===(idx-1))" class="fa-solid text-[10px] ml-1" :class="sortColumn==='d'+(idx-1) && sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
-                  <th class="py-3 px-4 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200" @click="handleSort('week_status')">
+                  <th class="py-3 px-2 sm:px-4 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200 dash-col-week" @click="handleSort('week_status')">
                     周线
                     <i v-if="sortColumn==='week_status' || (!sortColumn && processedData.rankBy==='weekly')" class="fa-solid text-[10px] ml-1" :class="sortColumn==='week_status' && sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
@@ -997,21 +997,21 @@ export default {
                       </div>
                     </td>
 
-                    <td v-for="idx in 5" :key="idx" class="p-3 font-medium" :class="getColorClass(cellPrimaryStatus(item.days[idx-1]))">
-                      <div class="flex items-center justify-center gap-1"
+                    <td v-for="idx in 5" :key="idx" class="p-1.5 sm:p-3 font-medium dash-col-day" :class="getColorClass(cellPrimaryStatus(item.days[idx-1]))">
+                      <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1"
                            :title="dataDateTitle(processedData.weekDays[idx-1])">
-                        <span class="text-[11px] sm:text-sm font-mono tracking-tight">{{ formatDayCell(item.days[idx-1]) }}</span>
+                        <span class="text-[10px] sm:text-sm font-mono tracking-tight leading-tight">{{ formatDayCell(item.days[idx-1]) }}</span>
                         <i v-if="showDailyChartIcon(item.etf_code, idx - 1)"
-                           class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs shrink-0"
-                           :title="chartDateTitle(chartUpdateDay(item.etf_code) || processedData.weekDays[idx-1])"
+                           class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-sm sm:text-xs shrink-0 p-1"
+                           :title="dailyChartTitle(item.etf_code, processedData.weekDays[idx-1])"
                            @click.stop="openDailyChartViewer(item, false)"></i>
                       </div>
                     </td>
 
-                    <td class="p-3 font-medium" :class="getColorClass(item.week_status)">
-                      <div class="flex items-center justify-center gap-1" :title="weekDataTitle(item)">
-                        <span>{{ item.week_status || '-' }}</span>
-                        <i class="fa-regular fa-image text-slate-300 hover:text-blue-500 cursor-pointer text-xs"
+                    <td class="p-1.5 sm:p-3 font-medium dash-col-week" :class="getColorClass(item.week_status)">
+                      <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1" :title="weekDataTitle(item)">
+                        <span class="text-[10px] sm:text-sm font-mono leading-tight">{{ item.week_status || '-' }}</span>
+                        <i class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-sm sm:text-xs shrink-0 p-1 -m-0.5"
                            :title="weekChartTitle()"
                            @click.stop="openWeeklyChartViewer(item, false)"></i>
                       </div>
