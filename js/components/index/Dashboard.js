@@ -4,6 +4,7 @@
  * - 数据与图表分列：行情按采集日、图表按更新日落在对应周几列
  * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
+ * DASHBOARD_BUILD 2026-08-16c favCodes fix
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -44,7 +45,7 @@ export default {
     const customList = ref([]);
     const sharedList = ref([]);  // 通用监控全量（无论是否触发）
     /** 会员收藏 / 自定义排序 */
-    const favCodes = ref(new Set());
+    const favCodes = ref([]); // string codes，避免部分 WebView 对 Set 响应式异常
     const userOrder = ref([]);
     const dragCode = ref(null);
     const prefsSaving = ref(false);
@@ -673,7 +674,7 @@ export default {
         store.state.isVip &&
         store.state.isLoggedIn &&
         !sortColumn.value &&
-        userOrder.value &&
+        Array.isArray(userOrder.value) &&
         userOrder.value.length
       ) {
         const orderMap = new Map(
@@ -819,7 +820,11 @@ export default {
     };
 
 
-    const isFavorite = (code) => favCodes.value.has(String(code));
+    const isFavorite = (code) => {
+      const list = Array.isArray(favCodes.value) ? favCodes.value : [];
+      const c = String(code || "").replace(/\D/g, "").slice(-6);
+      return !!c && list.includes(c);
+    };
 
     const canCustomizeBoard = computed(
       () => !!(store.state.isLoggedIn && store.state.isVip)
@@ -827,16 +832,16 @@ export default {
 
     const loadDashboardPrefs = async () => {
       if (!canCustomizeBoard.value) {
-        favCodes.value = new Set();
+        favCodes.value = [];
         userOrder.value = [];
         return;
       }
       try {
         const res = await dashboardPrefsApi.fetch();
         const data = (res && res.data) || res || {};
-        favCodes.value = new Set(
-          (data.favorites || []).map((c) => String(c).replace(/\D/g, "").slice(-6))
-        );
+        favCodes.value = (data.favorites || [])
+          .map((c) => String(c).replace(/\D/g, "").slice(-6))
+          .filter((c) => c.length === 6);
         userOrder.value = (data.order || []).map((c) =>
           String(c).replace(/\D/g, "").slice(-6)
         );
@@ -859,10 +864,11 @@ export default {
       try {
         const res = await dashboardPrefsApi.toggleFavorite(code);
         const on = !!(res && (res.favorite === true || res.favorite === 1));
-        const next = new Set(favCodes.value);
-        if (on) next.add(code);
-        else next.delete(code);
-        favCodes.value = next;
+        const cur = Array.isArray(favCodes.value) ? favCodes.value.slice() : [];
+        const idx = cur.indexOf(code);
+        if (on && idx < 0) cur.push(code);
+        if (!on && idx >= 0) cur.splice(idx, 1);
+        favCodes.value = cur;
         store.showToast(on ? "已收藏" : "已取消收藏");
       } catch (err) {
         store.showToast(err.message || "收藏失败", "error");
@@ -1110,11 +1116,11 @@ export default {
           if (store.state.isLoggedIn && store.state.isVip) {
             await loadDashboardPrefs();
           } else {
-            favCodes.value = new Set();
+            favCodes.value = [];
             userOrder.value = [];
           }
         } catch (_) {
-          favCodes.value = new Set();
+          favCodes.value = [];
           userOrder.value = [];
         }
         const data = results[0];
