@@ -229,19 +229,49 @@ export default {
       style.id = "bofutz-viewer-nav-style";
       style.textContent = `
         .bofutz-viewer-nav {
-          position: absolute; top: 50%; transform: translateY(-50%); z-index: 20;
-          width: 48px; height: 48px; border-radius: 999px; border: none;
-          background: rgba(15, 23, 42, 0.72); color: #fff; font-size: 32px; line-height: 1;
-          font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 4px 14px rgba(0,0,0,.35); -webkit-tap-highlight-color: transparent; user-select: none;
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 30;
+          width: 52px;
+          height: 52px;
+          border-radius: 999px;
+          border: 2.5px solid rgba(255,255,255,0.92);
+          background: rgba(15, 23, 42, 0.45);
+          color: #fff;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 6px 20px rgba(0,0,0,.28);
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          backdrop-filter: blur(6px);
+          transition: background .15s ease, transform .15s ease, border-color .15s ease;
+          padding: 0;
         }
-        .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.96); }
-        .bofutz-viewer-prev { left: 10px; }
-        .bofutz-viewer-next { right: 10px; }
+        .bofutz-viewer-nav:hover {
+          background: rgba(15, 23, 42, 0.7);
+          border-color: #fff;
+        }
+        .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.94); }
+        .bofutz-viewer-nav svg {
+          width: 22px;
+          height: 22px;
+          display: block;
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 2.6;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .bofutz-viewer-prev { left: 16px; }
+        .bofutz-viewer-next { right: 16px; }
         @media (max-width: 640px) {
-          .bofutz-viewer-nav { width: 44px; height: 44px; font-size: 28px; }
-          .bofutz-viewer-prev { left: 6px; }
-          .bofutz-viewer-next { right: 6px; }
+          .bofutz-viewer-nav { width: 46px; height: 46px; }
+          .bofutz-viewer-nav svg { width: 20px; height: 20px; }
+          .bofutz-viewer-prev { left: 8px; }
+          .bofutz-viewer-next { right: 8px; }
         }
       `;
       document.head.appendChild(style);
@@ -299,7 +329,7 @@ export default {
             navPrev.type = "button";
             navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
             navPrev.setAttribute("aria-label", "上一张");
-            navPrev.innerHTML = "&lt;";
+            navPrev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 6 9 12 15 18"></polyline></svg>';
             navPrev.addEventListener("click", (e) => {
               e.preventDefault(); e.stopPropagation();
               try { viewer.prev(true); } catch (_) {}
@@ -308,7 +338,7 @@ export default {
             navNext.type = "button";
             navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
             navNext.setAttribute("aria-label", "下一张");
-            navNext.innerHTML = "&gt;";
+            navNext.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
             navNext.addEventListener("click", (e) => {
               e.preventDefault(); e.stopPropagation();
               try { viewer.next(true); } catch (_) {}
@@ -501,7 +531,6 @@ export default {
             <thead class="bg-slate-50 text-xs text-slate-500 border-b font-bold">
               <tr>
                 <th class="py-2.5 px-4">代码 / 名称</th>
-                <th class="py-2.5 px-3">周期</th>
                 <th class="py-2.5 px-3">提交时间</th>
                 <th class="py-2.5 px-3">状态</th>
                 <th class="py-2.5 px-3">有效期</th>
