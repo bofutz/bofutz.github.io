@@ -50,14 +50,46 @@
       .etf-name-column { min-width: 160px; max-width: 220px; }
     }
   
-    .dash-board-table { table-layout: fixed; width: 100%; }
+    /* auto + max-content：列按内容撑开，手机端横向滑动，避免周五/周线重叠 */
+    .dash-board-table {
+      table-layout: auto;
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
     .dash-board-table .dash-col-name { width: 200px; min-width: 180px; max-width: 240px; }
-    .dash-board-table .dash-col-day { width: 88px; }
-    .dash-board-table .dash-col-week { width: 100px; }
+    .dash-board-table .dash-col-day {
+      min-width: 5.75rem;
+      width: 5.75rem;
+      box-sizing: border-box;
+      padding-left: 0.25rem;
+      padding-right: 0.25rem;
+    }
+    .dash-board-table .dash-col-week {
+      min-width: 4.5rem;
+      width: 4.5rem;
+      box-sizing: border-box;
+      padding-left: 0.25rem;
+      padding-right: 0.25rem;
+    }
+    .dash-board-table .dash-cell-inner {
+      min-height: 2.25rem;
+    }
     @media (max-width: 640px) {
-      .dash-board-table .dash-col-name { width: 140px; min-width: 120px; }
-      .dash-board-table .dash-col-day { width: 72px; }
-      .dash-board-table .dash-col-week { width: 80px; }
+      .dash-board-table .dash-col-name { width: 7.25rem; min-width: 7.25rem; max-width: 8rem; }
+      .dash-board-table .dash-col-day {
+        min-width: 4.25rem;
+        width: 4.25rem;
+      }
+      .dash-board-table .dash-col-week {
+        min-width: 3.5rem;
+        width: 3.5rem;
+      }
+      /* 数据在上、图表 icon 在下，避免同一行挤叠 */
+      .dash-board-table .dash-cell-inner {
+        min-height: 2.75rem;
+      }
     }
 
 
@@ -116,7 +148,7 @@
     import Toast from "./js/components/common/Toast.js";
     import AdsPopup from "./js/components/common/AdsPopup.js";
 
-    import Dashboard from "./js/components/index/Dashboard.js";
+    import Dashboard from "./js/components/index/Dashboard.js?v=20260816c";
     import Plan from "./js/components/index/Plan.js";
     import Profile from "./js/components/index/Profile.js";
     import Vote from "./js/components/index/Vote.js";
