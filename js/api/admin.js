@@ -83,6 +83,16 @@ export const adminApi = {
       body: JSON.stringify({ order_id: orderId }),
     });
   },
+  /** 删除订单（需管理密码二次确认） */
+  async deleteOrders(ids, adminPassword) {
+    return request("/api/admin/orders/delete", {
+      method: "POST",
+      body: JSON.stringify({
+        ids: Array.isArray(ids) ? ids : [ids],
+        admin_password: adminPassword,
+      }),
+    });
+  },
 
   // 4. 套餐管理 (支持 shared / custom / both)
   async fetchPlansAdmin() {
