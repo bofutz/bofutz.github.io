@@ -330,11 +330,11 @@ export default {
             </select>
           </label>
           <label class="text-xs space-y-1 block">
-            <span class="text-slate-500">微信收款码 URL（图片直链或支付链接）</span>
+            <span class="text-slate-500">微信收款码（仅图片直链，如 .jpg / .png）</span>
             <input v-model="form.wechat_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
           <label class="text-xs space-y-1 block">
-            <span class="text-slate-500">支付宝收款码 URL</span>
+            <span class="text-slate-500">支付宝收款码（仅图片直链，如 .jpg / .png）</span>
             <input v-model="form.alipay_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
           </label>
         </section>
