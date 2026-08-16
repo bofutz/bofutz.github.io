@@ -320,7 +320,8 @@ export default {
 
         <!-- 收款码（开通） -->
         <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
-          <h3 class="font-bold text-slate-700 text-sm border-b pb-2">开通套餐收款码</h3>
+          <h3 class="font-bold text-slate-700 text-sm border-b pb-2">收款码（开通套餐与打赏共用）</h3>
+          <p class="text-[11px] text-slate-400">微信 / 支付宝只需配置一次，前台「开通服务」与「打赏」共用。</p>
           <label class="text-xs space-y-1 block">
             <span class="text-slate-500">默认支付渠道</span>
             <select v-model="form.default_pay_channel" class="w-full border rounded-lg px-3 py-2 text-sm">
@@ -370,14 +371,7 @@ export default {
             <span class="text-slate-500">引导文案</span>
             <input v-model="form.tip_note" type="text" class="w-full border rounded-lg px-3 py-2 text-sm">
           </label>
-          <label class="text-xs space-y-1 block">
-            <span class="text-slate-500">打赏 · 微信收款码 URL</span>
-            <input v-model="form.tip_wechat_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
-          </label>
-          <label class="text-xs space-y-1 block">
-            <span class="text-slate-500">打赏 · 支付宝收款码 URL</span>
-            <input v-model="form.tip_alipay_qr_url" type="text" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
-          </label>
+          <p class="text-[11px] text-slate-400">收款码见上方「收款码」配置，无需在此重复填写。</p>
         </section>
 
         <!-- 弹窗广告 -->
