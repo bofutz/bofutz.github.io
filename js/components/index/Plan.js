@@ -62,18 +62,18 @@ export default {
     const payRegisterEnabled = computed(() => settingOn(settings.value.pay_register_enabled));
 
     const isImageUrl = (url) => {
-      if (!url || typeof url !== "string") return false;
-      return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url.trim().toLowerCase());
+      const u = String(url || "").trim();
+      if (!u || !/^https?:\/\//i.test(u)) return false;
+      return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u);
     };
-    const linkToQrSrc = (url) =>
-      `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(String(url).trim())}`;
     const currentPayQrSrc = computed(() => {
+      // 仅图片直链，不做 URL→二维码转换
       const raw =
         payChannel.value === "wechat"
           ? settings.value.wechat_qr_url || ""
           : settings.value.alipay_qr_url || "";
-      if (!raw.trim()) return "";
-      return isImageUrl(raw) ? raw.trim() : linkToQrSrc(raw);
+      const u = String(raw).trim();
+      return isImageUrl(u) ? u : "";
     });
 
     const displayPlans = computed(() =>

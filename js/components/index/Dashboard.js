@@ -93,23 +93,19 @@ export default {
     const tipEnabled = computed(() => settingOn(settings.value.tip_enabled));
 
     const isImageUrl = (url) => {
-      if (!url || typeof url !== "string") return false;
-      return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url.trim());
+      const u = String(url || "").trim();
+      if (!u || !/^https?:\/\//i.test(u)) return false;
+      // 仅认图片扩展名（允许 query/hash）
+      return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u);
     };
-    const linkToQrSrc = (url) =>
-      `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(
-        String(url).trim()
-      )}`;
     const tipWechatSrc = computed(() => {
-      // 与开通套餐共用收款码（兼容旧 tip_* 字段）
-      const u = settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "";
-      if (!u) return "";
-      return isImageUrl(u) ? u : linkToQrSrc(u);
+      // 仅图片直链；与开通套餐共用 wechat_qr_url（兼容旧 tip_*）
+      const u = String(settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "").trim();
+      return isImageUrl(u) ? u : "";
     });
     const tipAlipaySrc = computed(() => {
-      const u = settings.value.alipay_qr_url || settings.value.tip_alipay_qr_url || "";
-      if (!u) return "";
-      return isImageUrl(u) ? u : linkToQrSrc(u);
+      const u = String(settings.value.alipay_qr_url || settings.value.tip_alipay_qr_url || "").trim();
+      return isImageUrl(u) ? u : "";
     });
 
     const isValidDate = (d) =>
