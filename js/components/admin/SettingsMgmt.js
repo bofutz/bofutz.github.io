@@ -233,10 +233,6 @@ export default {
               <input v-model="form.gift_register_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>
             <label class="text-xs space-y-1">
-              <span class="text-slate-500">邀请人注册赠送（建议 0）</span>
-              <input v-model="form.gift_inviter_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </label>
-            <label class="text-xs space-y-1">
               <span class="text-slate-500">被邀请人注册赠送</span>
               <input v-model="form.gift_invitee_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm">
             </label>

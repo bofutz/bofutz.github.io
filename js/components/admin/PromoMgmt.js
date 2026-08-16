@@ -29,6 +29,14 @@ export default {
       loading.value = true;
       try {
         const res = await adminApi.fetchPromos();
+        // 兜底：隐藏已软删记录（兼容旧接口未过滤）
+        if (res && Array.isArray(res.data)) {
+          res.data = res.data.filter(
+            (x) =>
+              !(String(x.name || "").startsWith("__DELETED__") ||
+                String(x.code || "").startsWith("__del_"))
+          );
+        }
         promos.value = res.data || [];
       } catch (err) {
         store.showToast(err.message, "error");
