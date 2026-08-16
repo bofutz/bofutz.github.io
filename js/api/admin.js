@@ -181,10 +181,10 @@ export const adminApi = {
     });
   },
   async deletePromo(id) {
-    // DELETE + body：部分网关会丢 body，同时带 query 兜底
-    return request(`/api/admin/promos?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      body: JSON.stringify({ id }),
+    // 使用 POST action=delete，避免 DELETE + 外键/网关问题
+    return request("/api/admin/promos", {
+      method: "POST",
+      body: JSON.stringify({ id, action: "delete" }),
     });
   },
 
