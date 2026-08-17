@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>波幅探长 - 波幅监控</title>
-  <meta name="description" content="波幅探长：ETF 波幅监控、票选与定制图表服务" />
+  <meta name="description" content="波幅探长：ETF 波幅监控、票选与自主查询图表" />
   <link rel="icon" type="image/png" href="./logo.png">
 
   <!-- Tailwind -->
@@ -50,51 +50,50 @@
       .etf-name-column { min-width: 160px; max-width: 220px; }
     }
   
-    /* auto + max-content：列按内容撑开，手机端横向滑动，避免周五/周线重叠 */
+    /* 看板表格：桌面铺满卡片宽度；手机可横向滑动 */
     .dash-board-table {
-      table-layout: auto;
-      width: max-content;
+      table-layout: fixed;
+      width: 100%;
       min-width: 100%;
       border-collapse: separate;
       border-spacing: 0;
     }
-    .dash-board-table .dash-col-name { width: 200px; min-width: 180px; max-width: 240px; }
+    .dash-board-table .dash-col-name {
+      width: 22%;
+      min-width: 140px;
+    }
     .dash-board-table .dash-col-day {
-      min-width: 5.75rem;
-      width: 5.75rem;
+      width: 12.5%;
       box-sizing: border-box;
-      padding-left: 0.25rem;
-      padding-right: 0.25rem;
+      padding-left: 0.2rem;
+      padding-right: 0.2rem;
     }
     .dash-board-table .dash-col-week {
-      min-width: 4.5rem;
-      width: 4.5rem;
+      width: 12.5%;
       box-sizing: border-box;
-      padding-left: 0.25rem;
-      padding-right: 0.25rem;
+      padding-left: 0.2rem;
+      padding-right: 0.2rem;
     }
     .dash-board-table .dash-cell-inner {
       min-height: 2.25rem;
     }
     @media (max-width: 640px) {
-      .dash-board-table .dash-col-name { width: 7.25rem; min-width: 7.25rem; max-width: 8rem; }
-      .dash-board-table .dash-col-day {
-        min-width: 4.25rem;
-        width: 4.25rem;
+      /* 小屏：按内容宽度 + 横滑，避免挤叠 */
+      .dash-board-table {
+        table-layout: auto;
+        width: max-content;
+        min-width: 100%;
       }
-      .dash-board-table .dash-col-week {
-        min-width: 3.5rem;
-        width: 3.5rem;
-      }
-      /* 数据在上、图表 icon 在下，避免同一行挤叠 */
-      .dash-board-table .dash-cell-inner {
-        min-height: 2.75rem;
-      }
+      .dash-board-table .dash-col-name { width: 7.25rem; min-width: 7.25rem; max-width: 8.5rem; }
+      .dash-board-table .dash-col-day { min-width: 4.25rem; width: 4.25rem; }
+      .dash-board-table .dash-col-week { min-width: 3.5rem; width: 3.5rem; }
+      .dash-board-table .dash-cell-inner { min-height: 2.75rem; }
     }
 
-
-    /* 看板：手机端名称列强固定 + 表头不透底 */
-    .dash-table-scroll { -webkit-overflow-scrolling: touch; }
+    .dash-table-scroll {
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+    }
     .dash-board-table .dash-col-name,
     .dash-board-table th.etf-name-column,
     .dash-board-table td.etf-name-column {
@@ -107,9 +106,6 @@
     .dash-board-table thead th.dash-col-name {
       z-index: 50;
       background: #f8fafc;
-    }
-    @media (max-width: 640px) {
-      .dash-board-table .dash-col-name { min-width: 118px; max-width: 132px; }
     }
 
   </style>
@@ -148,7 +144,7 @@
     import Toast from "./js/components/common/Toast.js";
     import AdsPopup from "./js/components/common/AdsPopup.js";
 
-    import Dashboard from "./js/components/index/Dashboard.js?v=20260816c";
+    import Dashboard from "./js/components/index/Dashboard.js?v=20260817d";
     import Plan from "./js/components/index/Plan.js";
     import Profile from "./js/components/index/Profile.js";
     import Vote from "./js/components/index/Vote.js";
