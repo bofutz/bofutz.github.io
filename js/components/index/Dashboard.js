@@ -4,7 +4,7 @@
  * - 数据与图表分列：行情按采集日、图表按更新日落在对应周几列
  * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
- * DASHBOARD_BUILD 2026-08-17 remove custom watchlist
+ * DASHBOARD_BUILD 2026-08-17d width full + fav pin below top3
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -663,23 +663,45 @@ export default {
       }
 
 
-      // 会员自定义排序（未点列排序时生效）；收藏不强制置顶，仅标记星标
-      if (
-        store.state.isVip &&
-        store.state.isLoggedIn &&
-        !sortColumn.value &&
-        Array.isArray(userOrder.value) &&
-        userOrder.value.length
-      ) {
-        const orderMap = new Map(
-          userOrder.value.map((c, idx) => [String(c), idx])
+      // 默认排序结构（未点列排序时）：
+      //   1) 免费 Top3  2) 会员收藏  3) 其余
+      // 组内按波幅绝对值；若有拖拽顺序，组内再按 userOrder
+      if (!sortColumn.value) {
+        const freeSet = new Set((freeTop3Codes || []).map((c) => String(c)));
+        const favSet = new Set(
+          store.state.isLoggedIn && store.state.isVip
+            ? (Array.isArray(favCodes.value) ? favCodes.value : []).map((c) => String(c))
+            : []
         );
+        const orderMap = new Map(
+          (Array.isArray(userOrder.value) ? userOrder.value : []).map((c, i) => [
+            String(c),
+            i,
+          ])
+        );
+        const freeIdx = new Map(
+          (freeTop3Codes || []).map((c, i) => [String(c), i])
+        );
+        const groupOf = (code) => {
+          const c = String(code);
+          if (freeSet.has(c)) return 0;
+          if (favSet.has(c)) return 1;
+          return 2;
+        };
         items.sort((a, b) => {
           const ca = String(a.etf_code);
           const cb = String(b.etf_code);
-          const ia = orderMap.has(ca) ? orderMap.get(ca) : 100000;
-          const ib = orderMap.has(cb) ? orderMap.get(cb) : 100000;
-          if (ia !== ib) return ia - ib;
+          const ga = groupOf(ca);
+          const gb = groupOf(cb);
+          if (ga !== gb) return ga - gb;
+          if (ga === 0) {
+            return (freeIdx.get(ca) ?? 0) - (freeIdx.get(cb) ?? 0);
+          }
+          if (orderMap.size) {
+            const ia = orderMap.has(ca) ? orderMap.get(ca) : 100000;
+            const ib = orderMap.has(cb) ? orderMap.get(cb) : 100000;
+            if (ia !== ib) return ia - ib;
+          }
           return absRankVal(b) - absRankVal(a);
         });
       }
@@ -1199,7 +1221,7 @@ export default {
 
         <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div ref="tableScrollEl" class="overflow-x-auto custom-scrollbar dash-table-scroll">
-            <table class="text-center border-collapse whitespace-nowrap min-w-max dash-board-table">
+            <table class="text-center border-collapse whitespace-nowrap w-full dash-board-table">
               <thead class="bg-slate-50 border-b border-slate-100">
                 <tr class="text-xs text-slate-600 font-bold select-none">
                   <th class="py-3 px-4 text-left etf-name-column dash-col-name sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" @click="handleSort('etf_name')">
