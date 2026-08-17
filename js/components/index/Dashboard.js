@@ -4,7 +4,7 @@
  * - 数据与图表分列：行情按采集日、图表按更新日落在对应周几列
  * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
- * DASHBOARD_BUILD 2026-08-17d width full + fav pin below top3
+ * DASHBOARD_BUILD 2026-08-17f cross-symbol chart gallery
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -595,9 +595,9 @@ export default {
         (i) => i.week_status && i.week_status !== "-" && i.week_status !== "--"
       );
 
-      // ★ 默认排序 / 免费 Top3：按「当前最新一档数据」的绝对值
-      //   - 有最新日线 → 用该日 day_status 绝对值
-      //   - 否则若有周线 → 用 week_status 绝对值
+      // ★ 默认排序 / 免费 Top3：
+      //   1) 有最新日线 → 先按 day_status 绝对值降序，再按半日线（pm 优先，否则 am）绝对值降序
+      //   2) 无日线但有周线 → 按 week_status 绝对值
       //   （有日线时不让周线抢走默认顺序）
       const rankBy = latestIdx >= 0 ? "daily" : hasAnyWeek ? "weekly" : "daily";
 
@@ -615,11 +615,37 @@ export default {
         return v === -9999 ? -9999 : Math.abs(v);
       };
 
+      /** 半日线绝对值：优先下午 pm_status，否则上午 am_status；都没有则 -9999 */
+      const absHalfVal = (row, dayIdx) => {
+        if (dayIdx == null || dayIdx < 0) return -9999;
+        const item = row.days?.[dayIdx];
+        if (!item) return -9999;
+        const pm = getStatusVal(item.pm_status);
+        const am = getStatusVal(item.am_status);
+        let best = -9999;
+        if (pm !== -9999) best = Math.max(best, Math.abs(pm));
+        if (am !== -9999) best = Math.max(best, Math.abs(am));
+        return best;
+      };
+
+      /** 默认比较：日线绝对值优先，相同再比半日线绝对值（均为降序） */
+      const cmpDefaultRank = (a, b) => {
+        const da = absLatestVal(a);
+        const db = absLatestVal(b);
+        if (db !== da) return db - da;
+        if (rankBy === "daily" && latestIdx >= 0) {
+          const ha = absHalfVal(a, latestIdx);
+          const hb = absHalfVal(b, latestIdx);
+          if (hb !== ha) return hb - ha;
+        }
+        return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+      };
+
       const absRankVal = (row) => absLatestVal(row);
 
-      const sortedByAbs = [...items].sort((a, b) => absLatestVal(b) - absLatestVal(a));
+      const sortedByAbs = [...items].sort(cmpDefaultRank);
       const freeTop3Codes = sortedByAbs
-        .filter((i) => absLatestVal(i) > -9999)
+        .filter((i) => absLatestVal(i) > -9999 || (rankBy === "daily" && absHalfVal(i, latestIdx) > -9999))
         .slice(0, 3)
         .map((i) => i.etf_code);
 
@@ -631,14 +657,24 @@ export default {
           }
           if (sortColumn.value.startsWith("d")) {
             const idx = parseInt(sortColumn.value.substring(1), 10);
-            // 按日线绝对值排序（与默认规则一致）
+            // 先按日线绝对值，再按半日线绝对值
             const rawA = a.days[idx] ? getStatusVal(a.days[idx].day_status) : -9999;
             const rawB = b.days[idx] ? getStatusVal(b.days[idx].day_status) : -9999;
             const valA = rawA === -9999 ? -9999 : Math.abs(rawA);
             const valB = rawB === -9999 ? -9999 : Math.abs(rawB);
             if (valA === -9999 && valB !== -9999) return 1;
             if (valB === -9999 && valA !== -9999) return -1;
-            return sortOrder.value === "desc" ? valB - valA : valA - valB;
+            if (valA !== valB) {
+              return sortOrder.value === "desc" ? valB - valA : valA - valB;
+            }
+            const ha = absHalfVal(a, idx);
+            const hb = absHalfVal(b, idx);
+            if (ha === -9999 && hb !== -9999) return 1;
+            if (hb === -9999 && ha !== -9999) return -1;
+            if (ha !== hb) {
+              return sortOrder.value === "desc" ? hb - ha : ha - hb;
+            }
+            return 0;
           }
           if (sortColumn.value === "week_status") {
             const rawA = getStatusVal(a.week_status);
@@ -650,7 +686,7 @@ export default {
             return sortOrder.value === "desc" ? valB - valA : valA - valB;
           }
         }
-        return absRankVal(b) - absRankVal(a);
+        return cmpDefaultRank(a, b);
       });
 
       if (searchQuery.value) {
@@ -702,7 +738,7 @@ export default {
             const ib = orderMap.has(cb) ? orderMap.get(cb) : 100000;
             if (ia !== ib) return ia - ib;
           }
-          return absRankVal(b) - absRankVal(a);
+          return cmpDefaultRank(a, b);
         });
       }
 
@@ -1019,6 +1055,32 @@ export default {
       }
     };
 
+    /** 看板当前可见列表中，用户有权查看图表的标的（顺序与表格一致） */
+    const viewableBoardItems = () => {
+      const list = processedData.value?.list || [];
+      return list.filter((row) => row && canViewChart(row.etf_code));
+    };
+
+    /** 并行探测图片是否存在（限制并发，避免一次打爆） */
+    const probeImagesBatch = async (candidates, concurrency = 12) => {
+      const out = [];
+      let i = 0;
+      const workers = Array.from({ length: Math.min(concurrency, Math.max(1, candidates.length)) }, async () => {
+        while (i < candidates.length) {
+          const idx = i++;
+          const c = candidates[idx];
+          if (c && c.url && (await probeImage(c.url))) out.push({ ...c, _idx: idx });
+        }
+      });
+      await Promise.all(workers);
+      out.sort((a, b) => a._idx - b._idx);
+      return out.map(({ _idx, ...rest }) => rest);
+    };
+
+    /**
+     * 日线/半日线：按看板列表顺序拼成图库，左右翻页可切到上/下一标的
+     * 每个标的顺序：日线 → 半日线（有则入列）
+     */
     const openDailyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通监控 VIP？")) {
@@ -1026,38 +1088,62 @@ export default {
         }
         return;
       }
-      const entry = resolveChartEntry(item.etf_code);
-      const r2Daily = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_daily.png`;
-      const r2Half = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_half_day.png`;
-      const dayLabel = formatDateCN(chartUpdateDay(item.etf_code) || globalChartDay.value) || "";
-      const candidates = [
-        {
-          title: `${formatEtfName(item.etf_name)} (${item.etf_code}) ${dayLabel}日线图表`.replace(/\s+/g, " ").trim(),
-          url: (entry && entry.url) || r2Daily,
-        },
-        {
-          title: `${formatEtfName(item.etf_name)} (${item.etf_code}) ${dayLabel}半日线图表`.replace(/\s+/g, " ").trim(),
-          url: r2Half,
-        },
-      ];
-      // 若 DB 链接与默认 R2 不同，再补一条 R2 日线兜底
-      if (entry && entry.url && entry.url !== r2Daily) {
-        candidates.splice(1, 0, {
-          title: `${formatEtfName(item.etf_name)} (${item.etf_code}) ${dayLabel}日线图表(R2)`.replace(/\s+/g, " ").trim(),
-          url: r2Daily,
-        });
-      }
-      const images = [];
-      for (const c of candidates) {
-        if (await probeImage(c.url)) images.push(c);
-      }
-      if (!images.length) {
-        store.showToast("暂无可用日线图表", "error");
+      const rows = viewableBoardItems();
+      if (!rows.length) {
+        store.showToast("暂无可查看的图表", "error");
         return;
       }
-      showViewerWithMultiImages(images, 0);
+      store.showToast("正在加载图库…");
+      const dayLabel =
+        formatDateCN(chartUpdateDay(item.etf_code) || globalChartDay.value) || "";
+      const candidates = [];
+      for (const row of rows) {
+        const code = String(row.etf_code || "").replace(/\D/g, "").slice(-6) || row.etf_code;
+        const name = formatEtfName(row.etf_name) || code;
+        const entry = resolveChartEntry(code);
+        const r2Daily = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_daily.png`;
+        const r2Half = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_half_day.png`;
+        const dailyUrl = (entry && entry.url) || r2Daily;
+        const rowDayLabel =
+          formatDateCN(chartUpdateDay(code) || globalChartDay.value) || dayLabel;
+        candidates.push({
+          title: `${name} (${code}) ${rowDayLabel}日线`.replace(/\s+/g, " ").trim(),
+          url: dailyUrl,
+          code,
+          kind: "daily",
+        });
+        // DB 链接与默认 R2 不同时，再挂一条 R2 日线兜底（同一标的相邻，便于对照）
+        if (entry && entry.url && entry.url !== r2Daily) {
+          candidates.push({
+            title: `${name} (${code}) ${rowDayLabel}日线(R2)`.replace(/\s+/g, " ").trim(),
+            url: r2Daily,
+            code,
+            kind: "daily_r2",
+          });
+        }
+        candidates.push({
+          title: `${name} (${code}) ${rowDayLabel}半日线`.replace(/\s+/g, " ").trim(),
+          url: r2Half,
+          code,
+          kind: "half_day",
+        });
+      }
+      const images = await probeImagesBatch(candidates, 12);
+      if (!images.length) {
+        store.showToast("暂无可用日线/半日线图表", "error");
+        return;
+      }
+      const clickCode = String(item.etf_code || "").replace(/\D/g, "").slice(-6) || item.etf_code;
+      // 优先定位到当前标的的「日线」；没有则该标的任意一张；再没有则 0
+      let idx = images.findIndex((g) => g.code === clickCode && g.kind === "daily");
+      if (idx < 0) idx = images.findIndex((g) => g.code === clickCode);
+      if (idx < 0) idx = 0;
+      showViewerWithMultiImages(images, idx);
     };
 
+    /**
+     * 周线：按看板列表顺序拼成图库，左右翻页切换上/下一标的周线
+     */
     const openWeeklyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
@@ -1065,18 +1151,35 @@ export default {
         }
         return;
       }
-      const dayLabel = formatDateCN(globalChartDay.value || item.week_status_date) || "";
-      const images = [
-        {
-          title: `${formatEtfName(item.etf_name)} (${item.etf_code}) ${dayLabel}周线图表`.replace(/\s+/g, " ").trim(),
-          url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${item.etf_code}_weekly.png`,
-        },
-      ];
-      if (!(await probeImage(images[0].url))) {
+      const rows = viewableBoardItems();
+      if (!rows.length) {
+        store.showToast("暂无可查看的图表", "error");
+        return;
+      }
+      store.showToast("正在加载图库…");
+      const candidates = [];
+      for (const row of rows) {
+        const code = String(row.etf_code || "").replace(/\D/g, "").slice(-6) || row.etf_code;
+        const name = formatEtfName(row.etf_name) || code;
+        const rowDayLabel =
+          formatDateCN(weeklyChartDay.value || globalChartDay.value || row.week_status_date) ||
+          "";
+        candidates.push({
+          title: `${name} (${code}) ${rowDayLabel}周线`.replace(/\s+/g, " ").trim(),
+          url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_weekly.png`,
+          code,
+          kind: "weekly",
+        });
+      }
+      const images = await probeImagesBatch(candidates, 12);
+      if (!images.length) {
         store.showToast("暂无可用周线图表", "error");
         return;
       }
-      showViewerWithMultiImages(images, 0);
+      const clickCode = String(item.etf_code || "").replace(/\D/g, "").slice(-6) || item.etf_code;
+      let idx = images.findIndex((g) => g.code === clickCode);
+      if (idx < 0) idx = 0;
+      showViewerWithMultiImages(images, idx);
     };
 
     const toggleRow = (item) => {
