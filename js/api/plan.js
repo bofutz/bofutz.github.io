@@ -33,22 +33,8 @@ export const planApi = {
   },
 
   /**
-   * 计算定制组数
-   * @param {number} symbolCount 标的只数
-   * @param {number} perGroup 每组只数（后台 custom_max_symbols，默认 3）
-   */
-  calcCustomGroups(symbolCount, perGroup = 3) {
-    const n = Math.max(0, Number(symbolCount) || 0);
-    const g = Math.max(1, Number(perGroup) || 3);
-    if (n <= 0) return 0;
-    return Math.ceil(n / g);
-  },
-
-  /**
    * 提交开通/充值订单
-   * - orderType: 'vip' | 'custom_watchlist'
-   * - customItems: [{ etf_code, etf_name }] 定制订单必填，可超过每组只数
-   * - groups: 定制组数（可选，后端也会按 custom_items 重算）
+   * orderType: 'vip' | 'chart_credits'
    */
   async submitOrder(orderData) {
     const body = {

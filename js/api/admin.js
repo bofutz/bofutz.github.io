@@ -94,7 +94,7 @@ export const adminApi = {
     });
   },
 
-  // 4. 套餐管理 (支持 shared / custom / both)
+  // 4. 套餐管理 (shared / both；定制已下线)
   async fetchPlansAdmin() {
     return request("/api/admin/plans");
   },
@@ -156,29 +156,9 @@ export const adminApi = {
     });
   },
 
-  // 6. 定制监控管理（兼容旧数据，前台已下线）
-  async fetchCustomWatchlist() {
-    return request("/api/admin/watchlist/custom");
-  },
-  async saveCustomItem(item) {
-    return request("/api/admin/watchlist/custom", {
-      method: "POST",
-      body: JSON.stringify(item),
-    });
-  },
-  async deleteCustomItem(id) {
-    return request("/api/admin/watchlist/custom", {
-      method: "DELETE",
-      body: JSON.stringify({ id }),
-    });
-  },
-  /** 将过期定制标的批量标记为 expired（也可由 Worker 定时任务执行） */
-  async expireCustomWatchlist() {
-    return request("/api/admin/watchlist/custom/expire", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-  },
+  // 6. 定制监控已下线（API 已移除）
+
+  // 7. 优惠码管理
 
   // 7. 优惠码管理
   async fetchPromos() {
