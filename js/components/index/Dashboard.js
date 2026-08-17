@@ -4,11 +4,10 @@
  * - 数据与图表分列：行情按采集日、图表按更新日落在对应周几列
  * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
- * DASHBOARD_BUILD 2026-08-16c favCodes fix
+ * DASHBOARD_BUILD 2026-08-17 remove custom watchlist
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
-import { watchlistApi } from "../../api/watchlist.js";
 import { request } from "../../api/http.js";
 
 const dashboardPrefsApi = {
@@ -42,7 +41,6 @@ export default {
     const globalChartDay = ref(null);
     /** 周线图表采集日（与日线独立） */
     const weeklyChartDay = ref(null);
-    const customList = ref([]);
     const sharedList = ref([]);  // 通用监控全量（无论是否触发）
     /** 会员收藏 / 自定义排序 */
     const favCodes = ref([]); // string codes，避免部分 WebView 对 Set 响应式异常
@@ -696,29 +694,8 @@ export default {
       };
     });
 
-    /** 定制标的：合并行情行 */
-    const customRows = computed(() => {
-      if (!store.state.isLoggedIn || !customList.value.length) return [];
-      const now = Date.now();
-      return customList.value
-        .filter((c) => c.status === "active" && (!c.expire_at || c.expire_at > now))
-        .map((c) => {
-          const row = buildRowForCode(c.etf_code, c.etf_name);
-          return {
-            ...(row || {
-              etf_code: c.etf_code,
-              etf_name: c.etf_name || c.etf_code,
-              days: [null, null, null, null, null],
-              week_status: null,
-              week_status_from: null,
-            }),
-            _customMeta: c,
-          };
-        });
-    });
 
-    const canViewChart = (etfCode, isCustom = false) => {
-      if (isCustom) return true; // 有效定制期内可看图
+    const canViewChart = (etfCode) => {
       if (store.state.isVip) return true;
       return processedData.value.freeTop3Codes.includes(etfCode);
     };
@@ -1020,8 +997,8 @@ export default {
       }
     };
 
-    const openDailyChartViewer = async (item, isCustom = false) => {
-      if (!canViewChart(item.etf_code, isCustom)) {
+    const openDailyChartViewer = async (item) => {
+      if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通监控 VIP？")) {
           window.location.hash = "#/plan";
         }
@@ -1059,8 +1036,8 @@ export default {
       showViewerWithMultiImages(images, 0);
     };
 
-    const openWeeklyChartViewer = async (item, isCustom = false) => {
-      if (!canViewChart(item.etf_code, isCustom)) {
+    const openWeeklyChartViewer = async (item) => {
+      if (!canViewChart(item.etf_code)) {
         if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
           window.location.hash = "#/plan";
         }
@@ -1104,9 +1081,6 @@ export default {
           etfApi.fetchChartsMap().catch(() => ({})),
           etfApi.fetchSharedWatchlist().catch(() => ({ data: [] })),
         ];
-        if (store.state.isLoggedIn) {
-          tasks.push(watchlistApi.fetchUserCustomWatchlist().catch(() => ({ data: [] })));
-        }
         const results = await Promise.all(tasks);
         try {
           if (store.state.isLoggedIn && store.state.isVip) {
@@ -1126,10 +1100,6 @@ export default {
         chartsMap.value = chartsRes.charts || chartsRes || {};
         const sharedRaw = sharedRes?.data ?? sharedRes;
         sharedList.value = Array.isArray(sharedRaw) ? sharedRaw : [];
-        if (store.state.isLoggedIn && results[3]) {
-          const raw = results[3].data ?? results[3];
-          customList.value = Array.isArray(raw) ? raw : [];
-        }
         const sampleCodes = (sharedList.value || [])
           .map((s) => s.etf_code || s.code)
           .concat((allData.value || []).map((i) => i.etf_code));
@@ -1167,7 +1137,6 @@ export default {
       sortOrder,
       handleSort,
       processedData,
-      customRows,
       latestDailyColIndex,
       chartColIndexForCode,
       hasChartForCode,
@@ -1222,10 +1191,6 @@ export default {
       </div>
 
       <template v-else>
-        <!-- 定制监控已下线 -->
-
-
-
         <!-- ===== 通用数据表 ===== -->
         <div v-if="!processedData.list.length" class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
           <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-40"></i>

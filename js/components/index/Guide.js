@@ -68,7 +68,7 @@ export default {
       <section id="value" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div class="theme-bg px-6 py-4">
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-crown"></i> 为什么值得开通 VIP / 定制监控？
+            <i class="fa-solid fa-crown"></i> 为什么值得开通监控 VIP？
           </h2>
         </div>
         <div class="p-6 space-y-5">
@@ -100,15 +100,7 @@ export default {
                 半日线（约 3 小时）看节奏，日线看当日结构，周线看中期方向。免费用户可看部分免费标的图表，VIP 解锁通用池完整图表。
               </p>
             </div>
-            <div class="bg-slate-50 rounded-xl p-4">
-              <div class="font-bold text-slate-800 mb-1 flex items-center gap-2">
-                <span class="w-6 h-6 rounded-full theme-bg text-white text-xs flex items-center justify-center">4</span>
-                定制监控：你的标的你做主
-              </div>
-              <p class="text-xs text-slate-600 leading-relaxed">
-                定制池里的标的即使长期不触发波幅，只要在有效期内，也可随时看图，方便跟踪自己的持仓与观察名单。
-              </p>
-            </div>
+            
           </div>
           <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-900">
             <strong>一句话：</strong>本站是「波动筛选 + 多周期图表」工具，用来辅助观察与复盘，而不是荐股或收益承诺。
@@ -125,7 +117,7 @@ export default {
         </div>
         <div class="p-6 space-y-4 text-sm text-slate-700 leading-relaxed">
           <ul class="list-disc pl-5 space-y-2">
-            <li><strong>标的名称列：</strong>名称与代码；「免费」为未付费也可看图的示例标的；「定制」为你的专属监控。</li>
+            <li><strong>标的名称列：</strong>名称与代码；「免费」为未付费也可看图的示例标的；</li>
             <li><strong>周一～周五：</strong>当日若触发波幅阈值，显示带正负号的百分比；未触发为 “-”。</li>
             <li><strong>周线列：</strong>本周（或沿用上周）周线波幅结果；同样可为 “-”。</li>
             <li><strong>图表图标：</strong>点击可查看半日线 / 日线（或周线）大图。无触发数据时也可以点，只要图床已更新。</li>

@@ -1,15 +1,11 @@
 /**
- * 波幅探长 - 个人中心（整合版）
- * - 安全问题设置 + 未设置红条提醒
- * - 会员等级展示
- * - 定制标的可添加多只；按「每组 N 只」计费（N=后台 custom_max_symbols）
- * - 草稿 → 购买定制套餐
+ * 波幅探长 - 个人中心
+ * - 安全问题 / VIP / 订单 / 邀请 / 改密
  * js/components/index/Profile.js
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
 import { planApi } from "../../api/plan.js";
-import { watchlistApi } from "../../api/watchlist.js";
 import { CONFIG } from "../../config.js";
 
 const { ref, reactive, computed, onMounted } = Vue;
@@ -21,16 +17,8 @@ export default {
     const invitees = ref([]);
     const referralEdit = ref("");
     const referralSaving = ref(false);
-    const customList = ref([]);
     const loading = ref(false);
     const inviteeLoading = ref(false);
-
-    const customModalVisible = ref(false);
-    const inputCode = ref("");
-    const foundName = ref("");
-    const searchingName = ref(false);
-    const searchError = ref("");
-    const draftSymbols = ref([]);
 
     const pwdForm = reactive({
       oldPassword: "",
@@ -53,121 +41,10 @@ export default {
     const secEditing = ref(false);
 
     const settings = computed(() => store.state.publicSettings || {});
-    const perGroup = computed(() => {
-      const n = parseInt(settings.value.custom_max_symbols || "3", 10);
-      return isNaN(n) || n < 1 ? 3 : n;
-    });
-    const draftGroups = computed(() =>
-      planApi.calcCustomGroups(draftSymbols.value.length, perGroup.value)
-    );
     const levelLabel = computed(() => {
       const map = CONFIG.VIP_LEVEL_LABELS || {};
       return map[store.state.vipLevel] || map[0] || "普通用户";
     });
-
-    const fetchStockNameByCode = async (symbolStr) => {
-      try {
-        const codeMatch = String(symbolStr || "").match(/\d{6}/);
-        if (!codeMatch) return "";
-        const code = codeMatch[0];
-        const prefix = ["5", "6", "9"].includes(code[0]) ? "sh" : "sz";
-        const tx_url = `https://qt.gtimg.cn/q=${prefix}${code}`;
-        const resp = await fetch(tx_url);
-        if (!resp.ok) return "";
-        const buffer = await resp.arrayBuffer();
-        const decoder = new TextDecoder("gbk");
-        const text = decoder.decode(buffer);
-        const match = text.match(/="[^~]+~([^~]+)/);
-        return match ? match[1].trim() : "";
-      } catch (err) {
-        console.error("fetchName error:", err);
-        return "";
-      }
-    };
-
-    let searchTimer = null;
-    const onCodeInput = () => {
-      foundName.value = "";
-      searchError.value = "";
-      if (searchTimer) clearTimeout(searchTimer);
-      const code = inputCode.value.trim();
-      if (!code) return;
-      searchTimer = setTimeout(async () => {
-        searchingName.value = true;
-        const name = await fetchStockNameByCode(code);
-        searchingName.value = false;
-        if (name) foundName.value = name;
-        else searchError.value = "未识别到中文名称，确认后将直接使用代码";
-      }, 300);
-    };
-
-    const openCustomModal = () => {
-      inputCode.value = "";
-      foundName.value = "";
-      searchError.value = "";
-      try {
-        const cached = sessionStorage.getItem("draft_custom_symbols");
-        draftSymbols.value = cached ? JSON.parse(cached) : [];
-        if (!Array.isArray(draftSymbols.value)) draftSymbols.value = [];
-      } catch {
-        draftSymbols.value = [];
-      }
-      customModalVisible.value = true;
-    };
-
-    const confirmAddSingleSymbol = async () => {
-      const code = inputCode.value.trim().toUpperCase();
-      if (!code) {
-        store.showToast("请输入标的代码", "error");
-        return;
-      }
-      if (!/^\d{6}$/.test(code)) {
-        store.showToast("请输入 6 位标的代码", "error");
-        return;
-      }
-      if (draftSymbols.value.some((s) => s.code === code)) {
-        store.showToast("请勿重复添加相同代码", "error");
-        return;
-      }
-      // 不再限制只数上限；按组计费
-
-      let name = foundName.value;
-      if (!name) {
-        searchingName.value = true;
-        name = await fetchStockNameByCode(code);
-        searchingName.value = false;
-      }
-
-      draftSymbols.value.push({
-        code,
-        name: name || code,
-        addTime: Date.now(),
-      });
-      sessionStorage.setItem("draft_custom_symbols", JSON.stringify(draftSymbols.value));
-      inputCode.value = "";
-      foundName.value = "";
-      searchError.value = "";
-    };
-
-    const removeDraftSymbol = (index) => {
-      draftSymbols.value.splice(index, 1);
-      sessionStorage.setItem("draft_custom_symbols", JSON.stringify(draftSymbols.value));
-    };
-
-    const goToBuyCustomPlan = () => {
-      if (!draftSymbols.value.length) {
-        store.showToast("请先输入并添加至少一只定制标的", "error");
-        return;
-      }
-      const formattedItems = draftSymbols.value.map((item) => ({
-        etf_code: item.code,
-        etf_name: item.name,
-      }));
-      sessionStorage.setItem("pending_custom_items", JSON.stringify(formattedItems));
-      sessionStorage.setItem("prefer_plan_tab", "custom");
-      customModalVisible.value = false;
-      window.location.hash = "#/plan";
-    };
 
     const loadSecurityStatus = async () => {
       if (!store.state.isLoggedIn) return;
@@ -227,17 +104,14 @@ export default {
       loading.value = true;
       inviteeLoading.value = true;
       try {
-        const [ordersRes, inviteesRes, customRes, meRes] = await Promise.all([
+        const [ordersRes, inviteesRes, meRes] = await Promise.all([
           planApi.fetchUserOrders().catch(() => ({ data: [] })),
           authApi.getInvitees().catch(() => ({ data: [] })),
-          watchlistApi.fetchUserCustomWatchlist().catch(() => ({ data: [] })),
           authApi.getMe().catch(() => null),
         ]);
 
         orders.value = ordersRes.data || ordersRes || [];
         invitees.value = inviteesRes.data || inviteesRes || [];
-        const rawCustom = customRes?.data ?? customRes;
-        customList.value = Array.isArray(rawCustom) ? rawCustom : [];
 
         if (meRes && (meRes.data || meRes.username)) {
           const d = meRes.data || meRes;
@@ -260,17 +134,6 @@ export default {
       } finally {
         loading.value = false;
         inviteeLoading.value = false;
-      }
-    };
-
-    const removeCustomItem = async (item) => {
-      if (!confirm(`确认移除定制标的 ${item.etf_code}？`)) return;
-      try {
-        await watchlistApi.removeCustomItem(item.id);
-        store.showToast("已成功移除");
-        await loadProfileData();
-      } catch (err) {
-        store.showToast(err.message, "error");
       }
     };
 
@@ -314,14 +177,6 @@ export default {
       if (isNaN(d.getTime())) return "-";
       const p = (n) => String(n).padStart(2, "0");
       return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-    };
-
-    const formatAddTime = (ts) => {
-      if (!ts) return "";
-      const d = new Date(ts);
-      if (isNaN(d.getTime())) return "";
-      const p = (n) => String(n).padStart(2, "0");
-      return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
     };
 
     const formatStatus = (s) => {
@@ -370,8 +225,6 @@ export default {
     return {
       store: store.state,
       settings,
-      perGroup,
-      draftGroups,
       levelLabel,
       orders,
       invitees,
@@ -379,15 +232,8 @@ export default {
       referralSaving,
       saveReferralCode,
       copyReferralCode,
-      customList,
       loading,
       inviteeLoading,
-      customModalVisible,
-      inputCode,
-      foundName,
-      searchingName,
-      searchError,
-      draftSymbols,
       pwdForm,
       pwdLoading,
       securitySet,
@@ -395,17 +241,10 @@ export default {
       secLoading,
       secEditing,
       saveSecurity,
-      onCodeInput,
-      openCustomModal,
-      confirmAddSingleSymbol,
-      removeDraftSymbol,
-      goToBuyCustomPlan,
       loadProfileData,
-      removeCustomItem,
       changePassword,
       formatDateExact,
       formatDateShort,
-      formatAddTime,
       formatStatus,
     };
   },
@@ -616,61 +455,6 @@ export default {
           <button @click="changePassword" :disabled="pwdLoading" class="theme-bg text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 hover:opacity-90 shadow-sm">
             {{ pwdLoading ? '保存中...' : '确认修改' }}
           </button>
-        </div>
-      </div>
-
-      <!-- 添加定制标的弹窗 -->
-      <div v-if="customModalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4 select-none" @click.self="customModalVisible = false">
-        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl space-y-4 p-6">
-          <div class="flex justify-between items-center border-b pb-3">
-            <h3 class="font-bold text-slate-800 text-base">添加定制监控标的</h3>
-            <button @click="customModalVisible = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-          </div>
-          <p class="text-[11px] text-slate-500 leading-relaxed">
-            可添加任意只数。结算时：每 <strong class="theme-text">{{ perGroup }}</strong> 只为 1 组，
-            组数 = 向上取整(只数 ÷ {{ perGroup }})，购买对应组数的定制套餐即可。
-          </p>
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-slate-600">请输入定制标的代码：</label>
-            <div class="flex gap-2">
-              <input v-model="inputCode" @input="onCodeInput" placeholder="如：563300" class="flex-1 px-3 py-2 border rounded-lg text-sm font-mono uppercase focus:theme-border outline-none">
-              <button @click="confirmAddSingleSymbol" :disabled="!inputCode || searchingName" class="px-4 py-2 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50">
-                {{ searchingName ? '识别中...' : '添加' }}
-              </button>
-            </div>
-            <p v-if="foundName" class="text-xs theme-text font-bold flex items-center gap-1 pt-1">
-              <i class="fa-solid fa-circle-check"></i> 已识别标的：{{ foundName }}
-            </p>
-            <p v-else-if="searchError" class="text-xs text-amber-600 font-medium pt-1">{{ searchError }}</p>
-          </div>
-          <div v-if="draftSymbols.length > 0" class="pt-2 border-t space-y-2">
-            <div class="text-xs font-bold text-slate-600 flex justify-between">
-              <span>已添加 {{ draftSymbols.length }} 只</span>
-              <span class="theme-text">需购买 {{ draftGroups }} 组</span>
-            </div>
-            <div class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-              <div v-for="(sym, i) in draftSymbols" :key="i" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-lg text-xs border">
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">#{{ i + 1 }}</span>
-                    <span class="font-mono font-bold text-slate-800">{{ sym.code }}</span>
-                    <span class="text-slate-600 font-medium truncate">{{ sym.name }}</span>
-                  </div>
-                  <div class="text-[10px] text-slate-400 mt-0.5 pl-7">添加于 {{ formatAddTime(sym.addTime) }}</div>
-                </div>
-                <button @click="removeDraftSymbol(i)" class="text-slate-400 hover:text-red-500 ml-2 shrink-0">
-                  <i class="fa-solid fa-trash"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="pt-3 border-t flex flex-col gap-2">
-            <button @click="goToBuyCustomPlan" :disabled="draftSymbols.length === 0" class="w-full py-2.5 theme-bg text-white rounded-lg text-xs font-bold disabled:opacity-50 shadow-sm flex items-center justify-center gap-1">
-              <i class="fa-solid fa-cart-shopping"></i>
-              去购买定制套餐（{{ draftGroups }} 组）
-            </button>
-            <p class="text-[11px] text-slate-400 text-center">支付页将按组数 × 套餐单价结算</p>
-          </div>
         </div>
       </div>
     </div>
