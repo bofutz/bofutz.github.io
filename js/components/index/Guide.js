@@ -263,7 +263,7 @@ export default {
               </div>
             </button>
             <figcaption class="text-xs text-slate-600 space-y-1 bg-slate-50 rounded-lg p-3">
-              <p><strong>半日趋势线：</strong>跟踪盘中节奏（约 3 小时周期），绿→橙表示节奏转强，橙→绿表示转弱。</p>
+              <p><strong>半日趋势线：</strong>跟踪盘中节奏，绿→橙表示节奏转强，橙→绿表示转弱。</p>
               <p><strong>2 日趋势线：</strong>偏结构方向，变化通常慢于半日线，用来确认是否同向。</p>
               <p><strong>红/绿标签 + 数值：</strong>该段相对波幅或涨跌幅度的标记，便于复盘，不是保证收益。</p>
             </figcaption>
