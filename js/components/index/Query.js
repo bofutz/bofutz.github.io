@@ -369,6 +369,38 @@ export default {
     };
 
     const cancellingId = ref(null);
+    const selectedIds = ref([]);
+    const deleting = ref(false);
+
+    const isRowSelected = (id) => selectedIds.value.includes(id);
+    const toggleRowSelect = (id) => {
+      const i = selectedIds.value.indexOf(id);
+      if (i >= 0) selectedIds.value.splice(i, 1);
+      else selectedIds.value.push(id);
+    };
+    const toggleGroupSelect = (g) => {
+      const ids = (g.items || []).map((x) => x.id);
+      const allOn = ids.every((id) => selectedIds.value.includes(id));
+      if (allOn) {
+        selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id));
+      } else {
+        const set = new Set(selectedIds.value);
+        ids.forEach((id) => set.add(id));
+        selectedIds.value = [...set];
+      }
+    };
+    const groupAllSelected = (g) => {
+      const ids = (g.items || []).map((x) => x.id);
+      return ids.length && ids.every((id) => selectedIds.value.includes(id));
+    };
+
+    const hasActiveChart = (row) =>
+      row &&
+      row.status === "done" &&
+      row.chart_url &&
+      !(row.expire_at && Date.now() > Number(row.expire_at));
+
+
 
     /** 撤回排队中订单并退次 */
     const cancelQuery = async (row) => {
@@ -394,39 +426,42 @@ export default {
       }
     };
 
-    /**
-     * 改单：撤回原单（退次）并把标的/周期填回表单，用户改完后重新「确认查询」
-     */
-    const editPendingQuery = async (row) => {
-      if (!row || row.status !== "pending") return;
-      const label = recordIntervalText(row);
-      if (
-        !confirm(
-          `将撤回当前排队单并退回 1 次，\n把「${row.etf_code} / ${label}」填回上方表单供修改后重新提交。\n是否继续？`
-        )
-      ) {
+    /** 删除记录：有未到期图表时二次确认；排队中删除会退次 */
+    const deleteQueries = async (ids) => {
+      const list = (Array.isArray(ids) ? ids : [ids])
+        .map((x) => Number(x))
+        .filter((n) => n > 0);
+      if (!list.length) {
+        store.showToast("请先选择记录", "error");
         return;
       }
-      form.etfCode = String(row.etf_code || "").replace(/\D/g, "").slice(-6);
-      form.etfName = row.etf_name || "";
-      const iv = row.interval || "daily_closed";
-      if (enabledIntervals.value.includes(iv)) form.intervals = [iv];
-      else if (enabledIntervals.value.length) form.intervals = [enabledIntervals.value[0]];
-      cancellingId.value = row.id;
+      const rows = (records.value || []).filter((r) => list.includes(Number(r.id)));
+      const activeCharts = rows.filter((r) => hasActiveChart(r));
+      let msg = `确认删除选中的 ${list.length} 条记录？`;
+      if (activeCharts.length) {
+        msg +=
+          `\n其中 ${activeCharts.length} 条含未到期图表，删除后图表无法找回，请先存档或取消删除。`;
+      }
+      const pendingN = rows.filter((r) => r.status === "pending").length;
+      if (pendingN) msg += `\n含 ${pendingN} 条排队中，将退回对应次数。`;
+      if (!confirm(msg)) return;
+
+      deleting.value = true;
       try {
-        const res = await chartQueryApi.cancel(row.id);
+        const res = await chartQueryApi.delete(list);
         if (res.chart_credits != null) store.setChartCredits(res.chart_credits);
-        store.showToast("已撤回并填回表单，请修改后重新确认查询");
+        store.showToast(res.message || "已删除");
+        selectedIds.value = selectedIds.value.filter((id) => !list.includes(id));
         await loadRecords();
-        try {
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        } catch (_) {}
       } catch (err) {
-        store.showToast(err.message || "操作失败", "error");
+        store.showToast(err.message || "删除失败", "error");
       } finally {
-        cancellingId.value = null;
+        deleting.value = false;
       }
     };
+
+    const deleteOne = (row) => deleteQueries([row.id]);
+
 
 
     const formatTime = (ts) => {
@@ -736,7 +771,14 @@ isIntervalSelected,
       recordPhaseHint,
       cancellingId,
       cancelQuery,
-      editPendingQuery,
+      selectedIds,
+      isRowSelected,
+      toggleRowSelect,
+      toggleGroupSelect,
+      groupAllSelected,
+      deleteQueries,
+      deleteOne,
+      deleting,
       formatTime,
       isExpired,
       openChartGallery,
@@ -862,11 +904,18 @@ isIntervalSelected,
 
       <!-- 记录 -->
             <div class="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
-        <div class="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center">
+        <div class="px-5 py-3.5 border-b border-slate-100 flex flex-wrap gap-2 justify-between items-center">
           <span class="font-bold text-slate-700 text-sm">查询记录</span>
-          <button type="button" @click="loadRecords" class="text-xs text-slate-400 hover:theme-text">
-            <i class="fa-solid fa-rotate-right mr-1"></i>刷新
-          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" v-if="selectedIds.length"
+                    @click="deleteQueries(selectedIds)" :disabled="deleting"
+                    class="text-xs text-rose-500 font-bold hover:underline disabled:opacity-50">
+              删除所选 ({{ selectedIds.length }})
+            </button>
+            <button type="button" @click="loadRecords" class="text-xs text-slate-400 hover:theme-text">
+              <i class="fa-solid fa-rotate-right mr-1"></i>刷新
+            </button>
+          </div>
         </div>
         <div v-if="!store.isLoggedIn" class="py-10 text-center text-sm text-slate-400">登录后查看记录</div>
         <div v-else-if="loading" class="py-10 text-center text-slate-400">
@@ -876,12 +925,17 @@ isIntervalSelected,
         <div v-else class="divide-y divide-slate-50">
           <div v-for="g in recordGroups" :key="g.key" class="px-4 py-3.5 hover:bg-slate-50/50">
             <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
-              <div class="min-w-0">
+              <div class="min-w-0 flex items-start gap-2">
+                <input type="checkbox" class="mt-1 rounded border-slate-300"
+                       :checked="groupAllSelected(g)"
+                       @change="toggleGroupSelect(g)">
+                <div>
                 <div class="font-mono font-bold text-slate-800">{{ g.etf_code }}
                   <span class="text-xs font-sans font-normal text-slate-500 ml-1">{{ g.etf_name || '' }}</span>
                 </div>
                 <div class="text-[11px] text-slate-400 font-mono mt-0.5">{{ formatTime(g.created_at) }}
                   <span v-if="g.total > 1" class="ml-1 text-slate-500">· 共 {{ g.total }} 项</span>
+                </div>
                 </div>
               </div>
               <div class="flex flex-wrap gap-1 text-[10px]">
@@ -894,6 +948,9 @@ isIntervalSelected,
             <div class="space-y-1.5">
               <div v-for="r in g.items" :key="r.id"
                    class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-white px-2.5 py-2 text-xs">
+                <input type="checkbox" class="rounded border-slate-300 shrink-0"
+                       :checked="isRowSelected(r.id)"
+                       @change="toggleRowSelect(r.id)">
                 <div class="min-w-[7.5rem] flex-1">
                   <div class="font-bold text-slate-700">{{ recordIntervalText(r) }}</div>
                   <div class="text-[10px] text-slate-400">{{ recordPhaseHint(r) }}</div>
@@ -913,13 +970,13 @@ isIntervalSelected,
                      @click="openChartGallery(r)"
                      class="theme-text font-bold hover:underline">查看</button>
                   <template v-if="r.status==='pending'">
-                    <button type="button" @click="editPendingQuery(r)" :disabled="cancellingId===r.id"
-                            class="text-slate-500 hover:theme-text disabled:opacity-50">改单</button>
                     <button type="button" @click="cancelQuery(r)" :disabled="cancellingId===r.id"
                             class="text-rose-500 font-medium disabled:opacity-50">
                       {{ cancellingId===r.id ? '…' : '撤回' }}
                     </button>
                   </template>
+                  <button type="button" @click="deleteOne(r)" :disabled="deleting"
+                          class="text-slate-400 hover:text-rose-500 disabled:opacity-50">删除</button>
                 </div>
               </div>
             </div>
