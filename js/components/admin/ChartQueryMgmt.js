@@ -14,6 +14,8 @@ export default {
     const queries = ref([]);
 
     const statusFilter = ref("");
+    const selectedIds = ref([]);
+    const deleting = ref(false);
 
     const INTERVAL_LABELS = {
       half_day_closed: "最新收盘·半日线",
@@ -168,6 +170,52 @@ export default {
       }
     };
 
+
+    const isSelected = (id) => selectedIds.value.includes(id);
+    const toggleSelect = (id) => {
+      const i = selectedIds.value.indexOf(id);
+      if (i >= 0) selectedIds.value.splice(i, 1);
+      else selectedIds.value.push(id);
+    };
+    const toggleSelectAll = () => {
+      const ids = (queries.value || []).map((q) => q.id);
+      if (ids.length && ids.every((id) => selectedIds.value.includes(id))) {
+        selectedIds.value = [];
+      } else {
+        selectedIds.value = [...ids];
+      }
+    };
+    const allSelected = computed(() => {
+      const ids = (queries.value || []).map((q) => q.id);
+      return ids.length > 0 && ids.every((id) => selectedIds.value.includes(id));
+    });
+
+    const deleteSelected = async (ids) => {
+      const list = (Array.isArray(ids) ? ids : [ids]).map(Number).filter((n) => n > 0);
+      if (!list.length) {
+        store.showToast("请先选择记录", "error");
+        return;
+      }
+      const pwd = prompt("请输入管理密码以确认删除（仅后台隐藏，会员端记录保留）：");
+      if (pwd == null) return;
+      if (!String(pwd).trim()) {
+        store.showToast("请输入管理密码", "error");
+        return;
+      }
+      if (!confirm(`确认从后台移除 ${list.length} 条？会员查询记录不会受影响。`)) return;
+      deleting.value = true;
+      try {
+        const res = await adminApi.deleteChartQueries(list, String(pwd).trim());
+        store.showToast(res.message || "已删除");
+        selectedIds.value = [];
+        await loadQueries();
+      } catch (err) {
+        store.showToast(err.message || "删除失败", "error");
+      } finally {
+        deleting.value = false;
+      }
+    };
+
     const statusLabel = (s) =>
       ({ pending: "排队中", processing: "生成中", done: "已完成", failed: "失败", cancelled: "已撤回" }[s] || s);
 
@@ -267,6 +315,13 @@ export default {
       savePlan,
       delPlan,
       pendingCount,
+      selectedIds,
+      isSelected,
+      toggleSelect,
+      toggleSelectAll,
+      allSelected,
+      deleteSelected,
+      deleting,
     };
   },
   template: `
@@ -295,33 +350,48 @@ export default {
             <option value="done">已完成</option>
             <option value="failed">失败</option>
           </select>
-          <button @click="loadQueries" class="text-xs text-slate-500 hover:theme-text">
-            <i class="fa-solid fa-rotate-right mr-1"></i>刷新
-          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" v-if="selectedIds.length" @click="deleteSelected(selectedIds)" :disabled="deleting"
+                    class="text-xs text-rose-500 font-bold hover:underline disabled:opacity-50">
+              删除所选 ({{ selectedIds.length }})
+            </button>
+            <button @click="loadQueries" class="text-xs text-slate-500 hover:theme-text">
+              <i class="fa-solid fa-rotate-right mr-1"></i>刷新
+            </button>
+          </div>
         </div>
         <div v-if="loading" class="py-12 text-center text-slate-400 text-sm">加载中…</div>
         <div v-else class="overflow-x-auto">
           <table class="w-full text-sm text-left whitespace-nowrap">
             <thead class="bg-slate-50 text-xs text-slate-500 border-b">
               <tr>
+                <th class="py-2.5 px-2 w-8">
+                  <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" class="rounded border-slate-300">
+                </th>
                 <th class="py-2.5 px-3">ID</th>
                 <th class="py-2.5 px-3">用户</th>
                 <th class="py-2.5 px-3">代码</th>
+                <th class="py-2.5 px-3">类型</th>
                 <th class="py-2.5 px-3">状态</th>
                 <th class="py-2.5 px-3">提交</th>
                 <th class="py-2.5 px-3">有效期</th>
-                <th class="py-2.5 px-3 text-right">图表</th>
+                <th class="py-2.5 px-3 text-right">操作</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
               <tr v-for="q in queries" :key="q.id" class="hover:bg-slate-50/80">
+                <td class="py-2 px-2">
+                  <input type="checkbox" class="rounded border-slate-300"
+                         :checked="isSelected(q.id)" @change="toggleSelect(q.id)">
+                </td>
                 <td class="py-2 px-3 font-mono text-xs">{{ q.id }}</td>
                 <td class="py-2 px-3 text-xs">{{ q.username || q.user_id }}</td>
                 <td class="py-2 px-3">
                   <div class="font-mono font-bold">{{ q.etf_code }}</div>
                   <div class="text-[11px] text-slate-400">{{ q.etf_name }}</div>
                 </td>
-                                <td class="py-2 px-3">
+                <td class="py-2 px-3 text-xs font-bold text-slate-600">{{ intervalLabel(q.interval) }}</td>
+                <td class="py-2 px-3">
                   <span class="text-[11px] font-bold px-2 py-0.5 rounded-full"
                         :class="{
                           'bg-orange-50 text-orange-600': q.status==='pending',
@@ -331,14 +401,15 @@ export default {
                 </td>
                 <td class="py-2 px-3 text-xs font-mono text-slate-400">{{ formatTime(q.created_at) }}</td>
                 <td class="py-2 px-3 text-xs font-mono text-slate-400">{{ formatTime(q.expire_at) }}</td>
-                <td class="py-2 px-3">
+                <td class="py-2 px-3 text-right">
                   <button type="button" v-if="q.chart_url" @click="openChartGallery(q)"
-                          class="text-xs theme-text font-bold hover:underline">{{ intervalLabel(q.interval) }}</button>
-                  <span v-else class="text-xs text-slate-300">—</span>
+                          class="text-xs theme-text font-bold hover:underline mr-2">查看</button>
+                  <button type="button" @click="deleteSelected([q.id])" :disabled="deleting"
+                          class="text-xs text-rose-500 hover:underline disabled:opacity-50">删除</button>
                 </td>
               </tr>
               <tr v-if="!queries.length">
-                <td colspan="7" class="py-10 text-center text-slate-400 text-sm">暂无记录</td>
+                <td colspan="9" class="py-10 text-center text-slate-400 text-sm">暂无记录</td>
               </tr>
             </tbody>
           </table>
