@@ -301,7 +301,7 @@ export default {
           <h3 class="font-bold text-slate-700 text-sm border-b pb-2">自主查询 · 周期与出图场次</h3>
           <p class="text-[11px] text-slate-400 leading-relaxed">
             会员可选「最新收盘 / 下一收盘」的半日线、日线、周线。系统按下方场次自动对齐 charts 工作流：
-            交易日 <code class="bg-slate-50 px-1 rounded">07:00 / 15:35 / 19:00 / 22:00</code> 拉半日+日线（15:35 含监控列表，其余仅自主查询）；
+            交易日 <code class="bg-slate-50 px-1 rounded">07:00 / 15:35 / 19:00 / 22:00</code> 拉半日+日线（15:35 含监控列表约 25 分钟，其余约 10 分钟；会员增多会更久）；
             周六 <code class="bg-slate-50 px-1 rounded">09:00</code> 拉周线。
           </p>
           <div>
