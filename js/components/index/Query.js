@@ -23,7 +23,8 @@ export default {
     const form = reactive({
       etfCode: "",
       etfName: "",
-      interval: "daily_closed",
+      /** @type {string[]} 多选周期 */
+      intervals: ["daily_closed"],
     });
     const searchingName = ref(false);
     const nameError = ref("");
@@ -53,6 +54,25 @@ export default {
 
     const intervalLabel = (k) =>
       (CONFIG.CHART_INTERVALS && CONFIG.CHART_INTERVALS[k]) || k;
+
+    const isIntervalSelected = (key) => form.intervals.includes(key);
+
+    const toggleInterval = (key) => {
+      const i = form.intervals.indexOf(key);
+      if (i >= 0) {
+        // 至少保留一个时允许清空？产品：允许清空，提交时再校验
+        form.intervals.splice(i, 1);
+      } else {
+        form.intervals.push(key);
+      }
+    };
+
+    const selectedCount = computed(() => form.intervals.length);
+
+    const selectedLabels = computed(() =>
+      form.intervals.map((k) => intervalLabel(k)).filter(Boolean)
+    );
+
 
     /** 分组展示：半日 / 日 / 周 × 最新收盘 / 下一收盘 */
     const intervalGroups = computed(() => {
@@ -106,7 +126,7 @@ export default {
      * 返回 { text, time, etaMin, mode, detail }
      */
     const nextBatchInfo = computed(() => {
-      const iv = form.interval || "daily_closed";
+      const iv = (form.intervals && form.intervals[0]) || "daily_closed";
       const isWeekly = String(iv).startsWith("weekly");
       const isNext = String(iv).includes("_next");
       let slots = [];
@@ -269,13 +289,19 @@ export default {
         store.showToast("请输入 6 位标的代码", "error");
         return;
       }
-      if (!enabledIntervals.value.includes(form.interval)) {
-        store.showToast("当前未开放该周期", "error");
+      const picked = (form.intervals || []).filter((k) =>
+        enabledIntervals.value.includes(k)
+      );
+      if (!picked.length) {
+        store.showToast("请至少选择一种图表类型", "error");
         return;
       }
       const credits = store.state.chartCredits ?? 0;
-      if (credits < 1) {
-        store.showToast("查询次数不足，请先购买次数包", "error");
+      if (credits < picked.length) {
+        store.showToast(
+          `查询次数不足：本次需 ${picked.length} 次，剩余 ${credits} 次`,
+          "error"
+        );
         window.location.hash = "#/plan?tab=credits";
         return;
       }
@@ -289,18 +315,19 @@ export default {
         const res = await chartQueryApi.submit({
           etfCode: code,
           etfName: form.etfName || code,
-          interval: form.interval,
+          intervals: picked,
         });
         if (res.chart_credits != null) {
           store.setChartCredits(res.chart_credits);
-        } else if (store.state.chartCredits > 0) {
-          store.setChartCredits(store.state.chartCredits - 1);
+        } else if (store.state.chartCredits >= picked.length) {
+          store.setChartCredits(store.state.chartCredits - picked.length);
         }
         store.showToast(
-          res.message || `已加入队列，预计 ${nextBatchHint.value} 前后可出图`
+          res.message || `已提交 ${picked.length} 项查询`
         );
         form.etfCode = "";
         form.etfName = "";
+        // 保留周期多选，方便连续查不同代码
         await loadRecords();
       } catch (err) {
         store.showToast(err.message || "提交失败", "error");
@@ -383,8 +410,8 @@ export default {
       form.etfCode = String(row.etf_code || "").replace(/\D/g, "").slice(-6);
       form.etfName = row.etf_name || "";
       const iv = row.interval || "daily_closed";
-      if (enabledIntervals.value.includes(iv)) form.interval = iv;
-      else if (enabledIntervals.value.length) form.interval = enabledIntervals.value[0];
+      if (enabledIntervals.value.includes(iv)) form.intervals = [iv];
+      else if (enabledIntervals.value.length) form.intervals = [enabledIntervals.value[0]];
       cancellingId.value = row.id;
       try {
         const res = await chartQueryApi.cancel(row.id);
@@ -415,9 +442,48 @@ export default {
       return Date.now() > Number(row.expire_at);
     };
 
+    /**
+     * 查询记录分组展示：
+     * - 有 group_id → 同一批多选合并为一张卡片
+     * - 否则按 代码+提交时刻(分钟) 宽松合并历史单选记录
+     * 卡片内每一行仍是一种周期，可单独撤回/看图
+     */
+    const recordGroups = computed(() => {
+      const list = records.value || [];
+      const map = new Map();
+      for (const r of list) {
+        let key = r.group_id ? `g:${r.group_id}` : null;
+        if (!key) {
+          const ts = Number(r.created_at) || 0;
+          const minute = Math.floor(ts / 60000);
+          key = `s:${r.etf_code}|${minute}`;
+        }
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            etf_code: r.etf_code,
+            etf_name: r.etf_name,
+            created_at: r.created_at,
+            items: [],
+          });
+        }
+        const g = map.get(key);
+        g.items.push(r);
+        if (Number(r.created_at) > Number(g.created_at || 0)) g.created_at = r.created_at;
+      }
+      return [...map.values()].map((g) => {
+        const pending = g.items.filter((x) => x.status === "pending").length;
+        const done = g.items.filter((x) => x.status === "done").length;
+        const failed = g.items.filter((x) => x.status === "failed").length;
+        const cancelled = g.items.filter((x) => x.status === "cancelled").length;
+        return { ...g, pending, done, failed, cancelled, total: g.items.length };
+      });
+    });
+
     onMounted(() => {
-      if (enabledIntervals.value.length && !enabledIntervals.value.includes(form.interval)) {
-        form.interval = enabledIntervals.value[0];
+      if (enabledIntervals.value.length) {
+        form.intervals = form.intervals.filter((k) => enabledIntervals.value.includes(k));
+        if (!form.intervals.length) form.intervals = [enabledIntervals.value[0]];
       }
       loadRecords();
     });
@@ -646,6 +712,7 @@ export default {
       loading,
       submitLoading,
       records,
+recordGroups,
       form,
       searchingName,
       nameError,
@@ -654,6 +721,10 @@ export default {
       enabledIntervals,
       intervalGroups,
       intervalLabel,
+isIntervalSelected,
+      toggleInterval,
+      selectedCount,
+      selectedLabels,
       nextBatchInfo,
       nextBatchHint,
       onCodeInput,
@@ -713,7 +784,7 @@ export default {
           <div>
             <div class="flex items-center justify-between gap-2 mb-2.5">
               <label class="text-xs font-bold text-slate-700">图表类型与收盘相位</label>
-              <span class="text-[10px] text-slate-400 hidden sm:inline">点选一档即可</span>
+              <span class="text-[10px] text-slate-400 hidden sm:inline">可多选，按选中数量扣次</span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div v-for="g in intervalGroups" :key="g.title"
@@ -731,14 +802,16 @@ export default {
                 </div>
                 <div class="grid grid-cols-2 gap-1.5">
                   <button type="button" v-for="it in g.items" :key="it.key"
-                          @click="form.interval = it.key"
+                          @click="toggleInterval(it.key)"
                           class="relative rounded-lg px-2 py-2 text-left transition-all border"
-                          :class="form.interval === it.key
+                          :class="isIntervalSelected(it.key)
                             ? 'theme-bg text-white border-transparent shadow-md ring-2 ring-[#4da6a0]/25'
                             : 'bg-white text-slate-600 border-slate-150 hover:border-[#4da6a0]/40 hover:bg-[#4da6a0]/5'">
+                    <span v-if="isIntervalSelected(it.key)"
+                          class="absolute top-1 right-1 text-[9px] leading-none opacity-90">✓</span>
                     <span class="block text-[11px] font-bold leading-tight">{{ it.short }}</span>
                     <span class="block text-[10px] mt-0.5 leading-tight"
-                          :class="form.interval === it.key ? 'text-white/85' : 'text-slate-400'">{{ it.desc }}</span>
+                          :class="isIntervalSelected(it.key) ? 'text-white/85' : 'text-slate-400'">{{ it.desc }}</span>
                   </button>
                 </div>
               </div>
@@ -748,6 +821,11 @@ export default {
               <span class="font-medium text-slate-500">下一收盘</span>排队等待未结束时段的下场工作流。
               场次：交易日 07:00 / 15:35 / 19:00 / 22:00；周线周六 09:00。
             </p>
+            <p v-if="selectedCount" class="text-[11px] text-slate-600 mt-1.5">
+              已选 <strong class="theme-text">{{ selectedCount }}</strong> 项：
+              <span class="text-slate-500">{{ selectedLabels.join('、') }}</span>
+            </p>
+            <p v-else class="text-[11px] text-amber-600 mt-1.5">请至少选择一种图表类型</p>
           </div>
 
           <div class="rounded-xl border border-slate-100 bg-slate-50/90 px-3.5 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-4">
@@ -775,15 +853,15 @@ export default {
           <p class="text-[10px] text-slate-400 -mt-1 leading-relaxed">
             15:35 同时更新监控列表与自主查询，通常约 25 分钟；其它场次约 10 分钟。会员增多时耗时会相应延长。失败自动退回 1 次。
           </p>
-          <button type="button" @click="submit" :disabled="submitLoading || searchingName"
+          <button type="button" @click="submit" :disabled="submitLoading || searchingName || !selectedCount"
                   class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold disabled:opacity-50">
-            {{ submitLoading ? '提交中…' : '确认查询（消耗 1 次）' }}
+            {{ submitLoading ? '提交中…' : (selectedCount ? '确认查询（消耗 ' + selectedCount + ' 次）' : '请选择图表类型') }}
           </button>
         </template>
       </div>
 
       <!-- 记录 -->
-      <div class="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
+            <div class="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
         <div class="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center">
           <span class="font-bold text-slate-700 text-sm">查询记录</span>
           <button type="button" @click="loadRecords" class="text-xs text-slate-400 hover:theme-text">
@@ -794,65 +872,58 @@ export default {
         <div v-else-if="loading" class="py-10 text-center text-slate-400">
           <i class="fa-solid fa-spinner animate-spin theme-text"></i>
         </div>
-        <div v-else-if="!records.length" class="py-10 text-center text-sm text-slate-400">暂无记录</div>
-        <div v-else class="overflow-x-auto">
-          <table class="w-full text-sm text-left whitespace-nowrap">
-            <thead class="bg-slate-50 text-xs text-slate-500 border-b font-bold">
-              <tr>
-                <th class="py-2.5 px-4">代码 / 名称</th>
-                <th class="py-2.5 px-3">图表类型</th>
-                <th class="py-2.5 px-3">提交时间</th>
-                <th class="py-2.5 px-3">状态</th>
-                <th class="py-2.5 px-3">有效期</th>
-                <th class="py-2.5 px-4 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50">
-              <tr v-for="r in records" :key="r.id" class="hover:bg-slate-50/80">
-                <td class="py-3 px-4">
-                  <div class="font-mono font-bold text-slate-800">{{ r.etf_code }}</div>
-                  <div class="text-xs text-slate-500">{{ r.etf_name || '-' }}</div>
-                </td>
-                <td class="py-3 px-3">
-                  <div class="text-xs font-bold text-slate-700 leading-tight">{{ recordIntervalText(r) }}</div>
-                  <div class="text-[10px] text-slate-400 mt-0.5">{{ recordPhaseHint(r) }}</div>
-                </td>
-                <td class="py-3 px-3 text-xs font-mono text-slate-400">{{ formatTime(r.created_at) }}</td>
-                <td class="py-3 px-3">
-                  <span class="text-xs font-bold px-2 py-0.5 rounded-full"
-                        :class="{
-                          'bg-orange-50 text-orange-600': r.status==='pending' || r.status==='processing',
-                          'bg-emerald-50 text-emerald-600': r.status==='done',
-                          'bg-slate-100 text-slate-400': r.status==='failed' || r.status==='cancelled'
-                        }">{{ statusLabel(r.status) }}</span>
-                </td>
-                <td class="py-3 px-3 text-xs font-mono"
-                    :class="isExpired(r) ? 'text-red-400' : 'text-slate-500'">
-                  {{ r.expire_at ? formatTime(r.expire_at) : '-' }}
-                  <span v-if="isExpired(r)" class="block text-red-400">已过期</span>
-                </td>
-                <td class="py-3 px-4 text-right">
-                  <div class="inline-flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 justify-end">
-                    <button type="button" v-if="r.status==='done' && r.chart_url && !isExpired(r)"
-                       @click="openChartGallery(r)"
-                       class="text-xs theme-text font-bold hover:underline">查看图表</button>
-                    <template v-if="r.status==='pending'">
-                      <button type="button" @click="editPendingQuery(r)"
-                              :disabled="cancellingId===r.id"
-                              class="text-xs text-slate-500 hover:theme-text disabled:opacity-50">改单</button>
-                      <button type="button" @click="cancelQuery(r)"
-                              :disabled="cancellingId===r.id"
-                              class="text-xs text-rose-500 hover:text-rose-600 font-medium disabled:opacity-50">
-                        {{ cancellingId===r.id ? '处理中…' : '撤回' }}
-                      </button>
-                    </template>
-                    <span v-if="r.status!=='pending' && !(r.status==='done' && r.chart_url && !isExpired(r))"
-                          class="text-xs text-slate-300">—</span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-else-if="!recordGroups.length" class="py-10 text-center text-sm text-slate-400">暂无记录</div>
+        <div v-else class="divide-y divide-slate-50">
+          <div v-for="g in recordGroups" :key="g.key" class="px-4 py-3.5 hover:bg-slate-50/50">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
+              <div class="min-w-0">
+                <div class="font-mono font-bold text-slate-800">{{ g.etf_code }}
+                  <span class="text-xs font-sans font-normal text-slate-500 ml-1">{{ g.etf_name || '' }}</span>
+                </div>
+                <div class="text-[11px] text-slate-400 font-mono mt-0.5">{{ formatTime(g.created_at) }}
+                  <span v-if="g.total > 1" class="ml-1 text-slate-500">· 共 {{ g.total }} 项</span>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1 text-[10px]">
+                <span v-if="g.pending" class="px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 font-bold">排队 {{ g.pending }}</span>
+                <span v-if="g.done" class="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-bold">完成 {{ g.done }}</span>
+                <span v-if="g.failed" class="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">失败 {{ g.failed }}</span>
+                <span v-if="g.cancelled" class="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">撤回 {{ g.cancelled }}</span>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <div v-for="r in g.items" :key="r.id"
+                   class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-white px-2.5 py-2 text-xs">
+                <div class="min-w-[7.5rem] flex-1">
+                  <div class="font-bold text-slate-700">{{ recordIntervalText(r) }}</div>
+                  <div class="text-[10px] text-slate-400">{{ recordPhaseHint(r) }}</div>
+                </div>
+                <span class="px-2 py-0.5 rounded-full font-bold shrink-0"
+                      :class="{
+                        'bg-orange-50 text-orange-600': r.status==='pending' || r.status==='processing',
+                        'bg-emerald-50 text-emerald-600': r.status==='done',
+                        'bg-slate-100 text-slate-400': r.status==='failed' || r.status==='cancelled'
+                      }">{{ statusLabel(r.status) }}</span>
+                <span class="text-[10px] font-mono text-slate-400 shrink-0 hidden sm:inline"
+                      :class="isExpired(r) ? 'text-red-400' : ''">
+                  {{ r.expire_at ? formatTime(r.expire_at) : (r.status==='pending' ? '待出图' : '—') }}
+                </span>
+                <div class="ml-auto flex items-center gap-2 shrink-0">
+                  <button type="button" v-if="r.status==='done' && r.chart_url && !isExpired(r)"
+                     @click="openChartGallery(r)"
+                     class="theme-text font-bold hover:underline">查看</button>
+                  <template v-if="r.status==='pending'">
+                    <button type="button" @click="editPendingQuery(r)" :disabled="cancellingId===r.id"
+                            class="text-slate-500 hover:theme-text disabled:opacity-50">改单</button>
+                    <button type="button" @click="cancelQuery(r)" :disabled="cancellingId===r.id"
+                            class="text-rose-500 font-medium disabled:opacity-50">
+                      {{ cancellingId===r.id ? '…' : '撤回' }}
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
