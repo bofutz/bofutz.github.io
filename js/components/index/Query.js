@@ -315,9 +315,92 @@ export default {
         processing: "生成中",
         done: "已完成",
         failed: "失败已退次",
+        cancelled: "已撤回",
       };
       return map[s] || s;
     };
+
+    /** 记录行：完整周期文案（如 最新收盘·日线） */
+    const recordIntervalText = (r) => {
+      const k = r && r.interval;
+      if (!k) return "—";
+      return intervalLabel(k);
+    };
+
+    /** 相位短标签 */
+    const recordPhaseHint = (r) => {
+      const k = String((r && r.interval) || "");
+      if (k.includes("_next")) return "下一收盘·未结束时段";
+      if (
+        k.includes("_closed") ||
+        k === "half_day" ||
+        k === "daily" ||
+        k === "weekly"
+      )
+        return "最新收盘·已结束时段";
+      return "";
+    };
+
+    const cancellingId = ref(null);
+
+    /** 撤回排队中订单并退次 */
+    const cancelQuery = async (row) => {
+      if (!row || row.status !== "pending") return;
+      const label = recordIntervalText(row);
+      if (
+        !confirm(
+          `确认撤回？\n${row.etf_code} ${row.etf_name || ""}\n${label}\n将退回 1 次查询次数。`
+        )
+      ) {
+        return;
+      }
+      cancellingId.value = row.id;
+      try {
+        const res = await chartQueryApi.cancel(row.id);
+        if (res.chart_credits != null) store.setChartCredits(res.chart_credits);
+        store.showToast(res.message || "已撤回，次数已退回");
+        await loadRecords();
+      } catch (err) {
+        store.showToast(err.message || "撤回失败", "error");
+      } finally {
+        cancellingId.value = null;
+      }
+    };
+
+    /**
+     * 改单：撤回原单（退次）并把标的/周期填回表单，用户改完后重新「确认查询」
+     */
+    const editPendingQuery = async (row) => {
+      if (!row || row.status !== "pending") return;
+      const label = recordIntervalText(row);
+      if (
+        !confirm(
+          `将撤回当前排队单并退回 1 次，\n把「${row.etf_code} / ${label}」填回上方表单供修改后重新提交。\n是否继续？`
+        )
+      ) {
+        return;
+      }
+      form.etfCode = String(row.etf_code || "").replace(/\D/g, "").slice(-6);
+      form.etfName = row.etf_name || "";
+      const iv = row.interval || "daily_closed";
+      if (enabledIntervals.value.includes(iv)) form.interval = iv;
+      else if (enabledIntervals.value.length) form.interval = enabledIntervals.value[0];
+      cancellingId.value = row.id;
+      try {
+        const res = await chartQueryApi.cancel(row.id);
+        if (res.chart_credits != null) store.setChartCredits(res.chart_credits);
+        store.showToast("已撤回并填回表单，请修改后重新确认查询");
+        await loadRecords();
+        try {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } catch (_) {}
+      } catch (err) {
+        store.showToast(err.message || "操作失败", "error");
+      } finally {
+        cancellingId.value = null;
+      }
+    };
+
 
     const formatTime = (ts) => {
       if (!ts) return "-";
@@ -578,6 +661,11 @@ export default {
       openLogin,
       loadRecords,
       statusLabel,
+      recordIntervalText,
+      recordPhaseHint,
+      cancellingId,
+      cancelQuery,
+      editPendingQuery,
       formatTime,
       isExpired,
       openChartGallery,
@@ -712,10 +800,11 @@ export default {
             <thead class="bg-slate-50 text-xs text-slate-500 border-b font-bold">
               <tr>
                 <th class="py-2.5 px-4">代码 / 名称</th>
+                <th class="py-2.5 px-3">图表类型</th>
                 <th class="py-2.5 px-3">提交时间</th>
                 <th class="py-2.5 px-3">状态</th>
                 <th class="py-2.5 px-3">有效期</th>
-                <th class="py-2.5 px-4 text-right">图表</th>
+                <th class="py-2.5 px-4 text-right">操作</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
@@ -724,13 +813,17 @@ export default {
                   <div class="font-mono font-bold text-slate-800">{{ r.etf_code }}</div>
                   <div class="text-xs text-slate-500">{{ r.etf_name || '-' }}</div>
                 </td>
+                <td class="py-3 px-3">
+                  <div class="text-xs font-bold text-slate-700 leading-tight">{{ recordIntervalText(r) }}</div>
+                  <div class="text-[10px] text-slate-400 mt-0.5">{{ recordPhaseHint(r) }}</div>
+                </td>
                 <td class="py-3 px-3 text-xs font-mono text-slate-400">{{ formatTime(r.created_at) }}</td>
                 <td class="py-3 px-3">
                   <span class="text-xs font-bold px-2 py-0.5 rounded-full"
                         :class="{
                           'bg-orange-50 text-orange-600': r.status==='pending' || r.status==='processing',
                           'bg-emerald-50 text-emerald-600': r.status==='done',
-                          'bg-slate-100 text-slate-400': r.status==='failed'
+                          'bg-slate-100 text-slate-400': r.status==='failed' || r.status==='cancelled'
                         }">{{ statusLabel(r.status) }}</span>
                 </td>
                 <td class="py-3 px-3 text-xs font-mono"
@@ -739,10 +832,23 @@ export default {
                   <span v-if="isExpired(r)" class="block text-red-400">已过期</span>
                 </td>
                 <td class="py-3 px-4 text-right">
-                  <button type="button" v-if="r.status==='done' && r.chart_url && !isExpired(r)"
-                     @click="openChartGallery(r)"
-                     class="text-xs theme-text font-bold hover:underline">{{ intervalLabel(r.interval) }}</button>
-                  <span v-else class="text-xs text-slate-300">—</span>
+                  <div class="inline-flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 justify-end">
+                    <button type="button" v-if="r.status==='done' && r.chart_url && !isExpired(r)"
+                       @click="openChartGallery(r)"
+                       class="text-xs theme-text font-bold hover:underline">查看图表</button>
+                    <template v-if="r.status==='pending'">
+                      <button type="button" @click="editPendingQuery(r)"
+                              :disabled="cancellingId===r.id"
+                              class="text-xs text-slate-500 hover:theme-text disabled:opacity-50">改单</button>
+                      <button type="button" @click="cancelQuery(r)"
+                              :disabled="cancellingId===r.id"
+                              class="text-xs text-rose-500 hover:text-rose-600 font-medium disabled:opacity-50">
+                        {{ cancellingId===r.id ? '处理中…' : '撤回' }}
+                      </button>
+                    </template>
+                    <span v-if="r.status!=='pending' && !(r.status==='done' && r.chart_url && !isExpired(r))"
+                          class="text-xs text-slate-300">—</span>
+                  </div>
                 </td>
               </tr>
             </tbody>
