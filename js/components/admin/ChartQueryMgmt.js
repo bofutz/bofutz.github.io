@@ -16,12 +16,18 @@ export default {
     const statusFilter = ref("");
 
     const INTERVAL_LABELS = {
-      half_day: "半日线",
-      half: "半日线",
-      daily: "日线",
-      day: "日线",
-      weekly: "周线",
-      week: "周线",
+      half_day_closed: "最新收盘·半日线",
+      half_day_next: "下一收盘·半日线",
+      daily_closed: "最新收盘·日线",
+      daily_next: "下一收盘·日线",
+      weekly_closed: "最新收盘·周线",
+      weekly_next: "下一收盘·周线",
+      half_day: "最新收盘·半日线",
+      half: "最新收盘·半日线",
+      daily: "最新收盘·日线",
+      day: "最新收盘·日线",
+      weekly: "最新收盘·周线",
+      week: "最新收盘·周线",
     };
     const intervalLabel = (k) => INTERVAL_LABELS[String(k || "").toLowerCase()] || k || "—";
 
@@ -115,7 +121,11 @@ export default {
       const same = (queries.value || []).filter(
         (q) => q.chart_url && String(q.etf_code) === code && q.status === "done"
       );
-      const order = { half_day: 0, half: 0, daily: 1, day: 1, weekly: 2, week: 2 };
+      const order = {
+        half_day_closed: 0, half_day_next: 1, half_day: 0, half: 0,
+        daily_closed: 2, daily_next: 3, daily: 2, day: 2,
+        weekly_closed: 4, weekly_next: 5, weekly: 4, week: 4,
+      };
       same.sort((a, b) => (order[a.interval] ?? 9) - (order[b.interval] ?? 9));
       const list = (same.length ? same : [row]).map((q) => ({
         url: q.chart_url,

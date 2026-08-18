@@ -40,10 +40,10 @@ export default {
       wechat_qr_url: "",
       default_pay_channel: "wechat",
       chart_query_batch_hours: "2",
-      chart_run_slots: '[{"time":"15:40","mode":"all","enabled":true},{"time":"18:00","mode":"query","enabled":true},{"time":"20:00","mode":"query","enabled":true},{"time":"22:00","mode":"query","enabled":true}]',
+      chart_run_slots: '[{"time":"07:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"15:35","mode":"all","kinds":["half_day","daily"],"enabled":true},{"time":"19:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"22:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"09:00","mode":"query","kinds":["weekly"],"weekday":6,"enabled":true}]',
       chart_run_window_minutes: "25",
       chart_query_retain_trading_days: "2",
-      chart_query_intervals: '["daily"]',
+      chart_query_intervals: '["half_day_closed","half_day_next","daily_closed","daily_next","weekly_closed","weekly_next"]',
       chart_query_deduct_on: "submit",
 
       // 票选
@@ -177,6 +177,40 @@ export default {
       }
     };
 
+
+    const chartIntervalOptions = [
+      { key: "half_day_closed", label: "最新收盘·半日线", hint: "已结束" },
+      { key: "half_day_next", label: "下一收盘·半日线", hint: "未结束" },
+      { key: "daily_closed", label: "最新收盘·日线", hint: "已结束" },
+      { key: "daily_next", label: "下一收盘·日线", hint: "未结束" },
+      { key: "weekly_closed", label: "最新收盘·周线", hint: "已结束周" },
+      { key: "weekly_next", label: "下一收盘·周线", hint: "未结束周" },
+    ];
+
+    const parseIntervals = () => {
+      try {
+        const arr =
+          typeof form.chart_query_intervals === "string"
+            ? JSON.parse(form.chart_query_intervals || "[]")
+            : form.chart_query_intervals;
+        return Array.isArray(arr) ? arr.map(String) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const isIntervalEnabled = (key) => parseIntervals().includes(key);
+
+    const toggleInterval = (key, on) => {
+      let arr = parseIntervals();
+      if (on) {
+        if (!arr.includes(key)) arr.push(key);
+      } else {
+        arr = arr.filter((x) => x !== key);
+      }
+      form.chart_query_intervals = JSON.stringify(arr);
+    };
+
     onMounted(loadSettings);
 
     return {
@@ -189,6 +223,9 @@ export default {
       saveSettings,
       addPlatform,
       removePlatform,
+      chartIntervalOptions,
+      isIntervalEnabled,
+      toggleInterval,
     };
   },
   template: `
@@ -256,6 +293,49 @@ export default {
               <span class="text-[10px] text-slate-400 mt-1 block">如 90=季付起；邀请人仅在好友付费后获天数返利</span>
             </label>
           </div>
+        </section>
+
+
+        <!-- 自主查询（周期 + 出图场次） -->
+        <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
+          <h3 class="font-bold text-slate-700 text-sm border-b pb-2">自主查询 · 周期与出图场次</h3>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            会员可选「最新收盘 / 下一收盘」的半日线、日线、周线。系统按下方场次自动对齐 charts 工作流：
+            交易日 <code class="bg-slate-50 px-1 rounded">07:00 / 15:35 / 19:00 / 22:00</code> 拉半日+日线（15:35 含监控列表，其余仅自主查询）；
+            周六 <code class="bg-slate-50 px-1 rounded">09:00</code> 拉周线。
+          </p>
+          <div>
+            <div class="text-xs text-slate-500 mb-2">开放给会员的周期选项</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <label v-for="opt in chartIntervalOptions" :key="opt.key" class="flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer hover:bg-slate-50">
+                <input type="checkbox" :checked="isIntervalEnabled(opt.key)" @change="toggleInterval(opt.key, $event.target.checked)">
+                <span>
+                  <span class="font-bold text-slate-700">{{ opt.label }}</span>
+                  <span class="text-slate-400 ml-1">{{ opt.hint }}</span>
+                </span>
+              </label>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="text-xs space-y-1.5 block">
+              <span class="text-slate-500">图表保留交易日数</span>
+              <input v-model="form.chart_query_retain_trading_days" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </label>
+            <label class="text-xs space-y-1.5 block">
+              <span class="text-slate-500">扣次时机</span>
+              <select v-model="form.chart_query_deduct_on" class="w-full border rounded-lg px-3 py-2 text-sm">
+                <option value="submit">提交时扣次</option>
+                <option value="ready">出图成功时扣次</option>
+              </select>
+            </label>
+          </div>
+          <label class="text-xs space-y-1.5 block">
+            <span class="text-slate-500">出图场次 JSON（与 charts 定时任务对齐）</span>
+            <textarea v-model="form.chart_run_slots" rows="5" class="w-full border rounded-lg px-3 py-2 text-xs font-mono"></textarea>
+            <span class="text-[10px] text-slate-400 block mt-1">
+              mode=all 表示该场同时更新监控列表+自主查询；mode=query 仅自主查询。kinds 指定 half_day / daily / weekly；weekday=6 表示仅周六。
+            </span>
+          </label>
         </section>
 
         <!-- 收款码（开通） -->
