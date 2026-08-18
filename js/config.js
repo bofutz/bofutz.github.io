@@ -39,9 +39,16 @@ export const CONFIG = {
   },
 
   CHART_INTERVALS: {
-    half_day: "半日线",
-    daily: "日线",
-    weekly: "周线",
+    half_day_closed: "最新收盘·半日线",
+    half_day_next: "下一收盘·半日线",
+    daily_closed: "最新收盘·日线",
+    daily_next: "下一收盘·日线",
+    weekly_closed: "最新收盘·周线",
+    weekly_next: "下一收盘·周线",
+    // 兼容旧 key
+    half_day: "最新收盘·半日线",
+    daily: "最新收盘·日线",
+    weekly: "最新收盘·周线",
   },
 
   USERNAME_PATTERN: /^[A-Za-z0-9]+$/,
@@ -65,8 +72,9 @@ export const CONFIG = {
 
     chart_query_batch_hours: "2",
     chart_query_retain_trading_days: "2",
-    chart_query_intervals: '["daily"]',
+    chart_query_intervals: '["half_day_closed","half_day_next","daily_closed","daily_next","weekly_closed","weekly_next"]',
     chart_query_deduct_on: "submit",
+    chart_run_slots: '[{"time":"07:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"15:35","mode":"all","kinds":["half_day","daily"],"enabled":true},{"time":"19:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"22:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"09:00","mode":"query","kinds":["weekly"],"weekday":6,"enabled":true}]',
     vip_monthly_chart_gift: "0",
 
     vote_monthly_limit: "10",
