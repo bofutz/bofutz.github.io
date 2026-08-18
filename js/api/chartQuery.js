@@ -39,4 +39,15 @@ export const chartQueryApi = {
   async fetchStatus(id) {
     return request(`/api/chart-query/status?id=${encodeURIComponent(id)}`);
   },
+
+  /**
+   * 撤回排队中的查询（退回 1 次）
+   * @param {number|string} id
+   */
+  async cancel(id) {
+    return request("/api/chart-query/cancel", {
+      method: "POST",
+      body: JSON.stringify({ id: Number(id) }),
+    });
+  },
 };
