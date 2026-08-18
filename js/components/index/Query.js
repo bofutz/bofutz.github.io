@@ -60,23 +60,29 @@ export default {
       const groups = [
         {
           title: "半日线",
+          icon: "fa-solid fa-chart-area",
+          tone: "sky",
           items: [
-            { key: "half_day_closed", desc: "已结束场次" },
-            { key: "half_day_next", desc: "未结束场次" },
+            { key: "half_day_closed", short: "最新收盘", desc: "已结束时段" },
+            { key: "half_day_next", short: "下一收盘", desc: "未结束时段" },
           ],
         },
         {
           title: "日线",
+          icon: "fa-solid fa-chart-line",
+          tone: "teal",
           items: [
-            { key: "daily_closed", desc: "已结束场次" },
-            { key: "daily_next", desc: "未结束场次" },
+            { key: "daily_closed", short: "最新收盘", desc: "已结束时段" },
+            { key: "daily_next", short: "下一收盘", desc: "未结束时段" },
           ],
         },
         {
           title: "周线",
+          icon: "fa-solid fa-calendar-week",
+          tone: "violet",
           items: [
-            { key: "weekly_closed", desc: "已结束周" },
-            { key: "weekly_next", desc: "未结束周" },
+            { key: "weekly_closed", short: "最新收盘", desc: "已结束周" },
+            { key: "weekly_next", short: "下一收盘", desc: "未结束周" },
           ],
         },
       ];
@@ -88,11 +94,18 @@ export default {
         .filter((g) => g.items.length);
     });
 
+    /** 场次耗时：15:35 含监控列表，约 25 分钟；其余约 10 分钟 */
+    const etaMinutesForSlot = (timeStr, mode) => {
+      const t = String(timeStr || "");
+      if (t === "15:35" || mode === "all") return 25;
+      return 10;
+    };
+
     /**
      * 按所选周期 + 后台 chart_run_slots 推算最近一场
-     * 工作流：交易日 07:00/15:35/19:00/22:00 半日+日线；周六 09:00 周线
+     * 返回 { text, time, etaMin, mode, detail }
      */
-    const nextBatchHint = computed(() => {
+    const nextBatchInfo = computed(() => {
       const iv = form.interval || "daily_closed";
       const isWeekly = String(iv).startsWith("weekly");
       const isNext = String(iv).includes("_next");
@@ -103,8 +116,8 @@ export default {
         if (Array.isArray(arr)) {
           for (const s of arr) {
             if (!s || s.enabled === false) continue;
-            const t = String(s.time || "");
-            const m = t.match(/^(\d{1,2}):(\d{2})$/);
+            const tm = String(s.time || "");
+            const m = tm.match(/^(\d{1,2}):(\d{2})$/);
             if (!m) continue;
             const kinds = Array.isArray(s.kinds)
               ? s.kinds
@@ -123,56 +136,77 @@ export default {
       } catch (_) {}
       if (!slots.length) {
         slots = [
-          { time: "07:00", mins: 7 * 60, kinds: ["half_day", "daily"], weekday: null },
-          { time: "15:35", mins: 15 * 60 + 35, kinds: ["half_day", "daily"], weekday: null },
-          { time: "19:00", mins: 19 * 60, kinds: ["half_day", "daily"], weekday: null },
-          { time: "22:00", mins: 22 * 60, kinds: ["half_day", "daily"], weekday: null },
-          { time: "09:00", mins: 9 * 60, kinds: ["weekly"], weekday: 6 },
+          { time: "07:00", mins: 7 * 60, kinds: ["half_day", "daily"], weekday: null, mode: "query" },
+          { time: "15:35", mins: 15 * 60 + 35, kinds: ["half_day", "daily"], weekday: null, mode: "all" },
+          { time: "19:00", mins: 19 * 60, kinds: ["half_day", "daily"], weekday: null, mode: "query" },
+          { time: "22:00", mins: 22 * 60, kinds: ["half_day", "daily"], weekday: null, mode: "query" },
+          { time: "09:00", mins: 9 * 60, kinds: ["weekly"], weekday: 6, mode: "query" },
         ];
       }
       const base = isWeekly ? "weekly" : String(iv).includes("half") ? "half_day" : "daily";
       const matched = slots.filter((s) => (s.kinds || []).includes(base));
-      // 用北京时间近似：本地若非东八区仍可读懂
       const now = new Date();
       const bj = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
       const mins = bj.getHours() * 60 + bj.getMinutes();
       const wd = bj.getDay();
+
+      const pack = (slot, whenLabel, past = false) => {
+        const eta = etaMinutesForSlot(slot.time, slot.mode);
+        const modeNote =
+          slot.mode === "all"
+            ? "含监控列表，出图较慢"
+            : "仅自主查询标的";
+        const text = past
+          ? `${whenLabel} ${slot.time} 场（最新收盘）`
+          : `${whenLabel} ${slot.time}`;
+        return {
+          text,
+          time: slot.time,
+          etaMin: eta,
+          mode: slot.mode,
+          past,
+          detail: `预计排队约 ${eta} 分钟出图（${modeNote}；高峰可能更久）`,
+        };
+      };
+
       if (isWeekly) {
         const weekSlots = matched.filter((s) => s.weekday === 6 || s.weekday != null);
         const use = weekSlots.length ? weekSlots : matched;
         if (wd === 6) {
-          for (const s of use.sort((a, b) => a.mins - b.mins)) {
-            if (isNext ? mins < s.mins : mins < s.mins) return `今日 ${s.time}（周线）`;
-            if (!isNext && mins >= s.mins) return `本周六 ${s.time} 场（已跑/补拉）`;
+          for (const s of use.slice().sort((a, b) => a.mins - b.mins)) {
+            if (mins < s.mins) return pack(s, "今日");
+            if (!isNext && mins >= s.mins) return pack(s, "本周六", true);
           }
         }
-        return "下一周六 " + (use[0]?.time || "09:00") + "（周线）";
+        const s0 = use[0] || { time: "09:00", mode: "query" };
+        return pack(s0, "下一周六");
       }
+
       const daySlots = matched
         .filter((s) => s.weekday == null || (s.weekday >= 1 && s.weekday <= 5))
         .sort((a, b) => a.mins - b.mins);
       const isTd = wd >= 1 && wd <= 5;
+
       if (isNext) {
         if (isTd) {
           for (const s of daySlots) {
-            if (mins < s.mins) return `今日 ${s.time}`;
+            if (mins < s.mins) return pack(s, "今日");
           }
         }
-        return "下一交易日 " + (daySlots[0]?.time || "07:00");
+        return pack(daySlots[0] || { time: "07:00", mode: "query" }, "下一交易日");
       }
-      // closed：今日已过最近一场，否则下一场
+
       if (isTd) {
         const past = daySlots.filter((s) => s.mins <= mins);
-        if (past.length) {
-          const last = past[past.length - 1];
-          return `今日 ${last.time} 场（最新收盘）`;
-        }
+        if (past.length) return pack(past[past.length - 1], "今日", true);
         for (const s of daySlots) {
-          if (mins < s.mins) return `今日 ${s.time}`;
+          if (mins < s.mins) return pack(s, "今日");
         }
       }
-      return "下一交易日 " + (daySlots[0]?.time || "07:00");
+      return pack(daySlots[0] || { time: "07:00", mode: "query" }, "下一交易日");
     });
+
+    const nextBatchHint = computed(() => nextBatchInfo.value?.text || "—");
 
     const fetchStockNameByCode = async (symbolStr) => {
       try {
@@ -537,6 +571,7 @@ export default {
       enabledIntervals,
       intervalGroups,
       intervalLabel,
+      nextBatchInfo,
       nextBatchHint,
       onCodeInput,
       submit,
@@ -554,7 +589,7 @@ export default {
         <h2 class="text-2xl font-bold text-slate-800">自主查询</h2>
         <p class="text-xs text-slate-400 mt-1 leading-relaxed">
           输入任意股票/ETF 代码，选择<strong>最新收盘 / 下一收盘</strong>的半日线、日线或周线，按次消耗查询次数。
-          系统按 charts 工作流自动对齐最近场次（交易日 07:00 / 15:35 / 19:00 / 22:00；周六 09:00 周线）。
+          系统按 charts 工作流对齐最近场次；出图约 10～25 分钟（15:35 含监控池更久）。
           当前预计：<strong class="theme-text">{{ nextBatchHint }}</strong>。
           图片约保留 <strong class="text-slate-600">{{ retainDays }}</strong> 个交易日。
         </p>
@@ -588,31 +623,70 @@ export default {
             <p v-else-if="nameError" class="text-xs text-amber-600 mt-1">{{ nameError }}</p>
           </div>
           <div>
-            <label class="text-xs font-bold text-slate-600 mb-1.5 block">图表类型与收盘相位</label>
-            <div class="space-y-3">
-              <div v-for="g in intervalGroups" :key="g.title" class="space-y-1.5">
-                <div class="text-[11px] font-bold text-slate-500">{{ g.title }}</div>
-                <div class="flex flex-wrap gap-2">
+            <div class="flex items-center justify-between gap-2 mb-2.5">
+              <label class="text-xs font-bold text-slate-700">图表类型与收盘相位</label>
+              <span class="text-[10px] text-slate-400 hidden sm:inline">点选一档即可</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div v-for="g in intervalGroups" :key="g.title"
+                   class="rounded-xl border border-slate-100 bg-gradient-to-b from-slate-50/80 to-white p-3 shadow-sm">
+                <div class="flex items-center gap-1.5 mb-2.5">
+                  <span class="w-6 h-6 rounded-lg flex items-center justify-center text-[11px]"
+                        :class="{
+                          'bg-sky-100 text-sky-600': g.tone==='sky',
+                          'bg-teal-100 text-teal-700': g.tone==='teal',
+                          'bg-violet-100 text-violet-600': g.tone==='violet'
+                        }">
+                    <i :class="g.icon"></i>
+                  </span>
+                  <span class="text-xs font-bold text-slate-700">{{ g.title }}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5">
                   <button type="button" v-for="it in g.items" :key="it.key"
                           @click="form.interval = it.key"
-                          class="px-3 py-1.5 rounded-lg text-xs border font-bold transition-colors text-left"
-                          :class="form.interval === it.key ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600'">
-                    <span class="block">{{ intervalLabel(it.key) }}</span>
-                    <span class="block text-[10px] font-normal opacity-80 mt-0.5">{{ it.desc }}</span>
+                          class="relative rounded-lg px-2 py-2 text-left transition-all border"
+                          :class="form.interval === it.key
+                            ? 'theme-bg text-white border-transparent shadow-md ring-2 ring-[#4da6a0]/25'
+                            : 'bg-white text-slate-600 border-slate-150 hover:border-[#4da6a0]/40 hover:bg-[#4da6a0]/5'">
+                    <span class="block text-[11px] font-bold leading-tight">{{ it.short }}</span>
+                    <span class="block text-[10px] mt-0.5 leading-tight"
+                          :class="form.interval === it.key ? 'text-white/85' : 'text-slate-400'">{{ it.desc }}</span>
                   </button>
                 </div>
               </div>
             </div>
-            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
-              <strong>最新收盘</strong>：已结束的交易时段，优先对齐最近已跑/即将跑的 charts 场次；
-              <strong>下一收盘</strong>：尚未结束的时段，排队等待下一场工作流（交易日 07:00 / 15:35 / 19:00 / 22:00；周线周六 09:00）。
-              15:35 同时更新监控列表与自主查询，其余场次仅拉自主查询标的。
+            <p class="text-[11px] text-slate-400 mt-2.5 leading-relaxed">
+              <span class="font-medium text-slate-500">最新收盘</span>对齐已结束时段；
+              <span class="font-medium text-slate-500">下一收盘</span>排队等待未结束时段的下场工作流。
+              场次：交易日 07:00 / 15:35 / 19:00 / 22:00；周线周六 09:00。
             </p>
           </div>
-          <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 leading-relaxed">
-            当前选项预计对齐 <strong class="theme-text">{{ nextBatchHint }}</strong>。
-            成功出图后可在下方记录中打开链接；失败将自动退回 1 次。
+
+          <div class="rounded-xl border border-slate-100 bg-slate-50/90 px-3.5 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-4">
+            <div class="flex items-start gap-2.5 min-w-0 flex-1">
+              <span class="mt-0.5 w-8 h-8 rounded-full theme-bg/10 theme-text flex items-center justify-center shrink-0">
+                <i class="fa-regular fa-clock text-sm"></i>
+              </span>
+              <div class="min-w-0 text-xs leading-relaxed">
+                <div class="text-slate-700">
+                  预计对齐
+                  <strong class="theme-text font-mono text-sm mx-0.5">{{ nextBatchInfo.text }}</strong>
+                </div>
+                <div class="text-slate-500 mt-0.5">{{ nextBatchInfo.detail }}</div>
+              </div>
+            </div>
+            <div class="shrink-0 flex items-center gap-1.5 text-[11px]">
+              <span class="px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-600 font-bold">
+                ≈{{ nextBatchInfo.etaMin }} 分钟
+              </span>
+              <span v-if="nextBatchInfo.mode==='all'" class="px-2 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-700 font-medium">
+                含监控池
+              </span>
+            </div>
           </div>
+          <p class="text-[10px] text-slate-400 -mt-1 leading-relaxed">
+            15:35 同时更新监控列表与自主查询，通常约 25 分钟；其它场次约 10 分钟。会员增多时耗时会相应延长。失败自动退回 1 次。
+          </p>
           <button type="button" @click="submit" :disabled="submitLoading || searchingName"
                   class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold disabled:opacity-50">
             {{ submitLoading ? '提交中…' : '确认查询（消耗 1 次）' }}
