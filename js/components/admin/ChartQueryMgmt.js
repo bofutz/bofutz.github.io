@@ -169,7 +169,7 @@ export default {
     };
 
     const statusLabel = (s) =>
-      ({ pending: "排队中", processing: "生成中", done: "已完成", failed: "失败" }[s] || s);
+      ({ pending: "排队中", processing: "生成中", done: "已完成", failed: "失败", cancelled: "已撤回" }[s] || s);
 
     const formatTime = (ts) => {
       if (!ts) return "-";
@@ -291,6 +291,7 @@ export default {
           <select v-model="statusFilter" @change="loadQueries" class="border rounded-lg px-2 py-1.5 text-xs">
             <option value="">全部状态</option>
             <option value="pending">排队中</option>
+            <option value="cancelled">已撤回</option>
             <option value="done">已完成</option>
             <option value="failed">失败</option>
           </select>
@@ -325,7 +326,7 @@ export default {
                         :class="{
                           'bg-orange-50 text-orange-600': q.status==='pending',
                           'bg-emerald-50 text-emerald-600': q.status==='done',
-                          'bg-slate-100 text-slate-400': q.status==='failed'
+                          'bg-slate-100 text-slate-400': q.status==='failed' || q.status==='cancelled'
                         }">{{ statusLabel(q.status) }}</span>
                 </td>
                 <td class="py-2 px-3 text-xs font-mono text-slate-400">{{ formatTime(q.created_at) }}</td>
