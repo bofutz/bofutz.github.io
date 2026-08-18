@@ -42,7 +42,7 @@ export default {
           <div class="text-center sm:text-left">
             <div class="text-sm font-bold text-slate-700">波幅探长</div>
             <p class="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-              ETF/股票波幅异动批量监控工具、自主查询图表！
+              股票/ETF波幅异动批量监控系统！
             </p>
           </div>
 
