@@ -23,7 +23,7 @@ export default {
     const form = reactive({
       etfCode: "",
       etfName: "",
-      interval: "daily",
+      interval: "daily_closed",
     });
     const searchingName = ref(false);
     const nameError = ref("");
@@ -37,23 +37,65 @@ export default {
     );
 
     const enabledIntervals = computed(() => {
-      let raw = settings.value.chart_query_intervals || '["daily"]';
+      let raw =
+        settings.value.chart_query_intervals ||
+        '["half_day_closed","half_day_next","daily_closed","daily_next","weekly_closed","weekly_next"]';
       try {
         const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
-        if (Array.isArray(arr) && arr.length) return arr;
+        if (Array.isArray(arr) && arr.length) {
+          // 规范化旧 key
+          const map = { half_day: "half_day_closed", daily: "daily_closed", weekly: "weekly_closed" };
+          return [...new Set(arr.map((x) => map[x] || x))];
+        }
       } catch (_) {}
-      return ["daily"];
+      return ["daily_closed"];
     });
 
     const intervalLabel = (k) =>
       (CONFIG.CHART_INTERVALS && CONFIG.CHART_INTERVALS[k]) || k;
 
-    /** 下一场出图：读后台 chart_run_slots，默认 15:40/18/20/22 */
+    /** 分组展示：半日 / 日 / 周 × 最新收盘 / 下一收盘 */
+    const intervalGroups = computed(() => {
+      const enabled = new Set(enabledIntervals.value);
+      const groups = [
+        {
+          title: "半日线",
+          items: [
+            { key: "half_day_closed", desc: "已结束场次" },
+            { key: "half_day_next", desc: "未结束场次" },
+          ],
+        },
+        {
+          title: "日线",
+          items: [
+            { key: "daily_closed", desc: "已结束场次" },
+            { key: "daily_next", desc: "未结束场次" },
+          ],
+        },
+        {
+          title: "周线",
+          items: [
+            { key: "weekly_closed", desc: "已结束周" },
+            { key: "weekly_next", desc: "未结束周" },
+          ],
+        },
+      ];
+      return groups
+        .map((g) => ({
+          ...g,
+          items: g.items.filter((it) => enabled.has(it.key)),
+        }))
+        .filter((g) => g.items.length);
+    });
+
+    /**
+     * 按所选周期 + 后台 chart_run_slots 推算最近一场
+     * 工作流：交易日 07:00/15:35/19:00/22:00 半日+日线；周六 09:00 周线
+     */
     const nextBatchHint = computed(() => {
-      const now = new Date();
-      const mins = now.getHours() * 60 + now.getMinutes();
-      const wd = now.getDay();
-      const isWeekend = wd === 0 || wd === 6;
+      const iv = form.interval || "daily_closed";
+      const isWeekly = String(iv).startsWith("weekly");
+      const isNext = String(iv).includes("_next");
       let slots = [];
       try {
         const raw = settings.value.chart_run_slots;
@@ -64,22 +106,72 @@ export default {
             const t = String(s.time || "");
             const m = t.match(/^(\d{1,2}):(\d{2})$/);
             if (!m) continue;
-            slots.push(parseInt(m[1], 10) * 60 + parseInt(m[2], 10));
+            const kinds = Array.isArray(s.kinds)
+              ? s.kinds
+              : s.kind
+              ? [s.kind]
+              : ["half_day", "daily"];
+            slots.push({
+              time: `${String(m[1]).padStart(2, "0")}:${m[2]}`,
+              mins: parseInt(m[1], 10) * 60 + parseInt(m[2], 10),
+              kinds,
+              weekday: s.weekday != null ? Number(s.weekday) : null,
+              mode: s.mode || "query",
+            });
           }
         }
       } catch (_) {}
-      if (!slots.length) slots = [15 * 60 + 40, 18 * 60, 20 * 60, 22 * 60];
-      slots.sort((a, b) => a - b);
-      const fmt = (totalMin) => {
-        const h = Math.floor(totalMin / 60);
-        const m = totalMin % 60;
-        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      };
-      if (isWeekend) return "下一交易日 " + fmt(slots[0]);
-      for (const s of slots) {
-        if (mins < s) return fmt(s);
+      if (!slots.length) {
+        slots = [
+          { time: "07:00", mins: 7 * 60, kinds: ["half_day", "daily"], weekday: null },
+          { time: "15:35", mins: 15 * 60 + 35, kinds: ["half_day", "daily"], weekday: null },
+          { time: "19:00", mins: 19 * 60, kinds: ["half_day", "daily"], weekday: null },
+          { time: "22:00", mins: 22 * 60, kinds: ["half_day", "daily"], weekday: null },
+          { time: "09:00", mins: 9 * 60, kinds: ["weekly"], weekday: 6 },
+        ];
       }
-      return "下一交易日 " + fmt(slots[0]);
+      const base = isWeekly ? "weekly" : String(iv).includes("half") ? "half_day" : "daily";
+      const matched = slots.filter((s) => (s.kinds || []).includes(base));
+      // 用北京时间近似：本地若非东八区仍可读懂
+      const now = new Date();
+      const bj = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
+      const mins = bj.getHours() * 60 + bj.getMinutes();
+      const wd = bj.getDay();
+      if (isWeekly) {
+        const weekSlots = matched.filter((s) => s.weekday === 6 || s.weekday != null);
+        const use = weekSlots.length ? weekSlots : matched;
+        if (wd === 6) {
+          for (const s of use.sort((a, b) => a.mins - b.mins)) {
+            if (isNext ? mins < s.mins : mins < s.mins) return `今日 ${s.time}（周线）`;
+            if (!isNext && mins >= s.mins) return `本周六 ${s.time} 场（已跑/补拉）`;
+          }
+        }
+        return "下一周六 " + (use[0]?.time || "09:00") + "（周线）";
+      }
+      const daySlots = matched
+        .filter((s) => s.weekday == null || (s.weekday >= 1 && s.weekday <= 5))
+        .sort((a, b) => a.mins - b.mins);
+      const isTd = wd >= 1 && wd <= 5;
+      if (isNext) {
+        if (isTd) {
+          for (const s of daySlots) {
+            if (mins < s.mins) return `今日 ${s.time}`;
+          }
+        }
+        return "下一交易日 " + (daySlots[0]?.time || "07:00");
+      }
+      // closed：今日已过最近一场，否则下一场
+      if (isTd) {
+        const past = daySlots.filter((s) => s.mins <= mins);
+        if (past.length) {
+          const last = past[past.length - 1];
+          return `今日 ${last.time} 场（最新收盘）`;
+        }
+        for (const s of daySlots) {
+          if (mins < s.mins) return `今日 ${s.time}`;
+        }
+      }
+      return "下一交易日 " + (daySlots[0]?.time || "07:00");
     });
 
     const fetchStockNameByCode = async (symbolStr) => {
@@ -360,7 +452,11 @@ export default {
         return;
       }
       const R2 = "https://pub-973330e118204686a625fe51431d4336.r2.dev/charts";
-      const order = { half_day: 0, daily: 1, weekly: 2 };
+      const order = {
+        half_day_closed: 0, half_day_next: 1, half_day: 0,
+        daily_closed: 2, daily_next: 3, daily: 2,
+        weekly_closed: 4, weekly_next: 5, weekly: 4,
+      };
       const done = (records.value || []).filter(
         (r) => r.status === "done" && r.chart_url && !isExpired(r)
       );
@@ -439,6 +535,7 @@ export default {
       batchHours,
       retainDays,
       enabledIntervals,
+      intervalGroups,
       intervalLabel,
       nextBatchHint,
       onCodeInput,
@@ -456,9 +553,9 @@ export default {
       <div>
         <h2 class="text-2xl font-bold text-slate-800">自主查询</h2>
         <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-          输入任意股票/ETF 代码，按次消耗查询次数。
-          出图时间由后台「系统设置 → 自主查询 → 出图场次」配置（默认交易日 15:40 / 18:00 / 20:00 / 22:00）。预计下场
-          <strong class="theme-text">{{ nextBatchHint }}</strong>）。
+          输入任意股票/ETF 代码，选择<strong>最新收盘 / 下一收盘</strong>的半日线、日线或周线，按次消耗查询次数。
+          系统按 charts 工作流自动对齐最近场次（交易日 07:00 / 15:35 / 19:00 / 22:00；周六 09:00 周线）。
+          当前预计：<strong class="theme-text">{{ nextBatchHint }}</strong>。
           图片约保留 <strong class="text-slate-600">{{ retainDays }}</strong> 个交易日。
         </p>
       </div>
@@ -491,19 +588,29 @@ export default {
             <p v-else-if="nameError" class="text-xs text-amber-600 mt-1">{{ nameError }}</p>
           </div>
           <div>
-            <label class="text-xs font-bold text-slate-600 mb-1.5 block">图表周期</label>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" v-for="iv in enabledIntervals" :key="iv"
-                      @click="form.interval = iv"
-                      class="px-3.5 py-1.5 rounded-lg text-xs border font-bold transition-colors"
-                      :class="form.interval === iv ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600'">
-                {{ intervalLabel(iv) }}
-              </button>
+            <label class="text-xs font-bold text-slate-600 mb-1.5 block">图表类型与收盘相位</label>
+            <div class="space-y-3">
+              <div v-for="g in intervalGroups" :key="g.title" class="space-y-1.5">
+                <div class="text-[11px] font-bold text-slate-500">{{ g.title }}</div>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" v-for="it in g.items" :key="it.key"
+                          @click="form.interval = it.key"
+                          class="px-3 py-1.5 rounded-lg text-xs border font-bold transition-colors text-left"
+                          :class="form.interval === it.key ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600'">
+                    <span class="block">{{ intervalLabel(it.key) }}</span>
+                    <span class="block text-[10px] font-normal opacity-80 mt-0.5">{{ it.desc }}</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <p class="text-[11px] text-slate-400 mt-1.5">未在列表中的周期表示后台未开放</p>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              <strong>最新收盘</strong>：已结束的交易时段，优先对齐最近已跑/即将跑的 charts 场次；
+              <strong>下一收盘</strong>：尚未结束的时段，排队等待下一场工作流（交易日 07:00 / 15:35 / 19:00 / 22:00；周线周六 09:00）。
+              15:35 同时更新监控列表与自主查询，其余场次仅拉自主查询标的。
+            </p>
           </div>
           <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 leading-relaxed">
-            提交后预计在 <strong class="theme-text">{{ nextBatchHint }}</strong> 前后的批次生成。
+            当前选项预计对齐 <strong class="theme-text">{{ nextBatchHint }}</strong>。
             成功出图后可在下方记录中打开链接；失败将自动退回 1 次。
           </div>
           <button type="button" @click="submit" :disabled="submitLoading || searchingName"
