@@ -577,45 +577,67 @@ export default {
 
       let items = Object.values(etfMap);
 
-      // 最新有日线数据的列（0=周一 … 4=周五）
-      let latestIdx = 4;
-      while (latestIdx >= 0) {
-        const has = items.some(
-          (i) =>
-            i.days[latestIdx]?.day_status &&
-            i.days[latestIdx].day_status !== "-" &&
-            i.days[latestIdx].day_status !== "--"
-        );
-        if (has) break;
-        latestIdx--;
+      // ---------- 默认排序列 =「最新有数据的那一列」，等价于用户点了该列 ----------
+      // 例：周二收盘后数据/图更新 → 默认按「周二」列排序：先日线绝对值，再半日线绝对值
+      const hasStatus = (s) => !!(s && s !== "-" && s !== "--");
+      const cellHasDay = (row, idx) => hasStatus(row.days?.[idx]?.day_status);
+      const cellHasHalf = (row, idx) => {
+        const c = row.days?.[idx];
+        return !!(c && (hasStatus(c.am_status) || hasStatus(c.pm_status)));
+      };
+      const cellHasAny = (row, idx) => cellHasDay(row, idx) || cellHasHalf(row, idx);
+
+      // 图表采集日落在本周时，优先作为「当前列」（与数据更新对齐）
+      let chartColPrefer = -1;
+      if (globalChartDay.value && weekDays.length) {
+        const ci = weekDays.indexOf(globalChartDay.value);
+        if (ci >= 0) chartColPrefer = ci;
+        else {
+          // 周末采集的日线图挂在周五列
+          const wd = new Date(globalChartDay.value + "T12:00:00+08:00").getDay();
+          if (wd === 0 || wd === 6) chartColPrefer = 4;
+        }
       }
 
-      // 是否有可用周线
-      const hasAnyWeek = items.some(
-        (i) => i.week_status && i.week_status !== "-" && i.week_status !== "--"
-      );
-
-      // ★ 排序与免费 Top3（刻意拆开）
-      //   排序：有日线 → 按 day_status 绝对值；日线相同再比半日线；无日线有周线 → 用周线
-      //   免费 Top3：只统计「最新交易日 day_status」触发的标的，绝不拿半日线凑满 3 名
-      //     例：昨日仅 1 只触发日线 → 免费仅此 1 只
-      const rankBy = latestIdx >= 0 ? "daily" : hasAnyWeek ? "weekly" : "daily";
-
-      const absLatestVal = (row) => {
-        if (rankBy === "weekly") {
-          const s = row.week_status;
-          if (!s || s === "-" || s === "--") return -9999;
-          const v = getStatusVal(s);
-          return v === -9999 ? -9999 : Math.abs(v);
+      // 最新「有任意触发」的列（半日或日线）—— 默认排序列
+      let latestIdx = -1;
+      for (let idx = 4; idx >= 0; idx--) {
+        if (items.some((i) => cellHasAny(i, idx))) {
+          latestIdx = idx;
+          break;
         }
-        if (latestIdx < 0) return -9999;
-        const s = row.days[latestIdx]?.day_status;
-        if (!s || s === "-" || s === "--") return -9999;
+      }
+      if (chartColPrefer >= 0 && items.some((i) => cellHasAny(i, chartColPrefer))) {
+        latestIdx = chartColPrefer;
+      }
+
+      // 最新「有日线」的列 —— 免费 Top3 只看这一列的日线
+      let dailyColIdx = -1;
+      for (let idx = 4; idx >= 0; idx--) {
+        if (items.some((i) => cellHasDay(i, idx))) {
+          dailyColIdx = idx;
+          break;
+        }
+      }
+      if (chartColPrefer >= 0 && items.some((i) => cellHasDay(i, chartColPrefer))) {
+        dailyColIdx = chartColPrefer;
+      }
+
+      const hasAnyWeek = items.some((i) => hasStatus(i.week_status));
+
+      // 有周几列数据 → 按该列（同点击该列）；否则若有周线 → 按周线列
+      const rankBy =
+        latestIdx >= 0 ? "daily" : hasAnyWeek ? "weekly" : "daily";
+
+      const absDayVal = (row, dayIdx) => {
+        if (dayIdx == null || dayIdx < 0) return -9999;
+        const s = row.days?.[dayIdx]?.day_status;
+        if (!hasStatus(s)) return -9999;
         const v = getStatusVal(s);
         return v === -9999 ? -9999 : Math.abs(v);
       };
 
-      /** 半日线绝对值：优先下午 pm_status，否则上午 am_status；都没有则 -9999 */
+      /** 半日线绝对值：取 am/pm 中较大者 */
       const absHalfVal = (row, dayIdx) => {
         if (dayIdx == null || dayIdx < 0) return -9999;
         const item = row.days?.[dayIdx];
@@ -628,35 +650,71 @@ export default {
         return best;
       };
 
-      /** 默认比较：日线绝对值优先，相同再比半日线绝对值（均为降序） */
-      const cmpDefaultRank = (a, b) => {
-        const da = absLatestVal(a);
-        const db = absLatestVal(b);
-        if (db !== da) return db - da;
-        if (rankBy === "daily" && latestIdx >= 0) {
-          const ha = absHalfVal(a, latestIdx);
-          const hb = absHalfVal(b, latestIdx);
-          if (hb !== ha) return hb - ha;
+      const absWeekVal = (row) => {
+        const s = row.week_status;
+        if (!hasStatus(s)) return -9999;
+        const v = getStatusVal(s);
+        return v === -9999 ? -9999 : Math.abs(v);
+      };
+
+      /** 点击某一「周几」列的排序：先日线绝对值降序，再半日线绝对值降序 */
+      const cmpDayColumn = (a, b, idx, orderDesc = true) => {
+        const da = absDayVal(a, idx);
+        const db = absDayVal(b, idx);
+        if (da !== db) {
+          if (da === -9999) return 1;
+          if (db === -9999) return -1;
+          return orderDesc ? db - da : da - db;
+        }
+        const ha = absHalfVal(a, idx);
+        const hb = absHalfVal(b, idx);
+        if (ha !== hb) {
+          if (ha === -9999) return 1;
+          if (hb === -9999) return -1;
+          return orderDesc ? hb - ha : ha - hb;
         }
         return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
       };
 
+      const cmpWeekColumn = (a, b, orderDesc = true) => {
+        const wa = absWeekVal(a);
+        const wb = absWeekVal(b);
+        if (wa !== wb) {
+          if (wa === -9999) return 1;
+          if (wb === -9999) return -1;
+          return orderDesc ? wb - wa : wa - wb;
+        }
+        return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+      };
+
+      /** 默认排序 = 自动点选「最新有数据列」或周线列 */
+      const cmpDefaultRank = (a, b) => {
+        if (rankBy === "weekly") return cmpWeekColumn(a, b, true);
+        if (latestIdx >= 0) return cmpDayColumn(a, b, latestIdx, true);
+        return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+      };
+
+      // 兼容旧引用
+      const absLatestVal = (row) =>
+        rankBy === "weekly"
+          ? absWeekVal(row)
+          : absDayVal(row, dailyColIdx >= 0 ? dailyColIdx : latestIdx);
       const absRankVal = (row) => absLatestVal(row);
 
-      // 排序仍：日线优先，其次半日线
-      const sortedByAbs = [...items].sort(cmpDefaultRank);
-
-      // 免费 Top3：仅日线触发，按日线绝对值取前 3；不足不凑半日线
+      // 免费看图：仅「最新有日线的那一列」的 day_status TOP3；不足 3 个不凑半日线
       const freeTopN = 3;
-      const freeTop3Codes = [...items]
-        .filter((i) => absLatestVal(i) > -9999)
-        .sort((a, b) => {
-          const d = absLatestVal(b) - absLatestVal(a);
-          if (d !== 0) return d;
-          return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
-        })
-        .slice(0, freeTopN)
-        .map((i) => i.etf_code);
+      const freeTop3Codes =
+        dailyColIdx < 0
+          ? []
+          : [...items]
+              .filter((i) => absDayVal(i, dailyColIdx) > -9999)
+              .sort((a, b) => {
+                const d = absDayVal(b, dailyColIdx) - absDayVal(a, dailyColIdx);
+                if (d !== 0) return d;
+                return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+              })
+              .slice(0, freeTopN)
+              .map((i) => i.etf_code);
 
       items.sort((a, b) => {
         if (sortColumn.value) {
@@ -1424,7 +1482,7 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center">
-          单元格格式：上午/下午|日线。未触发显示 “-”。行情按采集日落列；图表按更新日落列（与触发数据独立）。默认排序：先按日线绝对值，再按半日线；免费看图仅限「最新交易日触发日线」的前 3 名（不足 3 只不拿半日线凑数）。
+          单元格格式：上午/下午|日线。未触发显示 “-”。行情按采集日落列；图表按更新日落列。默认按「最新有数据的周几列」排序（等同点击该列）：先日线绝对值，再半日线；周线列同理。免费看图仅限最新有日线触发列的前 3 名（不足不凑半日线）。
         </p>
 
         <!-- 打赏入口 -->
