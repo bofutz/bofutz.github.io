@@ -140,6 +140,16 @@ export const adminApi = {
     const q = status ? `?status=${encodeURIComponent(status)}` : "";
     return request(`/api/admin/chart-queries${q}`);
   },
+  async deleteChartQueries(ids, adminPassword) {
+    return request("/api/admin/chart-queries/delete", {
+      method: "POST",
+      body: JSON.stringify({
+        ids: Array.isArray(ids) ? ids : [ids],
+        admin_password: adminPassword,
+      }),
+    });
+  },
+
   async fetchChartCreditPlans() {
     return request("/api/admin/chart-credit-plans");
   },
