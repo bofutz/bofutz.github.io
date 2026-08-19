@@ -4,7 +4,7 @@
  * - 数据与图表分列：行情按采集日、图表按更新日落在对应周几列
  * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
- * DASHBOARD_BUILD 2026-08-17f cross-symbol chart gallery
+ * DASHBOARD_BUILD 2026-08-19a default-sort by latest data day (not chart day)
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -577,8 +577,9 @@ export default {
 
       let items = Object.values(etfMap);
 
-      // ---------- 默认排序列 =「最新有数据的那一列」，等价于用户点了该列 ----------
-      // 例：周二收盘后数据/图更新 → 默认按「周二」列排序：先日线绝对值，再半日线绝对值
+      // ---------- 默认排序列 =「最新有行情数据的那一列」，等价于用户点了该列 ----------
+      // 例：周三已有日线/半日线数据 → 默认按「周三」列排序（先日线绝对值，再半日线）
+      // 与图表采集日无关，避免「数据到周三、图还在周二」时仍按周二排
       const hasStatus = (s) => !!(s && s !== "-" && s !== "--");
       const cellHasDay = (row, idx) => hasStatus(row.days?.[idx]?.day_status);
       const cellHasHalf = (row, idx) => {
@@ -587,19 +588,9 @@ export default {
       };
       const cellHasAny = (row, idx) => cellHasDay(row, idx) || cellHasHalf(row, idx);
 
-      // 图表采集日落在本周时，优先作为「当前列」（与数据更新对齐）
-      let chartColPrefer = -1;
-      if (globalChartDay.value && weekDays.length) {
-        const ci = weekDays.indexOf(globalChartDay.value);
-        if (ci >= 0) chartColPrefer = ci;
-        else {
-          // 周末采集的日线图挂在周五列
-          const wd = new Date(globalChartDay.value + "T12:00:00+08:00").getDay();
-          if (wd === 0 || wd === 6) chartColPrefer = 4;
-        }
-      }
-
-      // 最新「有任意触发」的列（半日或日线）—— 默认排序列
+      // 默认排序列 = 最新「有行情数据」的交易日列（等价于用户点了该列）
+      // 不跟图表采集日挂钩：数据已到周三就按周三排，即使图表仍停在周二
+      // 从周五往前扫，找到最近一列有日线或半日线即可
       let latestIdx = -1;
       for (let idx = 4; idx >= 0; idx--) {
         if (items.some((i) => cellHasAny(i, idx))) {
@@ -607,20 +598,14 @@ export default {
           break;
         }
       }
-      if (chartColPrefer >= 0 && items.some((i) => cellHasAny(i, chartColPrefer))) {
-        latestIdx = chartColPrefer;
-      }
 
-      // 最新「有日线」的列 —— 免费 Top3 只看这一列的日线
+      // 免费 Top3：仅看「最新有日线」的那一列（同样不跟图表日）
       let dailyColIdx = -1;
       for (let idx = 4; idx >= 0; idx--) {
         if (items.some((i) => cellHasDay(i, idx))) {
           dailyColIdx = idx;
           break;
         }
-      }
-      if (chartColPrefer >= 0 && items.some((i) => cellHasDay(i, chartColPrefer))) {
-        dailyColIdx = chartColPrefer;
       }
 
       const hasAnyWeek = items.some((i) => hasStatus(i.week_status));
