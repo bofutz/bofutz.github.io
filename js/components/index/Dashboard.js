@@ -4,7 +4,7 @@
  * - 数据与图表分列：行情按采集日、图表按更新日落在对应周几列
  * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
- * DASHBOARD_BUILD 2026-08-22a weekend default-sort by week_status (like click 周线)
+ * DASHBOARD_BUILD 2026-08-22b sort by latest collection time; single active sort arrow
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -613,26 +613,43 @@ export default {
 
       const hasAnyWeek = items.some((i) => hasStatus(i.week_status));
 
-      // 北京是否周末：周六/日有周线更新时，默认排序应等同点击「周线」列
+      // 默认排序只看「最近一次采集」，不看数据是周几的行情
+      // 采集日代理：周线用 weeklyChartDay / week_status_date；日线用 globalChartDay / 最新有数据列日期
+      const todayBj = bjYmd(Date.now());
       let isWeekendBj = false;
       try {
-        const day = bjYmd(Date.now());
-        const wd = new Date(day + "T12:00:00+08:00").getDay(); // 0=Sun
+        const wd = new Date(todayBj + "T12:00:00+08:00").getDay();
         isWeekendBj = wd === 0 || wd === 6;
       } catch (_) {}
 
-      // 默认排序：
-      // - 周末且有本周周线数据 → 按周线（同点击「周线」）
-      // - 否则有周几列数据 → 按最新有数据的那一列
-      // - 再否则有周线 → 按周线
-      const rankBy =
-        isWeekendBj && hasAnyWeek
-          ? "weekly"
-          : latestIdx >= 0
-            ? "daily"
-            : hasAnyWeek
-              ? "weekly"
-              : "daily";
+      let maxWeekStatusDate = "";
+      for (const row of items) {
+        if (!hasStatus(row.week_status)) continue;
+        const d = row.week_status_date;
+        if (d && isValidDate(d) && d > maxWeekStatusDate) maxWeekStatusDate = d;
+      }
+      const weeklyCollectDay =
+        (weeklyChartDay.value && isValidDate(weeklyChartDay.value) && weeklyChartDay.value) ||
+        maxWeekStatusDate ||
+        "";
+      const dailyCollectDay =
+        (globalChartDay.value && isValidDate(globalChartDay.value) && globalChartDay.value) ||
+        (latestIdx >= 0 && weekDays[latestIdx] ? weekDays[latestIdx] : "") ||
+        "";
+
+      // 采集日谁新谁优先；周末跑完周线任务 → 强制周线（等同点击「周线」）
+      let rankBy = "daily";
+      if (hasAnyWeek && isWeekendBj) {
+        rankBy = "weekly";
+      } else if (hasAnyWeek && weeklyCollectDay && dailyCollectDay && weeklyCollectDay > dailyCollectDay) {
+        rankBy = "weekly";
+      } else if (hasAnyWeek && weeklyCollectDay && weeklyCollectDay === todayBj) {
+        rankBy = "weekly";
+      } else if (latestIdx >= 0) {
+        rankBy = "daily";
+      } else if (hasAnyWeek) {
+        rankBy = "weekly";
+      }
 
       const absDayVal = (row, dayIdx) => {
         if (dayIdx == null || dayIdx < 0) return -9999;
@@ -805,7 +822,8 @@ export default {
         weekDays,
         weekStatusMonday,
         rankBy,
-        rankDailyIdx: latestIdx,
+        // 仅日线默认排序时点亮对应周几箭头；周线排序时不点亮周五等
+        rankDailyIdx: rankBy === "daily" ? latestIdx : -1,
       };
     });
 
@@ -1390,7 +1408,7 @@ export default {
                   </th>
                   <th v-for="idx in 5" :key="idx" class="py-3 px-1.5 sm:px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200 dash-col-day" @click="handleSort('d'+(idx-1))">
                     周{{ ['一','二','三','四','五'][idx-1] }}
-                    <i v-if="sortColumn==='d'+(idx-1) || (!sortColumn && processedData.rankDailyIdx===(idx-1))" class="fa-solid text-[10px] ml-1" :class="sortColumn==='d'+(idx-1) && sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
+                    <i v-if="sortColumn==='d'+(idx-1) || (!sortColumn && processedData.rankBy==='daily' && processedData.rankDailyIdx===(idx-1))" class="fa-solid text-[10px] ml-1" :class="sortColumn==='d'+(idx-1) && sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
                   <th class="py-3 px-2 sm:px-4 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200 dash-col-week" @click="handleSort('week_status')">
                     周线
