@@ -1,36 +1,30 @@
 /* ========================= FILE: .\js\components\common\AuthModal.js ========================= */
 
 /**
- * 波幅探长 - 认证与注册弹窗（微信公众号口令直登优化版）
- * 1. 默认展示微信免密直登，支持输入专属品牌口令 bofutz
- * 2. 自动从 URL 提取 ?ref= 邀请参数
- * 3. 保留传统账号密码登录备用
+ * 波幅探长 - 纯微信免密直登专属弹窗（无冗余版）
+ * js/components/common/AuthModal.js
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
 
-const { ref, reactive, computed, onMounted, watch } = Vue;
+const { reactive, computed, onMounted, watch, ref } = Vue;
+
+const STORAGE_NICKNAME_KEY = "bofutz_last_nickname";
 
 export default {
   name: "AuthModal",
   setup() {
     const loading = ref(false);
-    // 选项卡：wechat (微信公众号免密) | password (传统账密)
-    const authTab = ref("wechat");
 
     const wechatForm = reactive({
-      verifyCode: "",
+      verifyCode: "bofutz",
+      nickname: "",
       refCode: "",
-    });
-
-    const pwdForm = reactive({
-      username: "",
-      password: "",
     });
 
     const settings = computed(() => store.state.publicSettings || {});
 
-    // 公众号关注二维码直链（优先从后台配置中获取）
+    // 公众号关注二维码直链
     const gzhQrCode = computed(() => {
       const u = settings.value.gzh_qr_url || settings.value.wechat_qr_url || "";
       return String(u).trim();
@@ -50,16 +44,33 @@ export default {
       } catch (_) {}
     };
 
+    const loadLocalNickname = () => {
+      try {
+        const saved = localStorage.getItem(STORAGE_NICKNAME_KEY);
+        if (saved && !wechatForm.nickname) {
+          wechatForm.nickname = saved.trim();
+        }
+      } catch (_) {}
+    };
+
     const closeModal = () => {
       store.state.authModalVisible = false;
     };
 
-    // 提交微信口令免密直登 / 静默注册
     const submitWechatLogin = async () => {
       const code = wechatForm.verifyCode.trim();
-      // 支持 4~12 位英文与数字（支持 bofutz 口令）
+      const nickname = wechatForm.nickname.trim();
+
       if (!/^[a-zA-Z0-9]{4,12}$/.test(code)) {
         store.showToast("请输入正确的公众号口令（如 bofutz）", "error");
+        return;
+      }
+      if (!nickname) {
+        store.showToast("请设置您的专属昵称（微信名或代号）", "error");
+        return;
+      }
+      if (nickname.length < 2 || nickname.length > 20) {
+        store.showToast("昵称长度建议在 2~20 个字符之间", "error");
         return;
       }
 
@@ -67,47 +78,27 @@ export default {
       try {
         const res = await authApi.wechatLogin({
           code,
+          nickname,
           refCode: wechatForm.refCode,
         });
 
         const data = res.data || res;
+        try {
+          localStorage.setItem(STORAGE_NICKNAME_KEY, nickname);
+        } catch (_) {}
+
         store.setUserState({
           token: data.token,
-          username: data.username || `wx_${code.toLowerCase()}`,
+          username: data.username || nickname,
           referralCode: data.referral_code,
           vipDaysLeft: data.shared_vip_days ?? data.vip_days_left ?? 3,
           vipLevel: data.vip_level ?? 0,
         });
 
-        store.showToast("登录成功，已为您开通 3 天 VIP 体验！");
+        store.showToast(`欢迎，${data.username || nickname}！VIP 体验期已激活`);
         closeModal();
       } catch (err) {
-        store.showToast(err.message || "口令校验失败，请核对公众号回复", "error");
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    // 传统账号密码登录（备用）
-    const submitPwdLogin = async () => {
-      if (!pwdForm.username || !pwdForm.password) {
-        store.showToast("请输入账号与密码", "error");
-        return;
-      }
-      loading.value = true;
-      try {
-        const data = await authApi.login(pwdForm.username, pwdForm.password);
-        store.setUserState({
-          token: data.token,
-          username: pwdForm.username.trim(),
-          referralCode: data.referral_code,
-          vipDaysLeft: data.shared_vip_days ?? data.vip_days_left ?? 0,
-          vipLevel: data.vip_level ?? 0,
-        });
-        store.showToast("登录成功");
-        closeModal();
-      } catch (err) {
-        store.showToast(err.message || "登录失败", "error");
+        store.showToast(err.message || "登录失败，请检查口令", "error");
       } finally {
         loading.value = false;
       }
@@ -115,6 +106,7 @@ export default {
 
     onMounted(() => {
       extractRefFromUrl();
+      loadLocalNickname();
     });
 
     watch(
@@ -122,23 +114,19 @@ export default {
       (visible) => {
         if (visible) {
           extractRefFromUrl();
-          wechatForm.verifyCode = "";
-          authTab.value = "wechat"; // 确保每次弹窗默认进入微信免密
+          loadLocalNickname();
+          if (!wechatForm.verifyCode) wechatForm.verifyCode = "bofutz";
         }
       }
     );
 
     return {
       store: store.state,
-      settings,
-      authTab,
       wechatForm,
-      pwdForm,
       gzhQrCode,
       loading,
       closeModal,
       submitWechatLogin,
-      submitPwdLogin,
     };
   },
   template: `
@@ -148,62 +136,52 @@ export default {
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
 
-        <div class="flex border-b border-slate-100">
-          <button type="button" @click="authTab='wechat'" class="flex-1 py-3.5 text-sm font-bold transition-colors"
-                  :class="authTab==='wechat' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">
-            <i class="fa-brands fa-weixin text-emerald-500 mr-1 text-base"></i> 微信免密直登
-          </button>
-          <button type="button" @click="authTab='password'" class="flex-1 py-3.5 text-sm font-medium transition-colors"
-                  :class="authTab==='password' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">
-            账号密码登录
-          </button>
+        <div class="px-6 pt-5 pb-2 text-center border-b border-slate-50">
+          <div class="text-base font-bold text-slate-800 flex items-center justify-center gap-1.5">
+            <i class="fa-brands fa-weixin text-emerald-500 text-lg"></i> 微信免密快捷开户
+          </div>
         </div>
 
-        <!-- 方案 A：微信公众号口令直登 -->
-        <div v-if="authTab==='wechat'" class="p-6 space-y-4 text-center">
-          <div class="bg-emerald-50 text-emerald-700 text-xs p-2.5 rounded-lg border border-emerald-100 leading-relaxed">
-            🎁 微信免密快捷登录，新用户自动注册并<strong>获赠 3 天 VIP 体验</strong>！
+        <div class="p-6 space-y-4 text-center">
+          <div class="bg-emerald-50 text-emerald-700 text-xs p-2.5 rounded-lg border border-emerald-100 leading-relaxed text-left">
+            🎁 关注公众号获取口令，设置昵称即送 <strong>3 天 VIP 体验</strong>！
           </div>
 
           <div class="flex flex-col items-center">
-            <div class="w-40 h-40 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-2 flex items-center justify-center">
+            <div class="w-36 h-36 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-1.5 flex items-center justify-center">
               <img v-if="gzhQrCode" :src="gzhQrCode" class="w-full h-full object-contain rounded-lg" alt="公众号二维码">
               <div v-else class="text-xs text-slate-400 text-center">
-                <i class="fa-solid fa-qrcode text-3xl mb-1 text-slate-300"></i>
+                <i class="fa-solid fa-qrcode text-2xl mb-1 text-slate-300"></i>
                 <p>请在后台配置公众号二维码</p>
               </div>
             </div>
-            <p class="text-xs text-slate-500 mt-2 font-medium leading-relaxed">
-              1. 微信扫一扫上方二维码，关注公众号<br>
-              2. 打开“私信”，点击左下方键盘图标<br>
-              3. 输入数字<strong class="theme-text text-sm">666</strong>或「<strong>登录</strong>」/「<strong>注册</strong>」获取口令
+            <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
+              微信扫一扫关注公众号，回复【<strong class="theme-text">666</strong>】或【<strong class="theme-text">登录</strong>】获取口令
             </p>
           </div>
 
-          <div class="space-y-2">
-            <input v-model="wechatForm.verifyCode" type="text" maxlength="12" placeholder="在此输入口令"
-                   class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-center font-mono text-base font-bold tracking-widest focus:theme-border outline-none">
+          <div class="space-y-2.5 text-left">
+            <div>
+              <label class="text-[11px] font-bold text-slate-600 block mb-1">专属昵称（您的微信号/炒股代号，跨设备登录唯一标识）</label>
+              <input v-model="wechatForm.nickname" type="text" maxlength="20" placeholder="例如：波段小李、TomQuant"
+                     class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium focus:theme-border outline-none">
+            </div>
 
-            <input v-model="wechatForm.refCode" type="text" placeholder="邀请码（选填，立领更多权益）"
-                   class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono uppercase text-center focus:theme-border outline-none">
+            <div>
+              <label class="text-[11px] font-bold text-slate-600 block mb-1">公众号口令</label>
+              <input v-model="wechatForm.verifyCode" type="text" maxlength="12" placeholder="公众号回复的口令（如 bofutz）"
+                     class="w-full px-3 py-2 border border-slate-200 rounded-lg font-mono text-sm uppercase text-center tracking-widest focus:theme-border outline-none">
+            </div>
+
+            <div>
+              <input v-model="wechatForm.refCode" type="text" placeholder="邀请码（选填，立领更多权益）"
+                     class="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono uppercase text-center focus:theme-border outline-none">
+            </div>
           </div>
 
-          <button type="button" @click="submitWechatLogin" :disabled="loading || !wechatForm.verifyCode"
+          <button type="button" @click="submitWechatLogin" :disabled="loading || !wechatForm.nickname || !wechatForm.verifyCode"
                   class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm disabled:opacity-50 hover:opacity-90">
-            {{ loading ? '校验中...' : '确认登录 / 自动注册' }}
-          </button>
-        </div>
-
-        <!-- 传统账号密码登录（备用） -->
-        <div v-else class="p-6 space-y-3.5">
-          <input v-model="pwdForm.username" type="text" placeholder="注册账号"
-                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-          <input v-model="pwdForm.password" type="password" placeholder="登录密码"
-                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-
-          <button type="button" @click="submitPwdLogin" :disabled="loading"
-                  class="w-full theme-bg text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-50 hover:opacity-90 flex justify-center items-center">
-            {{ loading ? '登录中...' : '立即登录' }}
+            {{ loading ? '进入中...' : '确认进入系统' }}
           </button>
         </div>
       </div>
