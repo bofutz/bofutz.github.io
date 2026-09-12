@@ -1,11 +1,12 @@
 /* ========================= FILE: .\js\components\common\AuthModal.js ========================= */
 
 /**
- * 波幅探长 - 纯微信免密直登专属弹窗（无冗余版）
+ * 波幅探长 - 纯微信免密直登专属弹窗（主动拉取二维码防白板版）
  * js/components/common/AuthModal.js
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
+import { request } from "../../api/http.js"; // 【新增】引入底层请求，用于主动拉取配置
 
 const { reactive, computed, onMounted, watch, ref } = Vue;
 
@@ -15,6 +16,7 @@ export default {
   name: "AuthModal",
   setup() {
     const loading = ref(false);
+    const dynamicQr = ref(""); // 【新增】主动从接口拉取到的二维码
 
     const wechatForm = reactive({
       verifyCode: "bofutz",
@@ -24,13 +26,24 @@ export default {
 
     const settings = computed(() => store.state.publicSettings || {});
 
-    // 公众号关注二维码直链
+    // 【新增】主动去后端拉取最新配置，兼容所有旧版二维码字段名
+    const fetchQrDirectly = async () => {
+      try {
+        const res = await request("/api/public-settings");
+        const d = res.data || res || {};
+        // 兼容后台可能存在的各种二维码字段
+        dynamicQr.value = d.gzh_qr_url || d.wechat_qr_url || d.tip_wechat_qr_url || "";
+      } catch (e) {
+        console.warn("二维码配置拉取失败", e);
+      }
+    };
+
+    // 最终展示的二维码直链：优先用刚拉到的，兜底用 store 里的
     const gzhQrCode = computed(() => {
-      const u = settings.value.gzh_qr_url || settings.value.wechat_qr_url || "";
+      const u = dynamicQr.value || settings.value.gzh_qr_url || settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "";
       return String(u).trim();
     });
 
-    // 自动抓取 URL 中的邀请码 (?ref=BOFUTZ-001)
     const extractRefFromUrl = () => {
       try {
         const query = window.location.search || window.location.hash.split("?")[1];
@@ -107,6 +120,7 @@ export default {
     onMounted(() => {
       extractRefFromUrl();
       loadLocalNickname();
+      fetchQrDirectly(); // 挂载时强制拉一次
     });
 
     watch(
@@ -115,6 +129,7 @@ export default {
         if (visible) {
           extractRefFromUrl();
           loadLocalNickname();
+          fetchQrDirectly(); // 【关键修复】每次弹窗打开都强制拉取一次，防止白板
           if (!wechatForm.verifyCode) wechatForm.verifyCode = "bofutz";
         }
       }
@@ -148,11 +163,11 @@ export default {
           </div>
 
           <div class="flex flex-col items-center">
-            <div class="w-36 h-36 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-1.5 flex items-center justify-center">
-              <img v-if="gzhQrCode" :src="gzhQrCode" class="w-full h-full object-contain rounded-lg" alt="公众号二维码">
-              <div v-else class="text-xs text-slate-400 text-center">
-                <i class="fa-solid fa-qrcode text-2xl mb-1 text-slate-300"></i>
-                <p>请在后台配置公众号二维码</p>
+            <div class="w-36 h-36 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-1.5 flex items-center justify-center relative">
+              <img v-if="gzhQrCode" :src="gzhQrCode" class="w-full h-full object-contain rounded-lg relative z-10" alt="公众号二维码">
+              <div v-else class="text-xs text-slate-400 text-center absolute inset-0 flex flex-col items-center justify-center">
+                <i class="fa-solid fa-spinner animate-spin text-2xl mb-1 text-slate-300"></i>
+                <p>拉取配置中...</p>
               </div>
             </div>
             <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
