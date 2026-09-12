@@ -1,11 +1,10 @@
 /* ========================= FILE: .\js\components\index\Dashboard.js ========================= */
 
 /**
- * 波幅探长 - 数据看板（整合版 + 拦截弹窗修复）
- * - 通用表：免费 TOP3 + VIP 全量
- * - 数据与图表：原采集日映射（同一列同一日期，不跨周混填）
- * - 列弹匣轮转：最新采集列在最右；手机全列可滑，默认滚到最新
- * - 拦截引导：高转化 VIP 卡片，无缝唤起微信免密注册/登录
+ * 波幅探长 - 数据看板（画廊翻页完整还原 + 微信免密转化增强版）
+ * 1. 恢复原版 Viewer.js 当前页画廊：支持无缝左右翻页浏览所有可看标的，无需跳出页面
+ * 2. 完美整合非 VIP 专属卡片拦截与一键唤醒微信注册/登录
+ * 3. 完整保留收藏、拖拽排序、弹匣列轮转、打赏等全部原有功能
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -119,6 +118,28 @@ export default {
       return am + "/" + pm + "|" + day;
     };
 
+    const chartDateTitle = (dateStr) => {
+      const cn = formatDateCN(dateStr);
+      return cn ? cn + "图表" : "图表";
+    };
+    const dataDateTitle = (dateStr, kind = "") => {
+      const cn = formatDateCN(dateStr);
+      return cn ? (kind ? cn + kind : cn) : kind || "";
+    };
+    const weekDataTitle = (item) => {
+      if (!item || !item.week_status) return "";
+      const cn = formatDateCN(item.week_status_date);
+      return cn ? cn + "周线" : "周线";
+    };
+    const dailyChartTitle = (etfCode, colDate) => {
+      const d = chartUpdateDay(etfCode) || globalChartDay.value || colDate;
+      return chartDateTitle(d);
+    };
+    const weekChartTitle = () => {
+      const d = weeklyChartDay.value;
+      return d && isValidDate(d) ? chartDateTitle(d) : "周线图表";
+    };
+
     const cellPrimaryStatus = (item) => {
       if (!item) return null;
       if (item.day_status && item.day_status !== "-" && item.day_status !== "--") return item.day_status;
@@ -195,6 +216,17 @@ export default {
         if (wd !== 0 && wd !== 6) return day;
       }
       return bjYmd(Date.now());
+    };
+
+    const resolveChartEntry = (code) => {
+      if (code == null) return null;
+      const rawCode = String(code);
+      const key6 = rawCode.replace(/\D/g, "").slice(-6) || rawCode;
+      const map = chartsMap.value || {};
+      const raw = map[key6] || map[rawCode] || map[code];
+      if (!raw) return null;
+      if (typeof raw === "string") return { url: raw, updated_at: null };
+      return { url: raw.chart_url || raw.url || "", updated_at: raw.updated_at || raw.last_modified || null };
     };
 
     const chartUpdateDay = (_code) => globalChartDay.value || null;
@@ -375,7 +407,7 @@ export default {
       });
 
       let items = Object.values(etfMap);
-      const hasStatus = (s) => !!(s && s !== "-" && s !== "--");
+      const hasStatus = (s) => !(!s || s === "-" || s === "--");
       const absDayVal = (row, dayIdx) => {
         if (dayIdx == null || dayIdx < 0) return -9999;
         const s = row.days?.[dayIdx]?.day_status;
@@ -440,12 +472,10 @@ export default {
       vipModal.visible = true;
     };
 
-    // 修复核心：带异步微任务的连贯唤醒，彻底防止遮罩冲突导致未弹起
     const handleRegisterAction = async () => {
       vipModal.visible = false;
       store.state.menuOpen = false;
       store.state.userMenuOpen = false;
-
       await nextTick();
       store.state.authMode = "register";
       store.state.authModalVisible = true;
@@ -456,24 +486,237 @@ export default {
       window.location.hash = "#/plan";
     };
 
+    // ============================================================
+    // 核心还原：Viewer.js 多图连续画廊与浮动翻页导航
+    // ============================================================
+    const probeImage = (url) =>
+      new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
+      });
+
+    const ensureViewerNavStyle = () => {
+      if (document.getElementById("bofutz-viewer-nav-style")) return;
+      const style = document.createElement("style");
+      style.id = "bofutz-viewer-nav-style";
+      style.textContent = `
+        .bofutz-viewer-nav {
+          position: absolute; top: 50%; transform: translateY(-50%); z-index: 30;
+          width: 52px; height: 52px; border-radius: 999px;
+          border: 2.5px solid rgba(255,255,255,0.92);
+          background: rgba(15, 23, 42, 0.45); color: #fff;
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 6px 20px rgba(0,0,0,.28); -webkit-tap-highlight-color: transparent;
+          user-select: none; backdrop-filter: blur(6px);
+          transition: background .15s ease, transform .15s ease, border-color .15s ease;
+          padding: 0;
+        }
+        .bofutz-viewer-nav:hover { background: rgba(15, 23, 42, 0.7); border-color: #fff; }
+        .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.94); }
+        .bofutz-viewer-nav svg {
+          width: 22px; height: 22px; display: block; fill: none;
+          stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+        }
+        .bofutz-viewer-prev { left: 16px; }
+        .bofutz-viewer-next { right: 16px; }
+        @media (max-width: 640px) {
+          .bofutz-viewer-nav { width: 46px; height: 46px; }
+          .bofutz-viewer-nav svg { width: 20px; height: 20px; }
+          .bofutz-viewer-prev { left: 8px; }
+          .bofutz-viewer-next { right: 8px; }
+        }
+      `;
+      document.head.appendChild(style);
+    };
+
+    const showViewerWithMultiImages = (imgList, initialIndex = 0) => {
+      if (!imgList || !imgList.length) return;
+      const container = document.createElement("div");
+      container.style.display = "none";
+      imgList.forEach((item) => {
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.title;
+        container.appendChild(img);
+      });
+      document.body.appendChild(container);
+      const isMulti = imgList.length > 1;
+      if (window.Viewer) {
+        ensureViewerNavStyle();
+        let navPrev = null, navNext = null;
+        const clearNav = () => {
+          try {
+            navPrev && navPrev.remove();
+            navNext && navNext.remove();
+          } catch (_) {}
+          navPrev = navNext = null;
+        };
+        const viewer = new window.Viewer(container, {
+          hidden: () => {
+            clearNav();
+            viewer.destroy();
+            container.remove();
+          },
+          title: true,
+          navbar: isMulti,
+          tooltip: true,
+          movable: true,
+          zoomable: true,
+          rotatable: false,
+          scalable: false,
+          transition: true,
+          keyboard: isMulti,
+          loop: isMulti,
+          initialViewIndex: Math.min(initialIndex, imgList.length - 1),
+          toolbar: {
+            zoomIn: 1, zoomOut: 1, oneToOne: 1, reset: 1,
+            prev: isMulti ? 1 : 0, play: 0, next: isMulti ? 1 : 0,
+            rotateLeft: 0, rotateRight: 0, flipHorizontal: 0, flipVertical: 0,
+          },
+          ready() {
+            if (!isMulti) return;
+            const root = (viewer && viewer.viewer) || document.querySelector(".viewer-container");
+            if (!root) return;
+            if (getComputedStyle(root).position === "static") root.style.position = "relative";
+            clearNav();
+            navPrev = document.createElement("button");
+            navPrev.type = "button";
+            navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
+            navPrev.setAttribute("aria-label", "上一张");
+            navPrev.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="15 6 9 12 15 18"></polyline></svg>';
+            navPrev.addEventListener("click", (e) => {
+              e.preventDefault(); e.stopPropagation();
+              try { viewer.prev(true); } catch (_) {}
+            });
+            navNext = document.createElement("button");
+            navNext.type = "button";
+            navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
+            navNext.setAttribute("aria-label", "下一张");
+            navNext.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+            navNext.addEventListener("click", (e) => {
+              e.preventDefault(); e.stopPropagation();
+              try { viewer.next(true); } catch (_) {}
+            });
+            root.appendChild(navPrev);
+            root.appendChild(navNext);
+          },
+        });
+        viewer.show();
+      } else {
+        window.open(imgList[initialIndex]?.url, "_blank");
+      }
+    };
+
+    const viewableBoardItems = () => {
+      const list = processedData.value?.list || [];
+      return list.filter((row) => row && canViewChart(row.etf_code));
+    };
+
+    const probeImagesBatch = async (candidates, concurrency = 12) => {
+      const out = [];
+      let i = 0;
+      const workers = Array.from({ length: Math.min(concurrency, Math.max(1, candidates.length)) }, async () => {
+        while (i < candidates.length) {
+          const idx = i++;
+          const c = candidates[idx];
+          if (c && c.url && (await probeImage(c.url))) out.push({ ...c, _idx: idx });
+        }
+      });
+      await Promise.all(workers);
+      out.sort((a, b) => a._idx - b._idx);
+      return out.map(({ _idx, ...rest }) => rest);
+    };
+
+    // 日线/半日线画廊打开与连续翻页
     const openDailyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
         triggerVipModal(item, "日线/半日线");
         return;
       }
-      const code = String(item.etf_code || "").replace(/\D/g, "").slice(-6) || item.etf_code;
-      const url = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_daily.png`;
-      window.open(url, "_blank");
+      const rows = viewableBoardItems();
+      if (!rows.length) {
+        store.showToast("暂无可查看的图表", "error");
+        return;
+      }
+      store.showToast("正在加载画廊图库…");
+      const dayLabel = formatDateCN(chartUpdateDay(item.etf_code) || globalChartDay.value) || "";
+      const candidates = [];
+      for (const row of rows) {
+        const code = String(row.etf_code || "").replace(/\D/g, "").slice(-6) || row.etf_code;
+        const name = formatEtfName(row.etf_name) || code;
+        const entry = resolveChartEntry(code);
+        const r2Daily = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_daily.png`;
+        const r2Half = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_half_day.png`;
+        const dailyUrl = (entry && entry.url) || r2Daily;
+        const rowDayLabel = formatDateCN(chartUpdateDay(code) || globalChartDay.value) || dayLabel;
+        candidates.push({
+          title: `${name} (${code}) ${rowDayLabel}日线`.replace(/\s+/g, " ").trim(),
+          url: dailyUrl,
+          code,
+          kind: "daily",
+        });
+        if (entry && entry.url && entry.url !== r2Daily) {
+          candidates.push({
+            title: `${name} (${code}) ${rowDayLabel}日线(R2)`.replace(/\s+/g, " ").trim(),
+            url: r2Daily,
+            code,
+            kind: "daily_r2",
+          });
+        }
+        candidates.push({
+          title: `${name} (${code}) ${rowDayLabel}半日线`.replace(/\s+/g, " ").trim(),
+          url: r2Half,
+          code,
+          kind: "half_day",
+        });
+      }
+      const images = await probeImagesBatch(candidates, 12);
+      if (!images.length) {
+        store.showToast("暂无可用日线/半日线图表", "error");
+        return;
+      }
+      const clickCode = String(item.etf_code || "").replace(/\D/g, "").slice(-6) || item.etf_code;
+      let idx = images.findIndex((g) => g.code === clickCode && g.kind === "daily");
+      if (idx < 0) idx = images.findIndex((g) => g.code === clickCode);
+      if (idx < 0) idx = 0;
+      showViewerWithMultiImages(images, idx);
     };
 
+    // 周线画廊打开与连续翻页
     const openWeeklyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
         triggerVipModal(item, "周线");
         return;
       }
-      const code = String(item.etf_code || "").replace(/\D/g, "").slice(-6) || item.etf_code;
-      const url = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_weekly.png`;
-      window.open(url, "_blank");
+      const rows = viewableBoardItems();
+      if (!rows.length) {
+        store.showToast("暂无可查看的图表", "error");
+        return;
+      }
+      store.showToast("正在加载周线画廊…");
+      const candidates = [];
+      for (const row of rows) {
+        const code = String(row.etf_code || "").replace(/\D/g, "").slice(-6) || row.etf_code;
+        const name = formatEtfName(row.etf_name) || code;
+        const rowDayLabel = formatDateCN(weeklyChartDay.value || globalChartDay.value || row.week_status_date) || "";
+        candidates.push({
+          title: `${name} (${code}) ${rowDayLabel}周线`.replace(/\s+/g, " ").trim(),
+          url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_weekly.png`,
+          code,
+          kind: "weekly",
+        });
+      }
+      const images = await probeImagesBatch(candidates, 12);
+      if (!images.length) {
+        store.showToast("暂无可用周线图表", "error");
+        return;
+      }
+      const clickCode = String(item.etf_code || "").replace(/\D/g, "").slice(-6) || item.etf_code;
+      let idx = images.findIndex((g) => g.code === clickCode);
+      if (idx < 0) idx = 0;
+      showViewerWithMultiImages(images, idx);
     };
 
     const isFavorite = (code) => favCodes.value.includes(String(code).replace(/\D/g, "").slice(-6));
@@ -533,6 +776,8 @@ export default {
       visibleCols,
       formatEtfName,
       formatDayCell,
+      dailyChartTitle,
+      weekChartTitle,
       showDailyChartIcon,
       openDailyChartViewer,
       openWeeklyChartViewer,
@@ -604,6 +849,7 @@ export default {
                         <i v-if="showDailyChartIcon(item.etf_code, col.dayIdx)"
                            class="fa-regular fa-image cursor-pointer text-sm sm:text-xs shrink-0 p-1"
                            :class="processedData.freeTop3Codes.includes(item.etf_code) || store.isVip ? 'text-slate-400 hover:text-blue-500' : 'text-amber-500 hover:text-amber-600'"
+                           :title="dailyChartTitle(item.etf_code, processedData.weekDays[col.dayIdx])"
                            @click.stop="openDailyChartViewer(item)"></i>
                       </div>
                     </template>
@@ -612,6 +858,7 @@ export default {
                         <span class="text-[10px] sm:text-sm font-mono">{{ item.week_status || '-' }}</span>
                         <i class="fa-regular fa-image cursor-pointer text-sm sm:text-xs shrink-0 p-1"
                            :class="processedData.freeTop3Codes.includes(item.etf_code) || store.isVip ? 'text-slate-400 hover:text-blue-500' : 'text-amber-500 hover:text-amber-600'"
+                           :title="weekChartTitle()"
                            @click.stop="openWeeklyChartViewer(item)"></i>
                       </div>
                     </template>
@@ -623,7 +870,7 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center">
-          标有「限免」的标的向所有访客开放全周期图表；其余标的为 VIP 专属。
+          标有「限免」的标的向所有访客开放全周期图表；点击图表可在当前页左右无缝翻页浏览全部标的通道图。
         </p>
       </template>
 
