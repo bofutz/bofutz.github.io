@@ -13,7 +13,7 @@ const { reactive, computed, onMounted, watch, ref } = Vue;
 const STORAGE_NICKNAME_KEY = "bofutz_last_nickname";
 
 // 【关键保底】如果你后台拿不到，直接使用这个固定的公众号二维码链接（请把这里换成你的 R2 或图床二维码直链）
-const FALLBACK_QR_URL = "https://bofutz.github.io/gzh_qr.jpg";
+const FALLBACK_QR_URL = "./gzh_qr.jpg";
 
 export default {
   name: "AuthModal",
