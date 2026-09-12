@@ -175,8 +175,8 @@ export default {
             </div>
             <p class="text-xs text-slate-500 mt-2 font-medium leading-relaxed">
               1. 微信扫一扫上方二维码，关注公众号<br>
-              2. 打开“私信”，点击左下方点击输入框<br>
-              3. 回复数字<strong class="theme-text text-sm">666</strong>或「<strong>登录</strong>」获取口令
+              2. 打开“私信”，点击左下方键盘图标<br>
+              3. 输入数字<strong class="theme-text text-sm">666</strong>或「<strong>登录</strong>」/「<strong>注册</strong>」获取口令
             </p>
           </div>
 
