@@ -12,7 +12,6 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.css">
 
   <style>
-    /* 全局品牌主题色规范 */
     :root {
       --theme-color: #4da6a0;
       --theme-hover: #3d8c87;
@@ -21,13 +20,11 @@
     .theme-text { color: var(--theme-color); }
     .theme-border { border-color: var(--theme-color); }
     
-    /* 弹窗半透明遮罩 */
     .modal-overlay {
       background-color: rgba(15, 23, 42, 0.65);
       backdrop-filter: blur(4px);
     }
 
-    /* 看板表格滚动条与移动端冻结列适配 */
     .custom-scrollbar::-webkit-scrollbar {
       height: 6px;
       width: 6px;
@@ -78,12 +75,12 @@
     <!-- 全局转化·吸睛促单悬浮挂件 -->
     <floating-vip-badge></floating-vip-badge>
 
-    <!-- 全局消息提示 (Toast) -->
-    <div v-if="store.toast.visible" 
+    <!-- 全局消息提示 (安全读取) -->
+    <div v-if="toastVisible" 
          class="fixed top-5 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-xl shadow-xl text-sm font-bold flex items-center gap-2 transition-all"
-         :class="store.toast.type === 'error' ? 'bg-red-500 text-white shadow-red-500/20' : 'bg-slate-900 text-white shadow-slate-900/20'">
-      <i :class="store.toast.type === 'error' ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-circle-check text-emerald-400'"></i>
-      <span>{{ store.toast.message }}</span>
+         :class="toastType === 'error' ? 'bg-red-500 text-white shadow-red-500/20' : 'bg-slate-900 text-white shadow-slate-900/20'">
+      <i :class="toastType === 'error' ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-circle-check text-emerald-400'"></i>
+      <span>{{ toastMessage }}</span>
     </div>
   </div>
 
@@ -139,16 +136,34 @@
           return routes[currentRoute.value] || Dashboard;
         });
 
+        // 兼容不同的 toast 结构，彻底防止 undefined 报错
+        const toastVisible = computed(() => {
+          return !!(store.state?.toast?.visible || store.toastVisible || store.state?.toastVisible);
+        });
+        const toastType = computed(() => {
+          return store.state?.toast?.type || store.toastType || store.state?.toastType || "info";
+        });
+        const toastMessage = computed(() => {
+          return store.state?.toast?.message || store.toastMessage || store.state?.toastMessage || "";
+        });
+
         onMounted(async () => {
           window.addEventListener("hashchange", updateRoute);
-          // 初始化本地会话与全局配置
-          await store.initSession();
-          await store.fetchPublicSettings();
+          
+          // 安全初始化公共设置（如存在则拉取）
+          if (typeof store.fetchPublicSettings === "function") {
+            try {
+              await store.fetchPublicSettings();
+            } catch (_) {}
+          }
         });
 
         return {
           store: store.state,
           currentView,
+          toastVisible,
+          toastType,
+          toastMessage,
         };
       },
     });
