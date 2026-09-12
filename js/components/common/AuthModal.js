@@ -1,22 +1,25 @@
 /* ========================= FILE: .\js\components\common\AuthModal.js ========================= */
 
 /**
- * 波幅探长 - 纯微信免密直登专属弹窗（主动拉取二维码防白板版）
+ * 波幅探长 - 纯微信免密直登专属弹窗（彻底杜绝加载卡死版）
  * js/components/common/AuthModal.js
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
-import { request } from "../../api/http.js"; // 【新增】引入底层请求，用于主动拉取配置
+import { request } from "../../api/http.js";
 
 const { reactive, computed, onMounted, watch, ref } = Vue;
 
 const STORAGE_NICKNAME_KEY = "bofutz_last_nickname";
 
+// 【关键保底】如果你后台拿不到，直接使用这个固定的公众号二维码链接（请把这里换成你的 R2 或图床二维码直链）
+const FALLBACK_QR_URL = "https://pub-973330e118204686a625fe51431d4336.r2.dev/gzh_qr.png";
+
 export default {
   name: "AuthModal",
   setup() {
     const loading = ref(false);
-    const dynamicQr = ref(""); // 【新增】主动从接口拉取到的二维码
+    const dynamicQr = ref("");
 
     const wechatForm = reactive({
       verifyCode: "bofutz",
@@ -26,22 +29,26 @@ export default {
 
     const settings = computed(() => store.state.publicSettings || {});
 
-    // 【新增】主动去后端拉取最新配置，兼容所有旧版二维码字段名
+    // 主动拉取配置，全面兼容各种可能的字段嵌套
     const fetchQrDirectly = async () => {
       try {
         const res = await request("/api/public-settings");
-        const d = res.data || res || {};
-        // 兼容后台可能存在的各种二维码字段
-        dynamicQr.value = d.gzh_qr_url || d.wechat_qr_url || d.tip_wechat_qr_url || "";
+        // 兼容 res.settings, res.data, res 本身
+        const d = res?.settings || res?.data || res || {};
+        const url = d.gzh_qr_url || d.wechat_qr_url || d.tip_wechat_qr_url || "";
+        if (url && typeof url === "string") {
+          dynamicQr.value = url.trim();
+        }
       } catch (e) {
-        console.warn("二维码配置拉取失败", e);
+        console.warn("二维码拉取使用兜底配置", e);
       }
     };
 
-    // 最终展示的二维码直链：优先用刚拉到的，兜底用 store 里的
+    // 最终展示的二维码：后端拉取 > store 缓存 > 静态保底 URL
     const gzhQrCode = computed(() => {
-      const u = dynamicQr.value || settings.value.gzh_qr_url || settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "";
-      return String(u).trim();
+      const s = settings.value || {};
+      const target = dynamicQr.value || s.gzh_qr_url || s.wechat_qr_url || s.tip_wechat_qr_url || FALLBACK_QR_URL;
+      return String(target || "").trim();
     });
 
     const extractRefFromUrl = () => {
@@ -120,7 +127,7 @@ export default {
     onMounted(() => {
       extractRefFromUrl();
       loadLocalNickname();
-      fetchQrDirectly(); // 挂载时强制拉一次
+      fetchQrDirectly();
     });
 
     watch(
@@ -129,7 +136,7 @@ export default {
         if (visible) {
           extractRefFromUrl();
           loadLocalNickname();
-          fetchQrDirectly(); // 【关键修复】每次弹窗打开都强制拉取一次，防止白板
+          fetchQrDirectly();
           if (!wechatForm.verifyCode) wechatForm.verifyCode = "bofutz";
         }
       }
@@ -163,12 +170,9 @@ export default {
           </div>
 
           <div class="flex flex-col items-center">
-            <div class="w-36 h-36 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-1.5 flex items-center justify-center relative">
-              <img v-if="gzhQrCode" :src="gzhQrCode" class="w-full h-full object-contain rounded-lg relative z-10" alt="公众号二维码">
-              <div v-else class="text-xs text-slate-400 text-center absolute inset-0 flex flex-col items-center justify-center">
-                <i class="fa-solid fa-spinner animate-spin text-2xl mb-1 text-slate-300"></i>
-                <p>拉取配置中...</p>
-              </div>
+            <div class="w-36 h-36 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-1.5 flex items-center justify-center relative overflow-hidden">
+              <img :src="gzhQrCode" class="w-full h-full object-contain rounded-lg relative z-10" alt="公众号二维码"
+                   @error="$event.target.src='https://pub-973330e118204686a625fe51431d4336.r2.dev/gzh_qr.png'">
             </div>
             <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
               微信扫一扫关注公众号，回复【<strong class="theme-text">666</strong>】或【<strong class="theme-text">登录</strong>】获取口令
