@@ -181,7 +181,7 @@ export default {
           </div>
 
           <div class="space-y-2">
-            <input v-model="wechatForm.verifyCode" type="text" maxlength="12" placeholder="在此输入口令（如 bofutz）"
+            <input v-model="wechatForm.verifyCode" type="text" maxlength="12" placeholder="在此输入口令"
                    class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-center font-mono text-base font-bold tracking-widest focus:theme-border outline-none">
 
             <input v-model="wechatForm.refCode" type="text" placeholder="邀请码（选填，立领更多权益）"
