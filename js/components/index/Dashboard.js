@@ -1,8 +1,11 @@
 /* ========================= FILE: .\js\components\index\Dashboard.js ========================= */
+
 /**
- * 波幅探长 - 数据看板（高转化变现优化版）
- * 1. 优化非 VIP 图表拦截体验：价值引导弹窗，注册送 3 天
- * 2. 标的打标：免费标的高亮，VIP 标的清晰指引
+ * 波幅探长 - 数据看板（整合版 + 拦截弹窗修复）
+ * - 通用表：免费 TOP3 + VIP 全量
+ * - 数据与图表：原采集日映射（同一列同一日期，不跨周混填）
+ * - 列弹匣轮转：最新采集列在最右；手机全列可滑，默认滚到最新
+ * - 拦截引导：高转化 VIP 卡片，无缝唤起微信免密注册/登录
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -60,7 +63,7 @@ export default {
     const tipChannel = ref("wechat");
     const tableScrollEl = ref(null);
 
-    // 核心优化：高转化率拦截弹窗状态
+    // 价值拦截卡片状态
     const vipModal = reactive({
       visible: false,
       etfCode: "",
@@ -116,27 +119,6 @@ export default {
       return am + "/" + pm + "|" + day;
     };
 
-    const chartDateTitle = (dateStr) => {
-      const cn = formatDateCN(dateStr);
-      return cn ? cn + "图表" : "图表";
-    };
-    const dataDateTitle = (dateStr, kind = "") => {
-      const cn = formatDateCN(dateStr);
-      return cn ? (kind ? cn + kind : cn) : kind || "";
-    };
-    const weekDataTitle = (item) => {
-      if (!item || !item.week_status) return "";
-      const cn = formatDateCN(item.week_status_date);
-      return cn ? cn + "周线" : "周线";
-    };
-    const dailyChartTitle = (etfCode, colDate) => {
-      const d = chartUpdateDay(etfCode) || globalChartDay.value || colDate;
-      return chartDateTitle(d);
-    };
-    const weekChartTitle = () => {
-      const d = weeklyChartDay.value;
-      return d && isValidDate(d) ? chartDateTitle(d) : "周线图表";
-    };
     const cellPrimaryStatus = (item) => {
       if (!item) return null;
       if (item.day_status && item.day_status !== "-" && item.day_status !== "--") return item.day_status;
@@ -213,17 +195,6 @@ export default {
         if (wd !== 0 && wd !== 6) return day;
       }
       return bjYmd(Date.now());
-    };
-
-    const resolveChartEntry = (code) => {
-      if (code == null) return null;
-      const rawCode = String(code);
-      const key6 = rawCode.replace(/\D/g, "").slice(-6) || rawCode;
-      const map = chartsMap.value || {};
-      const raw = map[key6] || map[rawCode] || map[code];
-      if (!raw) return null;
-      if (typeof raw === "string") return { url: raw, updated_at: null };
-      return { url: raw.chart_url || raw.url || "", updated_at: raw.updated_at || raw.last_modified || null };
     };
 
     const chartUpdateDay = (_code) => globalChartDay.value || null;
@@ -321,7 +292,7 @@ export default {
       }
     };
 
-    const quoteOk = (s) => !!(s && s !== "-" && s !== "--" && s !== "None" && s !== "null");
+    const quoteOk = (s) => !(!s || s === "-" || s === "--" || s === "None" || s === "null");
     const itemHasDailyQuote = (item) => item && (quoteOk(item.day_status) || quoteOk(item.am_status) || quoteOk(item.pm_status));
 
     const buildRecentTradingColDates = () => {
@@ -352,7 +323,7 @@ export default {
     };
 
     const processedData = computed(() => {
-      const empty = { list: [], freeTop3Codes: [], weekDays: [], weekStatusMonday: "", rankBy: "daily", rankDailyIdx: -1 };
+      const empty = { list: [], freeTop3Codes: [], weekDays: [], displayCols: [], latestColKey: "d4" };
       const colDates = buildRecentTradingColDates();
       const weekDays = colDates[0] ? colDates : (latestMonday.value ? getWeekDays(latestMonday.value) : []);
       if (!weekDays.length) return empty;
@@ -369,7 +340,6 @@ export default {
             days: [null, null, null, null, null],
             week_status: null,
             week_status_date: null,
-            week_status_from: null,
           };
         } else if (name && !etfMap[code].etf_name) {
           etfMap[code].etf_name = name;
@@ -401,7 +371,6 @@ export default {
         if (cur) {
           row.week_status = cur.status;
           row.week_status_date = closedWeekFriday || cur.date;
-          row.week_status_from = "closed";
         }
       });
 
@@ -412,7 +381,6 @@ export default {
         const s = row.days?.[dayIdx]?.day_status;
         return hasStatus(s) ? Math.abs(getStatusVal(s)) : -9999;
       };
-      const absWeekVal = (row) => (hasStatus(row.week_status) ? Math.abs(getStatusVal(row.week_status)) : -9999);
 
       let dailyColIdx = -1, dailyColDate = "";
       for (let idx = 0; idx < 5; idx++) {
@@ -423,7 +391,6 @@ export default {
         }
       }
 
-      // 免费 Top 3
       const freeTopN = 3;
       let freeTop3Codes = [];
       if (dailyColIdx >= 0) {
@@ -434,7 +401,6 @@ export default {
           .map((i) => i.etf_code);
       }
 
-      // 弹匣列
       let pivotIdx = dailyColIdx >= 0 ? dailyColIdx : 4;
       const n = BASE_COLS.length;
       const displayCols = [];
@@ -442,7 +408,6 @@ export default {
         displayCols.push(BASE_COLS[(pivotIdx + i) % n]);
       }
 
-      // 排序
       const freeSet = new Set(freeTop3Codes.map(String));
       items.sort((a, b) => {
         const ca = String(a.etf_code), cb = String(b.etf_code);
@@ -465,10 +430,9 @@ export default {
 
     const canViewChart = (etfCode) => {
       if (store.state.isVip) return true;
-      return processedData.value.freeTop3Codes.includes(etfCode);
+      return (processedData.value.freeTop3Codes || []).includes(etfCode);
     };
 
-    // 拦截弹窗动作：导流注册或升级
     const triggerVipModal = (item, period = "日线/半日线") => {
       vipModal.etfCode = item.etf_code;
       vipModal.etfName = formatEtfName(item.etf_name);
@@ -476,8 +440,13 @@ export default {
       vipModal.visible = true;
     };
 
-    const handleRegisterAction = () => {
+    // 修复核心：带异步微任务的连贯唤醒，彻底防止遮罩冲突导致未弹起
+    const handleRegisterAction = async () => {
       vipModal.visible = false;
+      store.state.menuOpen = false;
+      store.state.userMenuOpen = false;
+
+      await nextTick();
       store.state.authMode = "register";
       store.state.authModalVisible = true;
     };
@@ -564,10 +533,6 @@ export default {
       visibleCols,
       formatEtfName,
       formatDayCell,
-      dataDateTitle,
-      dailyChartTitle,
-      weekDataTitle,
-      weekChartTitle,
       showDailyChartIcon,
       openDailyChartViewer,
       openWeeklyChartViewer,
@@ -662,7 +627,7 @@ export default {
         </p>
       </template>
 
-      <!-- ===== 变现价值拦截弹窗 ===== -->
+      <!-- ===== 变现价值拦截卡片 ===== -->
       <div v-if="vipModal.visible" class="fixed inset-0 modal-overlay z-[120] flex items-center justify-center p-4" @click.self="vipModal.visible=false">
         <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 text-center">
           <div class="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-xl">
@@ -681,13 +646,13 @@ export default {
             <div>● 每月票选监控标的自选入池投票权</div>
           </div>
           <div class="space-y-2 pt-2">
-            <button v-if="!store.isLoggedIn" @click="handleRegisterAction" class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">
+            <button v-if="!store.isLoggedIn" type="button" @click="handleRegisterAction" class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">
               立即免费注册（立赠 3 天 VIP 体验）
             </button>
-            <button v-else @click="handleUpgradeAction" class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">
+            <button v-else type="button" @click="handleUpgradeAction" class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">
               升级开通监控 VIP
             </button>
-            <button @click="vipModal.visible=false" class="w-full py-1.5 text-xs text-slate-400">
+            <button type="button" @click="vipModal.visible=false" class="w-full py-1.5 text-xs text-slate-400">
               暂不解锁，继续浏览
             </button>
           </div>
