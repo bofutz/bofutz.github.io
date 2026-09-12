@@ -1,10 +1,8 @@
 /* ========================= FILE: .\js\components\index\Dashboard.js ========================= */
 
 /**
- * 波幅探长 - 数据看板（画廊翻页完整还原 + 微信免密转化增强版）
- * 1. 恢复原版 Viewer.js 当前页画廊：支持无缝左右翻页浏览所有可看标的，无需跳出页面
- * 2. 完美整合非 VIP 专属卡片拦截与一键唤醒微信注册/登录
- * 3. 完整保留收藏、拖拽排序、弹匣列轮转、打赏等全部原有功能
+ * 波幅探长 - 数据看板（画廊连续翻页 + 高转化拦截卡片）
+ * js/components/index/Dashboard.js
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -25,7 +23,7 @@ const dashboardPrefsApi = {
     }),
 };
 
-const { ref, reactive, computed, onMounted, nextTick, watch } = Vue;
+const { ref, reactive, computed, onMounted, nextTick } = Vue;
 
 function settingOn(val) {
   return val === "1" || val === 1 || val === true || val === "true";
@@ -50,19 +48,14 @@ export default {
     const weeklyChartDay = ref(null);
     const sharedList = ref([]);
     const favCodes = ref([]);
-    const userOrder = ref([]);
-    const dragCode = ref(null);
-    const prefsSaving = ref(false);
 
     const searchQuery = ref("");
     const sortColumn = ref(null);
     const sortOrder = ref("desc");
 
-    const tipVisible = ref(false);
-    const tipChannel = ref("wechat");
     const tableScrollEl = ref(null);
 
-    // 价值拦截卡片状态
+    // 高转化变现拦截卡片状态
     const vipModal = reactive({
       visible: false,
       etfCode: "",
@@ -80,20 +73,6 @@ export default {
     };
 
     const settings = computed(() => store.state.publicSettings || {});
-    const tipEnabled = computed(() => settingOn(settings.value.tip_enabled));
-
-    const isImageUrl = (url) => {
-      const u = String(url || "").trim();
-      return !!(u && /^https?:\/\//i.test(u) && /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u));
-    };
-    const tipWechatSrc = computed(() => {
-      const u = String(settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "").trim();
-      return isImageUrl(u) ? u : "";
-    });
-    const tipAlipaySrc = computed(() => {
-      const u = String(settings.value.alipay_qr_url || settings.value.tip_alipay_qr_url || "").trim();
-      return isImageUrl(u) ? u : "";
-    });
 
     const isValidDate = (d) => d && typeof d === "string" && /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(d.trim());
     const parseYMD = (s) => (isValidDate(s) ? s.trim().split(/[-/]/).map((v) => parseInt(v, 10)) : [0, 0, 0]);
@@ -121,15 +100,6 @@ export default {
     const chartDateTitle = (dateStr) => {
       const cn = formatDateCN(dateStr);
       return cn ? cn + "图表" : "图表";
-    };
-    const dataDateTitle = (dateStr, kind = "") => {
-      const cn = formatDateCN(dateStr);
-      return cn ? (kind ? cn + kind : cn) : kind || "";
-    };
-    const weekDataTitle = (item) => {
-      if (!item || !item.week_status) return "";
-      const cn = formatDateCN(item.week_status_date);
-      return cn ? cn + "周线" : "周线";
     };
     const dailyChartTitle = (etfCode, colDate) => {
       const d = chartUpdateDay(etfCode) || globalChartDay.value || colDate;
@@ -271,15 +241,6 @@ export default {
       }
       weeklyChartDay.value = latestTradingDayBj();
       return weeklyChartDay.value;
-    };
-
-    const handleSort = (column) => {
-      if (sortColumn.value === column) {
-        sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
-      } else {
-        sortColumn.value = column;
-        sortOrder.value = "desc";
-      }
     };
 
     const isBlankStatus = (s) => !s || s === "-" || s === "--" || s === "None" || s === "null";
@@ -477,7 +438,6 @@ export default {
       store.state.menuOpen = false;
       store.state.userMenuOpen = false;
       await nextTick();
-      store.state.authMode = "register";
       store.state.authModalVisible = true;
     };
 
@@ -487,7 +447,7 @@ export default {
     };
 
     // ============================================================
-    // 核心还原：Viewer.js 多图连续画廊与浮动翻页导航
+    // Viewer.js 多图连续画廊与浮动翻页导航
     // ============================================================
     const probeImage = (url) =>
       new Promise((resolve) => {
@@ -629,7 +589,6 @@ export default {
       return out.map(({ _idx, ...rest }) => rest);
     };
 
-    // 日线/半日线画廊打开与连续翻页
     const openDailyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
         triggerVipModal(item, "日线/半日线");
@@ -684,7 +643,6 @@ export default {
       showViewerWithMultiImages(images, idx);
     };
 
-    // 周线画廊打开与连续翻页
     const openWeeklyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
         triggerVipModal(item, "周线");
@@ -771,7 +729,6 @@ export default {
       searchQuery,
       sortColumn,
       sortOrder,
-      handleSort,
       processedData,
       visibleCols,
       formatEtfName,
@@ -786,11 +743,6 @@ export default {
       isFavorite,
       toggleFavorite,
       tableScrollEl,
-      tipEnabled,
-      tipVisible,
-      tipChannel,
-      tipWechatSrc,
-      tipAlipaySrc,
       settings,
       vipModal,
       handleRegisterAction,
@@ -874,33 +826,59 @@ export default {
         </p>
       </template>
 
-      <!-- ===== 变现价值拦截卡片 ===== -->
+      <!-- ===== 高转化·变现拦截转化弹窗 ===== -->
       <div v-if="vipModal.visible" class="fixed inset-0 modal-overlay z-[120] flex items-center justify-center p-4" @click.self="vipModal.visible=false">
-        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 text-center">
-          <div class="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-xl">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4 text-center relative overflow-hidden border border-amber-100">
+          <!-- 促销角标 -->
+          <div class="absolute top-0 right-0 bg-gradient-to-l from-red-500 to-amber-500 text-white text-[10px] font-extrabold px-3 py-1 rounded-bl-xl shadow-sm tracking-wider">
+            新春特惠·直降30%
+          </div>
+
+          <div class="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-xl ring-4 ring-amber-50">
             <i class="fa-solid fa-crown"></i>
           </div>
+
           <div>
-            <h3 class="text-lg font-bold text-slate-800">解锁【{{ vipModal.etfName }}】专属图表</h3>
-            <p class="text-xs text-slate-500 mt-1">代码: {{ vipModal.etfCode }} | 包含半日线与日线真实波幅通道</p>
+            <h3 class="text-base font-extrabold text-slate-800">解锁【{{ vipModal.etfName }}】多空通道</h3>
+            <p class="text-xs text-slate-400 mt-0.5">代码: {{ vipModal.etfCode }} · 含 11:30 半日线与日收盘图</p>
           </div>
-          <div class="bg-slate-50 rounded-xl p-3.5 text-xs text-slate-600 text-left space-y-1.5 border border-slate-100">
-            <div class="flex items-center gap-1.5 text-slate-700 font-bold">
-              <i class="fa-solid fa-circle-check text-emerald-500"></i> 会员尊享权益：
+
+          <!-- 核心权益与算账锚点 -->
+          <div class="bg-gradient-to-b from-slate-50 to-amber-50/30 rounded-xl p-3 text-xs text-slate-600 text-left space-y-1.5 border border-slate-100">
+            <div class="flex items-center justify-between text-slate-800 font-bold border-b border-slate-200/60 pb-1.5">
+              <span>开通会员立即解锁：</span>
+              <span class="text-red-500 font-extrabold">低至 0.6元/天</span>
             </div>
-            <div>● 50+ 只主流 ETF 多周期异动监控与图表完整访问</div>
-            <div>● 盘中半日线（11:30）异常收敛与突破抢先预警</div>
-            <div>● 每月票选监控标的自选入池投票权</div>
+            <div class="flex items-center gap-1.5 pt-0.5">
+              <i class="fa-solid fa-check text-emerald-500"></i>
+              <span>全市场 50+ 热门 ETF 日线/半日线真实波幅</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <i class="fa-solid fa-check text-emerald-500"></i>
+              <span>盘中 11:30 异常收敛突破优先提示</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <i class="fa-solid fa-check text-emerald-500"></i>
+              <span>专属客服工单与标的票选入池权</span>
+            </div>
           </div>
-          <div class="space-y-2 pt-2">
-            <button v-if="!store.isLoggedIn" type="button" @click="handleRegisterAction" class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">
-              立即免费注册（立赠 3 天 VIP 体验）
-            </button>
-            <button v-else type="button" @click="handleUpgradeAction" class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">
-              升级开通监控 VIP
-            </button>
-            <button type="button" @click="vipModal.visible=false" class="w-full py-1.5 text-xs text-slate-400">
-              暂不解锁，继续浏览
+
+          <!-- 促转化行动按钮 -->
+          <div class="space-y-2 pt-1">
+            <template v-if="!store.isLoggedIn">
+              <button type="button" @click="handleRegisterAction" 
+                      class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white py-2.5 rounded-xl text-sm font-bold shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1.5">
+                <i class="fa-brands fa-weixin text-base"></i> 微信扫码·立领 3 天 VIP
+              </button>
+            </template>
+            <template v-else>
+              <button type="button" @click="handleUpgradeAction" 
+                      class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-md shadow-orange-500/20 flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-bolt"></i> 立即开通（享新手专享价）
+              </button>
+            </template>
+            <button type="button" @click="vipModal.visible=false" class="w-full py-1 text-xs text-slate-400 hover:text-slate-600">
+              暂不解锁，仅看 3 只限免标的
             </button>
           </div>
         </div>
