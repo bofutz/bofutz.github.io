@@ -1,48 +1,48 @@
 /* ========================= FILE: .\js\components\common\AuthModal.js ========================= */
 /**
- * 波幅探长 - 认证与注册弹窗（裂变增强版）
- * 1. 自动从 URL 提取 ?ref= 并自动绑定邀请码
- * 2. 强化新用户赠送体验天数文案引导
+ * 波幅探长 - 微信公众号极简免密注册/登录弹窗
+ * 默认微信发码免密直登，自动绑定邀请码并送 3 天 VIP
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
-import { CONFIG } from "../../config.js";
 
-const { ref, reactive, nextTick, watch, computed, onMounted } = Vue;
+const { ref, reactive, computed, onMounted, watch } = Vue;
 
 export default {
   name: "AuthModal",
   setup() {
     const loading = ref(false);
-    const sendCodeLoading = ref(false);
-    const countdown = ref(0);
+    // 登录模式：wechat (默认公众号免密) | password (传统账密备用)
+    const authTab = ref("wechat");
 
-    const form = reactive({
+    const wechatForm = reactive({
+      verifyCode: "",
+      refCode: "",
+    });
+
+    const pwdForm = reactive({
       username: "",
       password: "",
-      emailCode: "",
-      refCode: "",
-      turnstileToken: "",
     });
 
-    const resetStep = ref("account");
-    const resetLoading = ref(false);
-    const resetForm = reactive({
-      username: "",
-      challengeId: "",
-      questions: [],
-      answers: {},
-      newPassword: "",
-      confirmPassword: "",
+    const settings = computed(() => store.state.publicSettings || {});
+
+    // 公众号二维码（优先取后台配置，缺省使用占位二维码或微信二维码）
+    const gzhQrCode = computed(() => {
+      const u = settings.value.gzh_qr_url || settings.value.wechat_qr_url || "";
+      return String(u).trim();
     });
 
-    // 核心优化：从 URL 抓取邀请码
+    // 自动抓取 URL 中的邀请参数 (?ref=BOFUTZ-001)
     const extractRefFromUrl = () => {
       try {
-        const urlParams = new URLSearchParams(window.location.search || window.location.hash.split("?")[1]);
-        const ref = urlParams.get("ref") || urlParams.get("invite");
-        if (ref) {
-          form.refCode = ref.trim().toUpperCase();
+        const query = window.location.search || window.location.hash.split("?")[1];
+        if (query) {
+          const urlParams = new URLSearchParams(query);
+          const refCode = urlParams.get("ref") || urlParams.get("invite");
+          if (refCode) {
+            wechatForm.refCode = refCode.trim().toUpperCase();
+          }
         }
       } catch (_) {}
     };
@@ -51,108 +51,59 @@ export default {
       store.state.authModalVisible = false;
     };
 
-    const switchMode = (mode) => {
-      store.state.authMode = mode;
-      form.password = "";
-      form.emailCode = "";
-      form.turnstileToken = "";
-      if (mode === "register") {
-        extractRefFromUrl();
-        renderTurnstile();
-      }
-    };
-
-    const renderTurnstile = () => {
-      nextTick(() => {
-        setTimeout(() => {
-          const container = document.getElementById("turnstile-container");
-          if (container && window.turnstile) {
-            container.innerHTML = "";
-            try {
-              window.turnstile.render("#turnstile-container", {
-                sitekey: CONFIG.TURNSTILE_SITEKEY,
-                callback: (token) => { form.turnstileToken = token; },
-                "expired-callback": () => { form.turnstileToken = ""; },
-              });
-            } catch (e) {
-              console.error("Turnstile render error:", e);
-            }
-          }
-        }, 150);
-      });
-    };
-
-    const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
-
-    const sendEmailCode = async () => {
-      if (!isEmail(form.username)) {
-        store.showToast("请输入有效电子邮箱", "error");
+    // 微信验证码免密直登
+    const submitWechatLogin = async () => {
+      const code = wechatForm.verifyCode.trim();
+      if (!/^\d{4,8}$/.test(code)) {
+        store.showToast("请输入正确的公众号数字验证码", "error");
         return;
-      }
-      if (!form.turnstileToken) {
-        store.showToast("请先完成人机验证", "error");
-        return;
-      }
-      sendCodeLoading.value = true;
-      try {
-        const res = await authApi.sendEmailCode(form.username, form.turnstileToken);
-        if (res.success) {
-          store.showToast(res.msg || "验证码已发送至您的邮箱");
-          countdown.value = 60;
-          const timer = setInterval(() => {
-            countdown.value--;
-            if (countdown.value <= 0) clearInterval(timer);
-          }, 1000);
-        } else {
-          store.showToast(res.msg || "发送失败", "error");
-        }
-      } catch (err) {
-        store.showToast(err.message || "网络错误", "error");
-      } finally {
-        sendCodeLoading.value = false;
-      }
-    };
-
-    const submit = async () => {
-      if (!form.username || !form.password) {
-        store.showToast("账号和密码不能为空", "error");
-        return;
-      }
-      if (store.state.authMode === "register") {
-        if (!isEmail(form.username)) {
-          store.showToast("请填写有效电子邮箱", "error");
-          return;
-        }
-        if (!form.emailCode) {
-          store.showToast("请输入邮箱验证码", "error");
-          return;
-        }
       }
 
       loading.value = true;
       try {
-        if (store.state.authMode === "register") {
-          const res = await authApi.register({
-            username: form.username,
-            password: form.password,
-            refCode: form.refCode,
-            emailCode: form.emailCode,
-          });
-          store.showToast((res.message || "注册成功") + "，已获赠 3 天 VIP 体验！");
-          switchMode("login");
-        } else {
-          const data = await authApi.login(form.username, form.password);
-          store.setUserState({
-            token: data.token,
-            username: form.username.trim(),
-            referralCode: data.referral_code,
-            vipDaysLeft: data.shared_vip_days ?? data.vip_days_left ?? 0,
-          });
-          store.showToast("登录成功");
-          closeModal();
-        }
+        const res = await authApi.wechatLogin({
+          code,
+          refCode: wechatForm.refCode,
+        });
+
+        const data = res.data || res;
+        store.setUserState({
+          token: data.token,
+          username: data.username || `wx_${code}`,
+          referralCode: data.referral_code,
+          vipDaysLeft: data.shared_vip_days ?? data.vip_days_left ?? 3,
+          vipLevel: data.vip_level ?? 0,
+        });
+
+        store.showToast("登录成功，已为您同步监控 VIP 权限！");
+        closeModal();
       } catch (err) {
-        store.showToast(err.message, "error");
+        store.showToast(err.message || "登录校验失败，请核对验证码", "error");
+      } finally {
+        loading.value = false;
+      }
+    };
+
+    // 传统账号密码登录（备用）
+    const submitPwdLogin = async () => {
+      if (!pwdForm.username || !pwdForm.password) {
+        store.showToast("请输入账号与密码", "error");
+        return;
+      }
+      loading.value = true;
+      try {
+        const data = await authApi.login(pwdForm.username, pwdForm.password);
+        store.setUserState({
+          token: data.token,
+          username: pwdForm.username.trim(),
+          referralCode: data.referral_code,
+          vipDaysLeft: data.shared_vip_days ?? data.vip_days_left ?? 0,
+          vipLevel: data.vip_level ?? 0,
+        });
+        store.showToast("登录成功");
+        closeModal();
+      } catch (err) {
+        store.showToast(err.message || "登录失败", "error");
       } finally {
         loading.value = false;
       }
@@ -165,67 +116,88 @@ export default {
     watch(
       () => store.state.authModalVisible,
       (visible) => {
-        if (visible && store.state.authMode === "register") {
+        if (visible) {
           extractRefFromUrl();
-          renderTurnstile();
+          wechatForm.verifyCode = "";
         }
       }
     );
 
     return {
       store: store.state,
-      form,
+      settings,
+      authTab,
+      wechatForm,
+      pwdForm,
+      gzhQrCode,
       loading,
-      sendCodeLoading,
-      countdown,
       closeModal,
-      switchMode,
-      sendEmailCode,
-      submit,
+      submitWechatLogin,
+      submitPwdLogin,
     };
   },
   template: `
     <div v-if="store.authModalVisible" class="fixed inset-0 modal-overlay z-[150] flex items-center justify-center p-4" @click.self="closeModal">
-      <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+      <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl relative">
+        <button @click="closeModal" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600 z-10">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+
         <div class="flex border-b border-slate-100">
-          <button @click="switchMode('login')" class="flex-1 py-4 text-sm font-medium transition-colors"
-                  :class="store.authMode==='login'?'theme-text border-b-2 theme-border font-bold':'text-slate-400'">账号登录</button>
-          <button @click="switchMode('register')" class="flex-1 py-4 text-sm font-medium transition-colors"
-                  :class="store.authMode==='register'?'theme-text border-b-2 theme-border font-bold':'text-slate-400'">免费注册</button>
+          <button @click="authTab='wechat'" class="flex-1 py-3.5 text-sm font-bold transition-colors"
+                  :class="authTab==='wechat' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">
+            <i class="fa-brands fa-weixin text-emerald-500 mr-1 text-base"></i> 微信免密直登
+          </button>
+          <button @click="authTab='password'" class="flex-1 py-3.5 text-sm font-medium transition-colors"
+                  :class="authTab==='password' ? 'theme-text border-b-2 theme-border' : 'text-slate-400'">
+            账号密码登录
+          </button>
         </div>
 
-        <div class="p-6 space-y-3.5">
-          <div v-if="store.authMode==='register'" class="bg-emerald-50 text-emerald-700 text-xs p-2.5 rounded-lg border border-emerald-100">
-            🎁 <strong>新用户专享：</strong>注册即送 <strong>3 天全功能 VIP</strong>，解锁 50+ 只 ETF 监控与全部波幅通道图表！
+        <!-- 方案 A：微信公众号验证码免密直登 -->
+        <div v-if="authTab==='wechat'" class="p-6 space-y-4 text-center">
+          <div class="bg-emerald-50 text-emerald-700 text-xs p-2.5 rounded-lg border border-emerald-100 leading-relaxed">
+            🎁 微信免密一键登录，新用户自动注册并<strong>获赠 3 天 VIP 体验</strong>！
           </div>
 
-          <input v-model="form.username" type="email" :placeholder="store.authMode==='register'?'注册邮箱地址':'注册账号/邮箱'"
+          <div class="flex flex-col items-center">
+            <div class="w-40 h-40 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-2 flex items-center justify-center">
+              <img v-if="gzhQrCode" :src="gzhQrCode" class="w-full h-full object-contain rounded-lg" alt="公众号二维码">
+              <div v-else class="text-xs text-slate-400 text-center">
+                <i class="fa-solid fa-qrcode text-3xl mb-1 text-slate-300"></i>
+                <p>请在后台配置公众号二维码</p>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 mt-2 font-medium">
+              1. 微信扫一扫上方二维码关注公众号<br>
+              2. 发送数字 <strong class="theme-text text-sm">666</strong> 或「<strong>登录</strong>」获取验证码
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <input v-model="wechatForm.verifyCode" type="text" maxlength="8" placeholder="在此输入公众号返回的验证码"
+                   class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-center font-mono text-base font-bold tracking-widest focus:theme-border outline-none">
+
+            <input v-model="wechatForm.refCode" type="text" placeholder="邀请码（选填，立领更多权益）"
+                   class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono uppercase text-center focus:theme-border outline-none">
+          </div>
+
+          <button @click="submitWechatLogin" :disabled="loading || !wechatForm.verifyCode"
+                  class="w-full theme-bg text-white py-2.5 rounded-lg text-sm font-bold shadow-sm disabled:opacity-50 hover:opacity-90">
+            {{ loading ? '校验中...' : '确认登录 / 自动注册' }}
+          </button>
+        </div>
+
+        <!-- 传统账号密码登录（备用） -->
+        <div v-else class="p-6 space-y-3.5">
+          <input v-model="pwdForm.username" type="text" placeholder="注册账号"
+                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
+          <input v-model="pwdForm.password" type="password" placeholder="登录密码"
                  class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
 
-          <div v-show="store.authMode==='register'" class="flex justify-center min-h-[65px]">
-            <div id="turnstile-container"></div>
-          </div>
-
-          <div v-if="store.authMode==='register'" class="flex gap-2">
-            <input v-model="form.emailCode" type="text" placeholder="6位验证码" class="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm font-mono">
-            <button @click="sendEmailCode" type="button" :disabled="sendCodeLoading||countdown>0"
-                    class="px-3 py-2 text-xs theme-bg text-white rounded-lg disabled:opacity-50 whitespace-nowrap">
-              {{ countdown > 0 ? countdown + 's' : (sendCodeLoading ? '发送中...' : '获取验证码') }}
-            </button>
-          </div>
-
-          <input v-model="form.password" type="password" placeholder="输入密码(至少6位)"
-                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-
-          <div v-if="store.authMode==='register'">
-            <input v-model="form.refCode" type="text" placeholder="邀请码（选填）"
-                   class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none font-mono">
-            <p v-if="form.refCode" class="text-[11px] text-emerald-600 mt-1">已成功绑定好友邀请关系</p>
-          </div>
-
-          <button @click="submit" :disabled="loading" class="w-full theme-bg text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-50 hover:opacity-90 flex justify-center items-center">
-            <i v-if="loading" class="fa-solid fa-circle-notch animate-spin mr-2"></i>
-            {{ store.authMode === 'login' ? '立即登录' : '立即注册领取权益' }}
+          <button @click="submitPwdLogin" :disabled="loading"
+                  class="w-full theme-bg text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-50 hover:opacity-90 flex justify-center items-center">
+            {{ loading ? '登录中...' : '立即登录' }}
           </button>
         </div>
       </div>
