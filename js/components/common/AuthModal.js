@@ -54,8 +54,9 @@ export default {
     // 微信验证码免密直登
     const submitWechatLogin = async () => {
       const code = wechatForm.verifyCode.trim();
-      if (!/^\d{4,8}$/.test(code)) {
-        store.showToast("请输入正确的公众号数字验证码", "error");
+      // 允许输入英文与数字（支持 bofutz 口令）
+      if (!/^[a-zA-Z0-9]{4,12}$/.test(code)) {
+        store.showToast("请输入正确的公众号验证码口令", "error");
         return;
       }
 
@@ -175,7 +176,7 @@ export default {
           </div>
 
           <div class="space-y-2">
-            <input v-model="wechatForm.verifyCode" type="text" maxlength="8" placeholder="在此输入公众号返回的验证码"
+            <input v-model="wechatForm.verifyCode" type="text" maxlength="12" placeholder="在此输入公众号返回的口令（如 bofutz）" ...>
                    class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-center font-mono text-base font-bold tracking-widest focus:theme-border outline-none">
 
             <input v-model="wechatForm.refCode" type="text" placeholder="邀请码（选填，立领更多权益）"
