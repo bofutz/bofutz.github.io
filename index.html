@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>波幅探长 - ETF多周期波幅监控与量化通道</title>
+  <link rel="icon" type="image/png" href="./logo.png">
+
+  <!-- 样式库：TailwindCSS + FontAwesome 图标库 + Viewer.js 画廊样式 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.css">
+
+  <style>
+    /* 全局品牌主题色规范 */
+    :root {
+      --theme-color: #4da6a0;
+      --theme-hover: #3d8c87;
+    }
+    .theme-bg { background-color: var(--theme-color); }
+    .theme-text { color: var(--theme-color); }
+    .theme-border { border-color: var(--theme-color); }
+    
+    /* 弹窗半透明遮罩 */
+    .modal-overlay {
+      background-color: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px);
+    }
+
+    /* 看板表格滚动条与移动端冻结列适配 */
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f8fafc;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .dash-col-name {
+      min-width: 110px;
+      max-width: 140px;
+    }
+    @media (min-width: 640px) {
+      .dash-col-name {
+        min-width: 140px;
+        max-width: 170px;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans antialiased">
+  <div id="app" class="flex-1 flex flex-col">
+    <!-- 顶部导航栏 -->
+    <app-header></app-header>
+
+    <!-- 路由视图容器 -->
+    <main class="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+      <component :is="currentView"></component>
+    </main>
+
+    <!-- 底部版权声明 -->
+    <footer class="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400 select-none">
+      <div class="max-w-6xl mx-auto px-4 space-y-1">
+        <p>© 2026 波幅探长 · 专注 ETF 真实波动率与多周期量化研判</p>
+        <p class="text-[11px] text-slate-300">本站数据基于历史量化模型计算，不构成任何直接投资建议，交易有风险，入市需谨慎。</p>
+      </div>
+    </footer>
+
+    <!-- 全局认证弹窗（微信免密开户/直登） -->
+    <auth-modal></auth-modal>
+
+    <!-- 全局转化·吸睛促单悬浮挂件 -->
+    <floating-vip-badge></floating-vip-badge>
+
+    <!-- 全局消息提示 (Toast) -->
+    <div v-if="store.toast.visible" 
+         class="fixed top-5 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-xl shadow-xl text-sm font-bold flex items-center gap-2 transition-all"
+         :class="store.toast.type === 'error' ? 'bg-red-500 text-white shadow-red-500/20' : 'bg-slate-900 text-white shadow-slate-900/20'">
+      <i :class="store.toast.type === 'error' ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-circle-check text-emerald-400'"></i>
+      <span>{{ store.toast.message }}</span>
+    </div>
+  </div>
+
+  <!-- 核心底层脚本引入 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.js"></script>
+
+  <!-- 前端 Vue 模块化启动入口 -->
+  <script type="module">
+    import { store } from "./js/store.js";
+    import AppHeader from "./js/components/common/Header.js";
+    import AuthModal from "./js/components/common/AuthModal.js";
+    import FloatingVipBadge from "./js/components/common/FloatingVipBadge.js";
+    import Dashboard from "./js/components/index/Dashboard.js";
+    import Plan from "./js/components/index/Plan.js";
+    import Profile from "./js/components/index/Profile.js";
+    import Query from "./js/components/index/Query.js";
+    import Vote from "./js/components/index/Vote.js";
+    import Tickets from "./js/components/index/Tickets.js";
+    import Guide from "./js/components/index/Guide.js";
+
+    const { createApp, ref, computed, onMounted } = Vue;
+
+    const routes = {
+      "#/": Dashboard,
+      "#/plan": Plan,
+      "#/profile": Profile,
+      "#/query": Query,
+      "#/vote": Vote,
+      "#/tickets": Tickets,
+      "#/guide": Guide,
+    };
+
+    const app = createApp({
+      components: {
+        AppHeader,
+        AuthModal,
+        FloatingVipBadge,
+      },
+      setup() {
+        const currentRoute = ref(window.location.hash || "#/");
+
+        const updateRoute = () => {
+          let hash = window.location.hash || "#/";
+          if (hash.includes("?")) {
+            hash = hash.split("?")[0];
+          }
+          currentRoute.value = hash || "#/";
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        };
+
+        const currentView = computed(() => {
+          return routes[currentRoute.value] || Dashboard;
+        });
+
+        onMounted(async () => {
+          window.addEventListener("hashchange", updateRoute);
+          // 初始化本地会话与全局配置
+          await store.initSession();
+          await store.fetchPublicSettings();
+        });
+
+        return {
+          store: store.state,
+          currentView,
+        };
+      },
+    });
+
+    app.mount("#app");
+  </script>
+</body>
+</html>
