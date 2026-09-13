@@ -699,14 +699,10 @@ export default {
 
     const getColorClass = (status) => {
       if (!status || status === "-" || status === "--") return "text-slate-300";
-      // 包含 '+'、'▲' 或红色圆点 '🔴' -> 红色
-      if (status.includes("+") || status.includes("▲") || status.includes("🔴")) {
-        return "text-red-500";
-      }
-      // 包含 '-'、'▼' 或绿色圆点 '🟢' -> 绿色
-      if (status.includes("-") || status.includes("▼") || status.includes("🟢")) {
-        return "text-emerald-500";
-      }
+      // 包含 '+' 或者 '▲' 均渲染为红色
+      if (status.includes("+") || status.includes("▲")) return "text-red-500";
+      // 包含 '-' 或者 '▼' 均渲染为绿色
+      if (status.includes("-") || status.includes("▼")) return "text-emerald-500";
       return "text-slate-300";
     };
     
