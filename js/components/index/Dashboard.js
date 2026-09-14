@@ -1,7 +1,7 @@
-/* ========================= FILE: .\js\components\index\Dashboard.js ========================= */
+/* ========================= FILE: js/components/index/Dashboard.js ========================= */
 
 /**
- * 波幅探长 - 数据看板（画廊连续翻页 + 高转化拦截卡片）
+ * 波幅探长 - 数据看板（完整还原原版标的排列与限免规则 + 高转化拦截与连续画廊）
  * js/components/index/Dashboard.js
  */
 import { store } from "../../store.js";
@@ -23,12 +23,13 @@ const dashboardPrefsApi = {
     }),
 };
 
-const { ref, reactive, computed, onMounted, nextTick } = Vue;
+const { ref, reactive, computed, onMounted, nextTick, watch } = Vue;
 
 function settingOn(val) {
   return val === "1" || val === 1 || val === true || val === "true";
 }
 
+/** 基准列序：周一..周五、周线（0..4 day，-1 week） */
 const BASE_COLS = [
   { key: "d0", type: "day", dayIdx: 0, label: "周一" },
   { key: "d1", type: "day", dayIdx: 1, label: "周二" },
@@ -47,15 +48,24 @@ export default {
     const globalChartDay = ref(null);
     const weeklyChartDay = ref(null);
     const sharedList = ref([]);
+    
+    // 会员收藏 / 自定义拖拽排序
     const favCodes = ref([]);
+    const userOrder = ref([]);
+    const dragCode = ref(null);
+    const prefsSaving = ref(false);
 
+    // 搜索与排序
     const searchQuery = ref("");
     const sortColumn = ref(null);
     const sortOrder = ref("desc");
 
+    // 打赏与滚动
+    const tipVisible = ref(false);
+    const tipChannel = ref("wechat");
     const tableScrollEl = ref(null);
 
-    // 高转化变现拦截卡片状态
+    // VIP 转化拦截弹窗状态
     const vipModal = reactive({
       visible: false,
       etfCode: "",
@@ -73,9 +83,29 @@ export default {
     };
 
     const settings = computed(() => store.state.publicSettings || {});
+    const tipEnabled = computed(() => settingOn(settings.value.tip_enabled));
 
-    const isValidDate = (d) => d && typeof d === "string" && /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(d.trim());
-    const parseYMD = (s) => (isValidDate(s) ? s.trim().split(/[-/]/).map((v) => parseInt(v, 10)) : [0, 0, 0]);
+    const isImageUrl = (url) => {
+      const u = String(url || "").trim();
+      if (!u || !/^https?:\/\//i.test(u)) return false;
+      return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u);
+    };
+
+    const tipWechatSrc = computed(() => {
+      const u = String(settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "").trim();
+      return isImageUrl(u) ? u : "";
+    });
+    const tipAlipaySrc = computed(() => {
+      const u = String(settings.value.alipay_qr_url || settings.value.tip_alipay_qr_url || "").trim();
+      return isImageUrl(u) ? u : "";
+    });
+
+    const isValidDate = (d) =>
+      d && typeof d === "string" && /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(d.trim());
+
+    const parseYMD = (s) =>
+      isValidDate(s) ? s.trim().split(/[-/]/).map((v) => parseInt(v, 10)) : [0, 0, 0];
+
     const formatDateCN = (dateStr) => {
       if (!dateStr || !isValidDate(dateStr)) return "";
       const [, m, d] = parseYMD(dateStr);
@@ -84,8 +114,9 @@ export default {
 
     const formatEtfName = (name) => {
       if (!name) return "";
-      const m = String(name).trim().match(/^(.*?ETF)/i);
-      return m ? m[1] : name;
+      const s = String(name).trim();
+      const m = s.match(/^(.*?ETF)/i);
+      return m ? m[1] : s;
     };
 
     const formatDayCell = (item) => {
@@ -101,13 +132,28 @@ export default {
       const cn = formatDateCN(dateStr);
       return cn ? cn + "图表" : "图表";
     };
+
+    const dataDateTitle = (dateStr, kind = "") => {
+      const cn = formatDateCN(dateStr);
+      if (!cn) return kind || "";
+      return kind ? cn + kind : cn;
+    };
+
+    const weekDataTitle = (item) => {
+      if (!item || !item.week_status) return "";
+      const cn = formatDateCN(item.week_status_date);
+      return cn ? cn + "周线" : "周线";
+    };
+
     const dailyChartTitle = (etfCode, colDate) => {
       const d = chartUpdateDay(etfCode) || globalChartDay.value || colDate;
       return chartDateTitle(d);
     };
+
     const weekChartTitle = () => {
       const d = weeklyChartDay.value;
-      return d && isValidDate(d) ? chartDateTitle(d) : "周线图表";
+      if (d && isValidDate(d)) return chartDateTitle(d);
+      return "周线图表";
     };
 
     const cellPrimaryStatus = (item) => {
@@ -128,7 +174,11 @@ export default {
       const days = [];
       for (let i = 0; i < 5; i++) {
         const temp = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-        days.push(`${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, "0")}-${String(temp.getDate()).padStart(2, "0")}`);
+        days.push(
+          `${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, "0")}-${String(
+            temp.getDate()
+          ).padStart(2, "0")}`
+        );
       }
       return days;
     };
@@ -144,11 +194,20 @@ export default {
       const day = d.getDay();
       const diff = day === 0 ? -6 : 1 - day;
       d.setDate(d.getDate() + diff);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
     };
 
     const latestMonday = computed(() => {
-      const validDates = [...new Set(allData.value.filter((i) => i.date && isValidDate(i.date)).map((i) => i.date))].sort();
+      const validDates = [
+        ...new Set(
+          allData.value
+            .filter((i) => i.date && isValidDate(i.date))
+            .map((i) => i.date)
+        ),
+      ].sort();
       if (validDates.length) {
         const wDays = getWeekDays(validDates[validDates.length - 1]);
         if (wDays.length) return wDays[0];
@@ -173,7 +232,11 @@ export default {
       if (val == null || val === "") return null;
       if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) return val.trim();
       let ts = Number(val);
-      if (!ts || isNaN(ts)) ts = Date.parse(String(val));
+      if (!ts || isNaN(ts)) {
+        const parsed = Date.parse(String(val));
+        if (isNaN(parsed)) return null;
+        ts = parsed;
+      }
       if (ts < 1e12) ts *= 1000;
       return bjYmd(ts);
     };
@@ -196,7 +259,10 @@ export default {
       const raw = map[key6] || map[rawCode] || map[code];
       if (!raw) return null;
       if (typeof raw === "string") return { url: raw, updated_at: null };
-      return { url: raw.chart_url || raw.url || "", updated_at: raw.updated_at || raw.last_modified || null };
+      return {
+        url: raw.chart_url || raw.url || "",
+        updated_at: raw.updated_at || raw.last_modified || null,
+      };
     };
 
     const chartUpdateDay = (_code) => globalChartDay.value || null;
@@ -207,7 +273,9 @@ export default {
       if (!weekDays.length) return -1;
       const day = chartUpdateDay(etfCode);
       if (!day) return -1;
-      return weekDays.indexOf(day);
+      const idx = weekDays.indexOf(day);
+      if (idx >= 0) return idx;
+      return -1;
     };
 
     const showDailyChartIcon = (etfCode, colIdx) => {
@@ -215,9 +283,12 @@ export default {
       let target = chartColIndexForCode(etfCode);
       if (target < 0 && globalChartDay.value && latestMonday.value) {
         const weekDays = getWeekDays(latestMonday.value);
-        if (weekDays.length) {
-          const wd = new Date(globalChartDay.value + "T12:00:00+08:00").getDay();
-          if (wd === 0 || wd === 6) target = 4;
+        const day = globalChartDay.value;
+        if (day && weekDays.length) {
+          const wd = new Date(day + "T12:00:00+08:00").getDay();
+          if (wd === 0 || wd === 6) {
+            target = 4;
+          }
         }
       }
       return target === colIdx && target >= 0;
@@ -229,30 +300,84 @@ export default {
         globalChartDay.value = fromApi;
         return fromApi;
       }
+      let maxTs = 0;
+      Object.values(chartsMap.value || {}).forEach((raw) => {
+        if (!raw || typeof raw === "string") return;
+        const u = raw.updated_at || raw.last_modified;
+        if (u == null || u === "") return;
+        let ts = Number(u);
+        if (!ts || isNaN(ts)) ts = Date.parse(String(u));
+        else if (ts < 1e12) ts *= 1000;
+        if (ts && !isNaN(ts) && ts > maxTs) maxTs = ts;
+      });
+      if (maxTs > 0) {
+        globalChartDay.value = bjYmd(maxTs);
+        return globalChartDay.value;
+      }
       globalChartDay.value = latestTradingDayBj();
       return globalChartDay.value;
     };
 
-    const resolveWeeklyChartDay = async (apiWeeklyChartDate = null) => {
+    const lastSaturdayBj = () => {
+      for (let i = 0; i <= 13; i++) {
+        const ms = Date.now() - i * 24 * 3600 * 1000;
+        const day = bjYmd(ms);
+        const wd = new Date(day + "T12:00:00+08:00").getDay();
+        if (wd === 6) return day;
+      }
+      return bjYmd(Date.now());
+    };
+
+    const resolveWeeklyChartDay = async (apiWeeklyChartDate = null, _apiChartDate = null) => {
       const fromWeekly = toBjDay(apiWeeklyChartDate);
       if (fromWeekly) {
         weeklyChartDay.value = fromWeekly;
         return fromWeekly;
       }
-      weeklyChartDay.value = latestTradingDayBj();
+      const monday = resolveLatestClosedWeekMonday();
+      if (monday) {
+        const [y, m, d] = parseYMD(monday);
+        if (y) {
+          const sat = new Date(y, m - 1, d + 5);
+          const satStr = `${sat.getFullYear()}-${String(sat.getMonth() + 1).padStart(2, "0")}-${String(sat.getDate()).padStart(2, "0")}`;
+          weeklyChartDay.value = satStr;
+          return satStr;
+        }
+      }
+      weeklyChartDay.value = lastSaturdayBj();
       return weeklyChartDay.value;
     };
 
-    const isBlankStatus = (s) => !s || s === "-" || s === "--" || s === "None" || s === "null";
-    const normCode = (c) => String(c || "").replace(/\D/g, "").slice(-6);
+    const handleSort = (column) => {
+      if (sortColumn.value === column) {
+        if (sortOrder.value === "desc") sortOrder.value = "asc";
+        else {
+          sortColumn.value = null;
+          sortOrder.value = "desc";
+        }
+      } else {
+        sortColumn.value = column;
+        sortOrder.value = "desc";
+      }
+    };
+
+    const isBlankStatus = (s) =>
+      !s || s === "-" || s === "--" || s === "None" || s === "null";
+
+    const normCode = (c) =>
+      String(c || "")
+        .replace(/\D/g, "")
+        .slice(-6);
 
     const findWeekStatusForMonday = (etfCode, mondayStr) => {
       if (!mondayStr) return null;
       const want = normCode(etfCode);
-      let best = null, bestDate = "";
+      let best = null;
+      let bestDate = "";
       for (const item of allData.value) {
         if (normCode(item.etf_code) !== want) continue;
-        if (!item.date || !isValidDate(item.date) || isBlankStatus(item.week_status)) continue;
+        if (!item.date || !isValidDate(item.date)) continue;
+        if (isBlankStatus(item.week_status)) continue;
         const wDays = getWeekDays(item.date);
         if (!wDays.length || wDays[0] !== mondayStr) continue;
         if (!bestDate || item.date >= bestDate) {
@@ -268,7 +393,8 @@ export default {
       for (const item of allData.value || []) {
         if (isBlankStatus(item.week_status)) continue;
         const d = item.date || item.week_status_date;
-        if (d && isValidDate(d) && String(d).trim() > maxDate) maxDate = String(d).trim();
+        if (d && isValidDate(d) && String(d).trim() > maxDate)
+          maxDate = String(d).trim();
       }
       if (!maxDate) return "";
       const wDays = getWeekDays(maxDate);
@@ -279,31 +405,42 @@ export default {
       if (!isValidDate(dateStr)) return -1;
       try {
         const wd = new Date(dateStr.trim() + "T12:00:00+08:00").getDay();
-        return wd === 0 || wd === 6 ? -1 : wd - 1;
+        if (wd === 0 || wd === 6) return -1;
+        return wd - 1;
       } catch (_) {
         return -1;
       }
     };
 
-    const quoteOk = (s) => !(!s || s === "-" || s === "--" || s === "None" || s === "null");
-    const itemHasDailyQuote = (item) => item && (quoteOk(item.day_status) || quoteOk(item.am_status) || quoteOk(item.pm_status));
+    const quoteOk = (s) =>
+      !!(s && s !== "-" && s !== "--" && s !== "None" && s !== "null");
+
+    const itemHasDailyQuote = (item) =>
+      item &&
+      (quoteOk(item.day_status) ||
+        quoteOk(item.am_status) ||
+        quoteOk(item.pm_status));
 
     const buildRecentTradingColDates = () => {
       const colDates = [null, null, null, null, null];
       for (const item of allData.value || []) {
-        if (!item || !item.date || !isValidDate(item.date) || !itemHasDailyQuote(item)) continue;
+        if (!item || !item.date || !isValidDate(item.date)) continue;
+        if (!itemHasDailyQuote(item)) continue;
         const idx = weekdayIndexFromDate(item.date);
         if (idx < 0) continue;
         const d = item.date.trim();
         if (!colDates[idx] || d > colDates[idx]) colDates[idx] = d;
       }
       let anchor = "";
-      for (const d of colDates) { if (d && d > anchor) anchor = d; }
+      for (const d of colDates) {
+        if (d && d > anchor) anchor = d;
+      }
       if (!anchor) anchor = bjYmd(Date.now());
       for (let idx = 0; idx < 5; idx++) {
         if (colDates[idx]) continue;
         for (let back = 0; back <= 21; back++) {
-          const ms = Date.parse(anchor + "T12:00:00+08:00") - back * 24 * 3600 * 1000;
+          const ms =
+            Date.parse(anchor + "T12:00:00+08:00") - back * 24 * 3600 * 1000;
           if (isNaN(ms)) break;
           const day = bjYmd(ms);
           if (weekdayIndexFromDate(day) === idx) {
@@ -315,14 +452,33 @@ export default {
       return colDates;
     };
 
+    // ============================================================
+    // 标的排列与限免计算（完全沿用原版 dashboard-grok.js 逻辑）
+    // ============================================================
     const processedData = computed(() => {
-      const empty = { list: [], freeTop3Codes: [], weekDays: [], displayCols: [], latestColKey: "d4" };
+      const empty = {
+        list: [],
+        freeTop3Codes: [],
+        weekDays: [],
+        weekStatusMonday: "",
+        rankBy: "daily",
+        rankDailyIdx: -1,
+        displayCols: BASE_COLS.slice(),
+        latestColKey: "d4",
+      };
+
       const colDates = buildRecentTradingColDates();
-      const weekDays = colDates[0] ? colDates : (latestMonday.value ? getWeekDays(latestMonday.value) : []);
-      if (!weekDays.length) return empty;
+      if (!colDates[0] && !colDates[1] && !colDates[2] && !colDates[3] && !colDates[4]) {
+        const fb = latestMonday.value ? getWeekDays(latestMonday.value) : [];
+        if (fb.length < 5) return empty;
+        for (let i = 0; i < 5; i++) colDates[i] = fb[i];
+      }
+      const weekDays = colDates;
 
       const dateToIdx = new Map();
-      weekDays.forEach((d, i) => { if (d) dateToIdx.set(d, i); });
+      weekDays.forEach((d, i) => {
+        if (d) dateToIdx.set(d, i);
+      });
 
       const etfMap = {};
       const ensureRow = (code, name) => {
@@ -333,6 +489,7 @@ export default {
             days: [null, null, null, null, null],
             week_status: null,
             week_status_date: null,
+            week_status_from: null,
           };
         } else if (name && !etfMap[code].etf_name) {
           etfMap[code].etf_name = name;
@@ -340,6 +497,7 @@ export default {
         return etfMap[code];
       };
 
+      // ① 灌入日线数据
       allData.value.forEach((item) => {
         if (!item.date || !isValidDate(item.date)) return;
         const idx = dateToIdx.get(item.date.trim());
@@ -351,75 +509,317 @@ export default {
         if (item.etf_name) row.etf_name = item.etf_name;
       });
 
+      // ② 并入通用监控列表
       (sharedList.value || []).forEach((s) => {
         const code = normCode(s.etf_code || s.code);
-        if (code.length === 6) ensureRow(code, s.etf_name || s.name || code);
+        if (code.length !== 6) return;
+        ensureRow(code, s.etf_name || s.name || code);
       });
 
+      // ③ 行情里出现过的代码兜底建行
+      allData.value.forEach((item) => {
+        const code = normCode(item.etf_code);
+        if (code.length !== 6) return;
+        ensureRow(code, item.etf_name || code);
+      });
+
+      // ④ 周线统一为闭合周
       const closedWeekMonday = resolveLatestClosedWeekMonday();
       const closedWeekDays = closedWeekMonday ? getWeekDays(closedWeekMonday) : [];
       const closedWeekFriday = closedWeekDays.length >= 5 ? closedWeekDays[4] : "";
       Object.values(etfMap).forEach((row) => {
-        const cur = closedWeekMonday ? findWeekStatusForMonday(row.etf_code, closedWeekMonday) : null;
+        const cur = closedWeekMonday
+          ? findWeekStatusForMonday(row.etf_code, closedWeekMonday)
+          : null;
         if (cur) {
           row.week_status = cur.status;
           row.week_status_date = closedWeekFriday || cur.date;
+          row.week_status_from = "closed";
+        } else {
+          row.week_status = null;
+          row.week_status_date = null;
+          row.week_status_from = null;
         }
       });
 
+      const weekStatusMonday = closedWeekMonday || latestMonday.value;
       let items = Object.values(etfMap);
-      const hasStatus = (s) => !(!s || s === "-" || s === "--");
-      const absDayVal = (row, dayIdx) => {
-        if (dayIdx == null || dayIdx < 0) return -9999;
-        const s = row.days?.[dayIdx]?.day_status;
-        return hasStatus(s) ? Math.abs(getStatusVal(s)) : -9999;
-      };
 
-      let dailyColIdx = -1, dailyColDate = "";
+      const hasStatus = (s) => !(!s || s === "-" || s === "--");
+      const cellHasDay = (row, idx) => hasStatus(row.days?.[idx]?.day_status);
+      const cellHasHalf = (row, idx) => {
+        const c = row.days?.[idx];
+        return !(!c || (!hasStatus(c.am_status) && !hasStatus(c.pm_status)));
+      };
+      const cellHasAny = (row, idx) => cellHasDay(row, idx) || cellHasHalf(row, idx);
+
+      // 最新日线列 = colDates 中日期最大的那一列
+      let latestIdx = -1;
+      let latestDayDate = "";
       for (let idx = 0; idx < 5; idx++) {
         const d = weekDays[idx];
-        if (d && d >= dailyColDate && items.some((i) => hasStatus(i.days?.[idx]?.day_status))) {
+        if (d && d >= latestDayDate && items.some((i) => cellHasAny(i, idx))) {
+          latestDayDate = d;
+          latestIdx = idx;
+        }
+      }
+
+      // 日线波幅列（有日线状态的最新列）
+      let dailyColIdx = -1;
+      let dailyColDate = "";
+      for (let idx = 0; idx < 5; idx++) {
+        const d = weekDays[idx];
+        if (d && d >= dailyColDate && items.some((i) => cellHasDay(i, idx))) {
           dailyColDate = d;
           dailyColIdx = idx;
         }
       }
 
+      const hasAnyWeek = items.some((i) => hasStatus(i.week_status));
+
+      // 判断采集日优先级与周末周线模式
+      const todayBj = bjYmd(Date.now());
+      let isWeekendBj = false;
+      try {
+        const wd = new Date(todayBj + "T12:00:00+08:00").getDay();
+        isWeekendBj = wd === 0 || wd === 6;
+      } catch (_) {}
+
+      let maxWeekStatusDate = "";
+      for (const row of items) {
+        if (!hasStatus(row.week_status)) continue;
+        const d = row.week_status_date;
+        if (d && isValidDate(d) && d > maxWeekStatusDate) maxWeekStatusDate = d;
+      }
+      const weeklyCollectDay =
+        (weeklyChartDay.value && isValidDate(weeklyChartDay.value) && weeklyChartDay.value) ||
+        maxWeekStatusDate ||
+        "";
+      const dailyCollectDay =
+        (globalChartDay.value && isValidDate(globalChartDay.value) && globalChartDay.value) ||
+        (latestIdx >= 0 && weekDays[latestIdx] ? weekDays[latestIdx] : "") ||
+        "";
+
+      let rankBy = "daily";
+      if (hasAnyWeek && isWeekendBj) {
+        rankBy = "weekly";
+      } else if (hasAnyWeek && weeklyCollectDay && dailyCollectDay && weeklyCollectDay > dailyCollectDay) {
+        rankBy = "weekly";
+      } else if (hasAnyWeek && weeklyCollectDay && weeklyCollectDay === todayBj) {
+        rankBy = "weekly";
+      } else if (latestIdx >= 0) {
+        rankBy = "daily";
+      } else if (hasAnyWeek) {
+        rankBy = "weekly";
+      }
+
+      const absDayVal = (row, dayIdx) => {
+        if (dayIdx == null || dayIdx < 0) return -9999;
+        const s = row.days?.[dayIdx]?.day_status;
+        if (!hasStatus(s)) return -9999;
+        const v = getStatusVal(s);
+        return v === -9999 ? -9999 : Math.abs(v);
+      };
+
+      const absHalfVal = (row, dayIdx) => {
+        if (dayIdx == null || dayIdx < 0) return -9999;
+        const item = row.days?.[dayIdx];
+        if (!item) return -9999;
+        const pm = getStatusVal(item.pm_status);
+        const am = getStatusVal(item.am_status);
+        let best = -9999;
+        if (pm !== -9999) best = Math.max(best, Math.abs(pm));
+        if (am !== -9999) best = Math.max(best, Math.abs(am));
+        return best;
+      };
+
+      const absWeekVal = (row) => {
+        const s = row.week_status;
+        if (!hasStatus(s)) return -9999;
+        const v = getStatusVal(s);
+        return v === -9999 ? -9999 : Math.abs(v);
+      };
+
+      const cmpDayColumn = (a, b, idx, orderDesc = true) => {
+        const da = absDayVal(a, idx);
+        const db = absDayVal(b, idx);
+        if (da !== db) {
+          if (da === -9999) return 1;
+          if (db === -9999) return -1;
+          return orderDesc ? db - da : da - db;
+        }
+        const ha = absHalfVal(a, idx);
+        const hb = absHalfVal(b, idx);
+        if (ha !== hb) {
+          if (ha === -9999) return 1;
+          if (hb === -9999) return -1;
+          return orderDesc ? hb - ha : ha - hb;
+        }
+        return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+      };
+
+      const cmpWeekColumn = (a, b, orderDesc = true) => {
+        const wa = absWeekVal(a);
+        const wb = absWeekVal(b);
+        if (wa !== wb) {
+          if (wa === -9999) return 1;
+          if (wb === -9999) return -1;
+          return orderDesc ? wb - wa : wa - wb;
+        }
+        return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+      };
+
+      const cmpDefaultRank = (a, b) => {
+        if (rankBy === "weekly") return cmpWeekColumn(a, b, true);
+        if (latestIdx >= 0) return cmpDayColumn(a, b, latestIdx, true);
+        return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+      };
+
+      // 原版免费看图 TOP3 规则（完全还原）：周线模式用周线排，日线模式用日线排
       const freeTopN = 3;
       let freeTop3Codes = [];
-      if (dailyColIdx >= 0) {
+      if (rankBy === "weekly") {
+        freeTop3Codes = [...items]
+          .filter((i) => absWeekVal(i) > -9999)
+          .sort((a, b) => {
+            const d = absWeekVal(b) - absWeekVal(a);
+            if (d !== 0) return d;
+            return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+          })
+          .slice(0, freeTopN)
+          .map((i) => i.etf_code);
+      } else if (dailyColIdx >= 0) {
         freeTop3Codes = [...items]
           .filter((i) => absDayVal(i, dailyColIdx) > -9999)
-          .sort((a, b) => absDayVal(b, dailyColIdx) - absDayVal(a, dailyColIdx))
+          .sort((a, b) => {
+            const d = absDayVal(b, dailyColIdx) - absDayVal(a, dailyColIdx);
+            if (d !== 0) return d;
+            return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
+          })
           .slice(0, freeTopN)
           .map((i) => i.etf_code);
       }
 
-      let pivotIdx = dailyColIdx >= 0 ? dailyColIdx : 4;
+      // 手动点击表头排序处理
+      items.sort((a, b) => {
+        if (sortColumn.value) {
+          if (sortColumn.value === "etf_name") {
+            const cmp = (a.etf_name || "").localeCompare(b.etf_name || "", "zh-CN");
+            return sortOrder.value === "asc" ? cmp : -cmp;
+          }
+          if (sortColumn.value.startsWith("d")) {
+            const idx = parseInt(sortColumn.value.substring(1), 10);
+            return cmpDayColumn(a, b, idx, sortOrder.value !== "asc");
+          }
+          if (sortColumn.value === "week_status") {
+            return cmpWeekColumn(a, b, sortOrder.value !== "asc");
+          }
+        }
+        return cmpDefaultRank(a, b);
+      });
+
+      // 搜索过滤
+      if (searchQuery.value) {
+        const q = searchQuery.value.toLowerCase().trim();
+        items = items.filter(
+          (i) =>
+            (i.etf_name && i.etf_name.toLowerCase().includes(q)) ||
+            (i.etf_code && i.etf_code.toLowerCase().includes(q))
+        );
+      }
+
+      // 标的默认排列顺序（完全还原原版）：
+      // 1. 周线模式：整表纯按周线波动绝对值降序排列；
+      // 2. 日线模式：【免费 TOP3】 -> 【VIP 收藏】 -> 【其余标的】，组内按最新采集排序与拖拽序
+      if (!sortColumn.value) {
+        if (rankBy === "weekly") {
+          items.sort((a, b) => cmpWeekColumn(a, b, true));
+        } else {
+          const freeSet = new Set((freeTop3Codes || []).map((c) => String(c)));
+          const freeIdx = new Map(
+            (freeTop3Codes || []).map((c, i) => [String(c), i])
+          );
+          const favSet = new Set(
+            store.state.isLoggedIn && store.state.isVip
+              ? (Array.isArray(favCodes.value) ? favCodes.value : []).map((c) =>
+                  String(c)
+                )
+              : []
+          );
+          const orderMap = new Map(
+            (Array.isArray(userOrder.value) ? userOrder.value : []).map((c, i) => [
+              String(c),
+              i,
+            ])
+          );
+          const groupOf = (code) => {
+            const c = String(code);
+            if (freeSet.has(c)) return 0;
+            if (favSet.has(c)) return 1;
+            return 2;
+          };
+          items.sort((a, b) => {
+            const ca = String(a.etf_code);
+            const cb = String(b.etf_code);
+            const ga = groupOf(ca);
+            const gb = groupOf(cb);
+            if (ga !== gb) return ga - gb;
+            if (ga === 0) {
+              return (freeIdx.get(ca) ?? 0) - (freeIdx.get(cb) ?? 0);
+            }
+            const primary = cmpDefaultRank(a, b);
+            if (primary !== 0) return primary;
+            if (orderMap.size) {
+              const ia = orderMap.has(ca) ? orderMap.get(ca) : 100000;
+              const ib = orderMap.has(cb) ? orderMap.get(cb) : 100000;
+              if (ia !== ib) return ia - ib;
+            }
+            return 0;
+          });
+        }
+      }
+
+      // 列弹匣轮转（最右为最新列）
+      let pivotIdx = 5;
+      if (rankBy === "weekly") {
+        pivotIdx = 5;
+      } else if (latestIdx >= 0) {
+        pivotIdx = latestIdx;
+      } else if (globalChartDay.value && weekDays.length) {
+        const ci = weekDays.indexOf(globalChartDay.value);
+        if (ci >= 0) pivotIdx = ci;
+        else {
+          try {
+            const wd = new Date(globalChartDay.value + "T12:00:00+08:00").getDay();
+            if (wd === 0 || wd === 6) pivotIdx = 4;
+          } catch (_) {}
+        }
+      }
       const n = BASE_COLS.length;
       const displayCols = [];
       for (let i = 1; i <= n; i++) {
         displayCols.push(BASE_COLS[(pivotIdx + i) % n]);
       }
-
-      const freeSet = new Set(freeTop3Codes.map(String));
-      items.sort((a, b) => {
-        const ca = String(a.etf_code), cb = String(b.etf_code);
-        const ga = freeSet.has(ca) ? 0 : 1;
-        const gb = freeSet.has(cb) ? 0 : 1;
-        if (ga !== gb) return ga - gb;
-        return absDayVal(b, dailyColIdx) - absDayVal(a, dailyColIdx);
-      });
+      const latestColKey = displayCols[displayCols.length - 1].key;
 
       return {
         list: items,
         freeTop3Codes,
         weekDays,
+        weekStatusMonday,
+        rankBy,
+        rankDailyIdx: rankBy === "daily" ? latestIdx : -1,
         displayCols,
-        latestColKey: displayCols[displayCols.length - 1].key,
+        latestColKey,
       };
     });
 
-    const visibleCols = computed(() => processedData.value?.displayCols || BASE_COLS);
+    const visibleCols = computed(() => {
+      const pd = processedData.value;
+      return pd && pd.displayCols && pd.displayCols.length
+        ? pd.displayCols
+        : BASE_COLS.slice();
+    });
 
     const canViewChart = (etfCode) => {
       if (store.state.isVip) return true;
@@ -447,7 +847,115 @@ export default {
     };
 
     // ============================================================
-    // Viewer.js 多图连续画廊与浮动翻页导航
+    // 会员自定义排版与拖拽排序
+    // ============================================================
+    const isFavorite = (code) => {
+      const list = Array.isArray(favCodes.value) ? favCodes.value : [];
+      const c = String(code || "").replace(/\D/g, "").slice(-6);
+      return !(!c || !list.includes(c));
+    };
+
+    const canCustomizeBoard = computed(
+      () => !(!store.state.isLoggedIn || !store.state.isVip)
+    );
+
+    const loadDashboardPrefs = async () => {
+      if (!canCustomizeBoard.value) {
+        favCodes.value = [];
+        userOrder.value = [];
+        return;
+      }
+      try {
+        const res = await dashboardPrefsApi.fetch();
+        const data = (res && res.data) || res || {};
+        favCodes.value = (data.favorites || [])
+          .map((c) => String(c).replace(/\D/g, "").slice(-6))
+          .filter((c) => c.length === 6);
+        userOrder.value = (data.order || []).map((c) =>
+          String(c).replace(/\D/g, "").slice(-6)
+        );
+      } catch (e) {
+        console.log("dashboard prefs", e && e.message);
+      }
+    };
+
+    const toggleFavorite = async (item, ev) => {
+      if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      if (!canCustomizeBoard.value) {
+        store.showToast("登录会员后可收藏标的", "error");
+        return;
+      }
+      const code = String(item.etf_code || "").replace(/\D/g, "").slice(-6);
+      if (code.length !== 6) return;
+      try {
+        const res = await dashboardPrefsApi.toggleFavorite(code);
+        const on = !(!res || (res.favorite !== true && res.favorite !== 1));
+        const cur = Array.isArray(favCodes.value) ? favCodes.value.slice() : [];
+        const idx = cur.indexOf(code);
+        if (on && idx < 0) cur.push(code);
+        if (!on && idx >= 0) cur.splice(idx, 1);
+        favCodes.value = cur;
+        store.showToast(on ? "已收藏" : "已取消收藏");
+      } catch (err) {
+        store.showToast(err.message || "收藏失败", "error");
+      }
+    };
+
+    const onDragStart = (item, ev) => {
+      if (!canCustomizeBoard.value) {
+        ev.preventDefault();
+        return;
+      }
+      dragCode.value = String(item.etf_code);
+      try {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(item.etf_code));
+      } catch (_) {}
+    };
+
+    const onDragOver = (ev) => {
+      if (!canCustomizeBoard.value) return;
+      ev.preventDefault();
+      try {
+        ev.dataTransfer.dropEffect = "move";
+      } catch (_) {}
+    };
+
+    const onDropRow = async (targetItem, ev) => {
+      if (!canCustomizeBoard.value) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const from =
+        dragCode.value ||
+        (ev.dataTransfer && ev.dataTransfer.getData("text/plain"));
+      const to = String(targetItem.etf_code);
+      dragCode.value = null;
+      if (!from || from === to) return;
+
+      const list = (processedData.value.list || []).map((x) => String(x.etf_code));
+      const next = list.slice();
+      const fi = next.indexOf(String(from));
+      const ti = next.indexOf(to);
+      if (fi < 0 || ti < 0) return;
+      next.splice(fi, 1);
+      next.splice(ti, 0, String(from));
+      userOrder.value = next;
+      if (prefsSaving.value) return;
+      prefsSaving.value = true;
+      try {
+        await dashboardPrefsApi.saveOrder(next, Array.from(favCodes.value));
+      } catch (err) {
+        store.showToast(err.message || "排序保存失败", "error");
+      } finally {
+        prefsSaving.value = false;
+      }
+    };
+
+    // ============================================================
+    // 画廊浏览与连续翻页导航
     // ============================================================
     const probeImage = (url) =>
       new Promise((resolve) => {
@@ -677,55 +1185,73 @@ export default {
       showViewerWithMultiImages(images, idx);
     };
 
-    const isFavorite = (code) => favCodes.value.includes(String(code).replace(/\D/g, "").slice(-6));
-
-    const toggleFavorite = async (item, ev) => {
-      if (ev) ev.stopPropagation();
-      if (!store.state.isLoggedIn) {
-        store.showToast("登录后可收藏标的", "error");
-        return;
-      }
-      const code = String(item.etf_code || "").replace(/\D/g, "").slice(-6);
-      try {
-        const res = await dashboardPrefsApi.toggleFavorite(code);
-        const on = !!(res && (res.favorite === true || res.favorite === 1));
-        if (on) favCodes.value.push(code);
-        else favCodes.value = favCodes.value.filter((c) => c !== code);
-        store.showToast(on ? "已收藏" : "已取消收藏");
-      } catch (err) {
-        store.showToast(err.message || "收藏失败", "error");
-      }
-    };
-
     const getColorClass = (status) => {
       if (!status || status === "-" || status === "--") return "text-slate-300";
-      // 包含 '+' 或者 '▲' 均渲染为红色
       if (status.includes("+") || status.includes("▲")) return "text-red-500";
-      // 包含 '-' 或者 '▼' 均渲染为绿色
       if (status.includes("-") || status.includes("▼")) return "text-emerald-500";
       return "text-slate-300";
     };
-    
-    onMounted(async () => {
+
+    const initData = async () => {
       loading.value = true;
       try {
-        const [data, chartsRes, sharedRes] = await Promise.all([
+        const tasks = [
           etfApi.fetchEtfRawData().catch(() => []),
           etfApi.fetchChartsMap().catch(() => ({})),
           etfApi.fetchSharedWatchlist().catch(() => ({ data: [] })),
-        ]);
-        allData.value = Array.isArray(data) ? data : [];
+        ];
+        const results = await Promise.all(tasks);
+        try {
+          if (store.state.isLoggedIn && store.state.isVip) {
+            await loadDashboardPrefs();
+          } else {
+            favCodes.value = [];
+            userOrder.value = [];
+          }
+        } catch (_) {
+          favCodes.value = [];
+          userOrder.value = [];
+        }
+        const data = results[0];
+        const chartsRes = results[1];
+        const sharedRes = results[2];
+        if (Array.isArray(data)) allData.value = data;
         chartsMap.value = chartsRes.charts || chartsRes || {};
-        sharedList.value = sharedRes.data || [];
-        await resolveGlobalChartDay([], chartsRes?.chart_date);
-        await resolveWeeklyChartDay(chartsRes?.weekly_chart_date);
+        const sharedRaw = sharedRes?.data ?? sharedRes;
+        sharedList.value = Array.isArray(sharedRaw) ? sharedRaw : [];
+        const sampleCodes = (sharedList.value || [])
+          .map((s) => s.etf_code || s.code)
+          .concat((allData.value || []).map((i) => i.etf_code));
+        await resolveGlobalChartDay(sampleCodes, chartsRes && chartsRes.chart_date);
+        await resolveWeeklyChartDay(
+          chartsRes && (chartsRes.weekly_chart_date || chartsRes.week_chart_date),
+          chartsRes && chartsRes.chart_date
+        );
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
         loading.value = false;
         await scrollToLatestCol();
       }
+    };
+
+    onMounted(async () => {
+      await initData();
+      setTimeout(scrollToLatestCol, 120);
+      setTimeout(scrollToLatestCol, 400);
     });
+
+    watch(
+      () => [
+        processedData.value.rankDailyIdx,
+        processedData.value.latestColKey,
+        globalChartDay.value,
+        loading.value,
+      ],
+      () => {
+        if (!loading.value) setTimeout(scrollToLatestCol, 80);
+      }
+    );
 
     return {
       store: store.state,
@@ -733,10 +1259,13 @@ export default {
       searchQuery,
       sortColumn,
       sortOrder,
+      handleSort,
       processedData,
       visibleCols,
       formatEtfName,
       formatDayCell,
+      dataDateTitle,
+      weekDataTitle,
       dailyChartTitle,
       weekChartTitle,
       showDailyChartIcon,
@@ -746,8 +1275,18 @@ export default {
       cellPrimaryStatus,
       isFavorite,
       toggleFavorite,
+      onDragStart,
+      onDragOver,
+      onDropRow,
+      canCustomizeBoard,
+      dragCode,
       tableScrollEl,
       settings,
+      tipEnabled,
+      tipVisible,
+      tipChannel,
+      tipWechatSrc,
+      tipAlipaySrc,
       vipModal,
       handleRegisterAction,
       handleUpgradeAction,
@@ -762,46 +1301,76 @@ export default {
 
       <div v-if="loading" class="text-center py-12 text-slate-400">
         <i class="fa-solid fa-spinner animate-spin text-2xl theme-text"></i>
-        <p class="mt-2 text-sm">读取量化云端数据中...</p>
+        <p class="mt-2 text-sm">读取云端量化数据中...</p>
       </div>
 
       <template v-else>
-        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <!-- ===== 数据看板表格 ===== -->
+        <div v-if="!processedData.list.length" class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
+          <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-40"></i>
+          <p>暂无相关行情数据</p>
+        </div>
+
+        <div v-else class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div ref="tableScrollEl" class="overflow-x-auto custom-scrollbar dash-table-scroll">
             <table class="text-center border-collapse whitespace-nowrap w-full dash-board-table">
               <thead class="bg-slate-50 border-b border-slate-100">
                 <tr class="text-xs text-slate-600 font-bold select-none">
-                  <th class="py-3 px-2 sm:px-4 text-left etf-name-column dash-col-name sticky top-0 left-0 bg-slate-50 z-40 border-b border-r border-slate-200">
+                  <th class="py-3 px-2 sm:px-4 text-left etf-name-column dash-col-name sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" @click="handleSort('etf_name')">
                     标的名称
+                    <i v-if="sortColumn==='etf_name'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
-                  <th v-for="col in visibleCols" :key="col.key" class="py-3 px-1.5 sm:px-2 sticky top-0 bg-slate-50 z-30 border-b border-slate-200">
+                  <th v-for="col in visibleCols" :key="col.key"
+                      class="py-3 px-1.5 sm:px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200"
+                      :class="col.type==='week' ? 'dash-col-week' : 'dash-col-day'"
+                      @click="handleSort(col.type==='week' ? 'week_status' : col.key)">
                     {{ col.label }}
+                    <i v-if="sortColumn===(col.type==='week'?'week_status':col.key) || (!sortColumn && processedData.latestColKey===col.key)"
+                       class="fa-solid text-[10px] ml-1"
+                       :class="sortColumn===(col.type==='week'?'week_status':col.key) && sortOrder==='asc' ? 'fa-arrow-up' : 'fa-arrow-down'"></i>
                   </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-50 text-sm">
-                <tr v-for="item in processedData.list" :key="item.etf_code" class="hover:bg-[#4da6a0]/5 transition-colors group">
-                  <td class="p-2 sm:p-3 text-left sticky left-0 bg-white group-hover:bg-[#f6faf9] z-10 etf-name-column dash-col-name border-r border-slate-100">
+                <tr v-for="item in processedData.list" :key="item.etf_code"
+                    class="hover:bg-[#4da6a0]/5 transition-colors group"
+                    :class="{ 'opacity-60': dragCode === item.etf_code }"
+                    :draggable="canCustomizeBoard ? true : false"
+                    @dragstart="onDragStart(item, $event)"
+                    @dragover="onDragOver($event)"
+                    @drop="onDropRow(item, $event)">
+                  <td class="p-2 sm:p-3 text-left relative sticky left-0 bg-white group-hover:bg-[#f6faf9] z-10 etf-name-column dash-col-name border-r border-slate-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
                     <div v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="absolute left-0 top-0 bottom-0 w-1 theme-bg"></div>
                     <div class="flex items-start gap-1 min-w-0">
-                      <button type="button" class="mt-0.5 shrink-0 p-0.5 leading-none" @click="toggleFavorite(item, $event)">
-                        <i class="fa-solid fa-star text-sm" :class="isFavorite(item.etf_code) ? 'text-amber-400' : 'text-slate-300'"></i>
+                      <button type="button"
+                              class="mt-0.5 shrink-0 p-0.5 leading-none"
+                              :title="canCustomizeBoard ? (isFavorite(item.etf_code) ? '取消收藏' : '收藏') : '会员可收藏'"
+                              @click="toggleFavorite(item, $event)">
+                        <i class="fa-solid fa-star text-sm"
+                           :class="isFavorite(item.etf_code) ? 'text-amber-400' : 'text-slate-300'"></i>
                       </button>
                       <div class="min-w-0 flex-1 overflow-hidden">
                         <div class="font-bold text-slate-800 flex items-center gap-1">
-                          <span class="truncate text-[12px] sm:text-sm">{{ formatEtfName(item.etf_name) }}</span>
-                          <span v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[10px] bg-emerald-100 text-emerald-700 px-1 py-0.2 rounded font-bold">限免</span>
-                          <span v-else class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1 rounded font-bold">VIP</span>
+                          <span v-if="canCustomizeBoard" class="text-slate-300 text-[10px] cursor-grab active:cursor-grabbing select-none shrink-0" title="拖动排序">⋮⋮</span>
+                          <span class="truncate text-[12px] sm:text-sm leading-tight" :title="formatEtfName(item.etf_name)">{{ formatEtfName(item.etf_name) }}</span>
+                          <span v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[10px] bg-emerald-100 text-emerald-700 px-1 py-0.2 rounded font-bold shrink-0">限免</span>
+                          <span v-else class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1 rounded font-bold shrink-0">VIP</span>
                         </div>
                         <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                       </div>
                     </div>
                   </td>
 
-                  <td v-for="col in visibleCols" :key="col.key" class="p-1.5 sm:p-3 font-medium" :class="getColorClass(col.type==='week' ? item.week_status : cellPrimaryStatus(item.days[col.dayIdx]))">
+                  <td v-for="col in visibleCols" :key="col.key"
+                      class="p-1.5 sm:p-3 font-medium"
+                      :class="[
+                        col.type==='week' ? 'dash-col-week' : 'dash-col-day',
+                        getColorClass(col.type==='week' ? item.week_status : cellPrimaryStatus(item.days[col.dayIdx]))
+                      ]">
                     <template v-if="col.type==='day'">
-                      <div class="flex items-center justify-center gap-1">
-                        <span class="text-[10px] sm:text-sm font-mono">{{ formatDayCell(item.days[col.dayIdx]) }}</span>
+                      <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1"
+                           :title="dataDateTitle(processedData.weekDays[col.dayIdx])">
+                        <span class="text-[10px] sm:text-sm font-mono tracking-tight leading-tight">{{ formatDayCell(item.days[col.dayIdx]) }}</span>
                         <i v-if="showDailyChartIcon(item.etf_code, col.dayIdx)"
                            class="fa-regular fa-image cursor-pointer text-sm sm:text-xs shrink-0 p-1"
                            :class="processedData.freeTop3Codes.includes(item.etf_code) || store.isVip ? 'text-slate-400 hover:text-blue-500' : 'text-amber-500 hover:text-amber-600'"
@@ -810,9 +1379,9 @@ export default {
                       </div>
                     </template>
                     <template v-else>
-                      <div class="flex items-center justify-center gap-1">
-                        <span class="text-[10px] sm:text-sm font-mono">{{ item.week_status || '-' }}</span>
-                        <i class="fa-regular fa-image cursor-pointer text-sm sm:text-xs shrink-0 p-1"
+                      <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1" :title="weekDataTitle(item)">
+                        <span class="text-[10px] sm:text-sm font-mono leading-tight">{{ item.week_status || '-' }}</span>
+                        <i class="fa-regular fa-image cursor-pointer text-sm sm:text-xs shrink-0 p-1 -m-0.5"
                            :class="processedData.freeTop3Codes.includes(item.etf_code) || store.isVip ? 'text-slate-400 hover:text-blue-500' : 'text-amber-500 hover:text-amber-600'"
                            :title="weekChartTitle()"
                            @click.stop="openWeeklyChartViewer(item)"></i>
@@ -826,16 +1395,23 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center">
-          标有「限免」的标的向所有访客开放全周期图表；点击图表可在当前页左右无缝翻页浏览全部标的通道图。
+          标有「限免」的标的向所有访客开放全周期图表；支持表头点击排序及左右无缝翻页浏览全部标的通道图。
         </p>
+
+        <!-- 打赏入口（兼容后台 tip_enabled） -->
+        <div v-if="tipEnabled" class="text-center pt-2">
+          <button type="button" @click="tipChannel = tipWechatSrc ? 'wechat' : (tipAlipaySrc ? 'alipay' : 'wechat'); tipVisible = true"
+                  class="text-xs text-slate-400 hover:theme-text underline">
+            {{ settings.tip_note || '觉得有用？请作者喝杯咖啡' }}
+          </button>
+        </div>
       </template>
 
       <!-- ===== 高转化·变现拦截转化弹窗 ===== -->
       <div v-if="vipModal.visible" class="fixed inset-0 modal-overlay z-[120] flex items-center justify-center p-4" @click.self="vipModal.visible=false">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4 text-center relative overflow-hidden border border-amber-100">
-          <!-- 促销角标 -->
           <div class="absolute top-0 right-0 bg-gradient-to-l from-red-500 to-amber-500 text-white text-[10px] font-extrabold px-3 py-1 rounded-bl-xl shadow-sm tracking-wider">
-            新春特惠·直降30%
+            特惠开通·全解锁
           </div>
 
           <div class="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-xl ring-4 ring-amber-50">
@@ -847,7 +1423,6 @@ export default {
             <p class="text-xs text-slate-400 mt-0.5">代码: {{ vipModal.etfCode }} · 含 11:30 半日线与日收盘图</p>
           </div>
 
-          <!-- 核心权益与算账锚点 -->
           <div class="bg-gradient-to-b from-slate-50 to-amber-50/30 rounded-xl p-3 text-xs text-slate-600 text-left space-y-1.5 border border-slate-100">
             <div class="flex items-center justify-between text-slate-800 font-bold border-b border-slate-200/60 pb-1.5">
               <span>开通会员立即解锁：</span>
@@ -855,7 +1430,7 @@ export default {
             </div>
             <div class="flex items-center gap-1.5 pt-0.5">
               <i class="fa-solid fa-check text-emerald-500"></i>
-              <span>全市场 50+ 热门 ETF 日线/半日线真实波幅</span>
+              <span>全市场热门标的日线/半日线真实波幅</span>
             </div>
             <div class="flex items-center gap-1.5">
               <i class="fa-solid fa-check text-emerald-500"></i>
@@ -867,7 +1442,6 @@ export default {
             </div>
           </div>
 
-          <!-- 促转化行动按钮 -->
           <div class="space-y-2 pt-1">
             <template v-if="!store.isLoggedIn">
               <button type="button" @click="handleRegisterAction" 
@@ -885,6 +1459,34 @@ export default {
               暂不解锁，仅看 3 只限免标的
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- ===== 打赏弹层 ===== -->
+      <div v-if="tipVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="tipVisible = false">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl text-center">
+          <h3 class="font-bold text-slate-800">感谢支持</h3>
+          <p class="text-xs text-slate-500">{{ settings.tip_note || '自愿打赏，不解锁任何权限' }}</p>
+          <div class="flex justify-center gap-2 mb-1" v-if="tipWechatSrc || tipAlipaySrc">
+            <button type="button" v-if="tipWechatSrc" @click="tipChannel='wechat'"
+                    class="px-3 py-1 rounded-full text-xs border transition"
+                    :class="tipChannel==='wechat' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200'">微信</button>
+            <button type="button" v-if="tipAlipaySrc" @click="tipChannel='alipay'"
+                    class="px-3 py-1 rounded-full text-xs border transition"
+                    :class="tipChannel==='alipay' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200'">支付宝</button>
+          </div>
+          <div class="flex justify-center">
+            <div v-if="tipChannel==='wechat' && tipWechatSrc" class="space-y-1">
+              <img :src="tipWechatSrc" class="w-40 h-40 object-contain border rounded-lg mx-auto" alt="微信收款码">
+              <div class="text-[11px] text-slate-500">微信扫码</div>
+            </div>
+            <div v-else-if="tipChannel==='alipay' && tipAlipaySrc" class="space-y-1">
+              <img :src="tipAlipaySrc" class="w-40 h-40 object-contain border rounded-lg mx-auto" alt="支付宝收款码">
+              <div class="text-[11px] text-slate-500">支付宝扫码</div>
+            </div>
+            <p v-else class="text-xs text-slate-400">后台尚未配置打赏收款码</p>
+          </div>
+          <button type="button" @click="tipVisible = false" class="text-sm text-slate-500">关闭</button>
         </div>
       </div>
     </div>
