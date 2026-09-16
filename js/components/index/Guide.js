@@ -1,7 +1,7 @@
 /**
  * 波幅探长 - 图表指南
  * A股配色：上涨趋势线=橙，下跌趋势线=绿
- * 配图：chart1.png（半日线标注）/ chart2.png（日线标注）
+ * 配图：webpic/chart1.png（半日线标注）/ webpic/chart2.png（日线标注）
  * 点击图片可用 Viewer.js 放大、翻页（与看板一致）
  * js/components/index/Guide.js
  */
@@ -49,7 +49,7 @@ export default {
     /** 与看板相同：Viewer 放大 + 左右翻页 */
     const openGuideViewer = (startIndex = 0) => {
       if (!window.Viewer) {
-        window.open(startIndex === 1 ? "./chart2.png" : "./chart1.png", "_blank");
+        window.open(startIndex === 1 ? "./webpic/chart2.png" : "./webpic/chart1.png", "_blank");
         return;
       }
       ensureViewerNavStyle();
@@ -62,8 +62,8 @@ export default {
       const wrap = document.createElement("div");
       wrap.style.display = "none";
       const imgs = [
-        { src: "./chart1.png", alt: "半日线：趋势线与涨跌标签" },
-        { src: "./chart2.png", alt: "日线：评分与阶段涨跌幅" },
+        { src: "./webpic/chart1.png", alt: "半日线：趋势线与涨跌标签" },
+        { src: "./webpic/chart2.png", alt: "日线：评分与阶段涨跌幅" },
       ];
       imgs.forEach((it) => {
         const img = document.createElement("img");
@@ -254,12 +254,12 @@ export default {
               <span class="text-xs text-slate-400">点击图片可放大、左右翻页</span>
             </div>
             <button type="button" class="block w-full text-left group" @click="openGuideViewer(0)">
-              <img src="./chart1.png" alt="半日线：半日趋势线、2日趋势线、涨跌标签"
+              <img src="./webpic/chart1.png" alt="半日线：半日趋势线、2日趋势线、涨跌标签"
                    class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[420px] cursor-zoom-in group-hover:opacity-95 transition"
                    loading="lazy"
                    onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='flex');">
               <div style="display:none" class="text-xs text-slate-400 justify-center py-10 border border-dashed rounded-xl">
-                请将 chart1.png 放到网站根目录（与 index.html 同级）
+                请将 webpic/chart1.png 放到网站根目录（与 index.html 同级）
               </div>
             </button>
             <figcaption class="text-xs text-slate-600 space-y-1 bg-slate-50 rounded-lg p-3">
@@ -276,12 +276,12 @@ export default {
               <span class="text-xs text-slate-400">点击图片可放大、左右翻页</span>
             </div>
             <button type="button" class="block w-full text-left group" @click="openGuideViewer(1)">
-              <img src="./chart2.png" alt="日线：评分与阶段涨跌幅"
+              <img src="./webpic/chart2.png" alt="日线：评分与阶段涨跌幅"
                    class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[420px] cursor-zoom-in group-hover:opacity-95 transition"
                    loading="lazy"
                    onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='flex');">
               <div style="display:none" class="text-xs text-slate-400 justify-center py-10 border border-dashed rounded-xl">
-                请将 chart2.png 放到网站根目录（与 index.html 同级）
+                请将 webpic/chart2.png 放到网站根目录（与 index.html 同级）
               </div>
             </button>
             <figcaption class="text-xs text-slate-600 space-y-1 bg-slate-50 rounded-lg p-3">
