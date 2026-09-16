@@ -1,7 +1,11 @@
 /* ========================= FILE: js/components/index/Dashboard.js ========================= */
 
 /**
- * 波幅探长 - 数据看板（完整还原原版标的排列与限免规则 + 高转化拦截与连续画廊）
+ * 波幅探长 - 数据看板（整合版）
+ * - 通用表：免费 TOP3 + VIP 全量
+ * - 数据与图表：原采集日映射（同一列同一日期，不跨周混填）
+ * - 列弹匣轮转：最新采集列在最右；手机全列可滑，默认滚到最新
+ * - 打赏入口（后台 tip_enabled）
  * js/components/index/Dashboard.js
  */
 import { store } from "../../store.js";
@@ -23,13 +27,13 @@ const dashboardPrefsApi = {
     }),
 };
 
-const { ref, reactive, computed, onMounted, nextTick, watch } = Vue;
+const { ref, computed, onMounted, nextTick, watch } = Vue;
 
 function settingOn(val) {
   return val === "1" || val === 1 || val === true || val === "true";
 }
 
-/** 基准列序：周一..周五、周线（0..4 day，-1 week） */
+/** 基准列序：周一..周五、周线（0..4 day，5 week） */
 const BASE_COLS = [
   { key: "d0", type: "day", dayIdx: 0, label: "周一" },
   { key: "d1", type: "day", dayIdx: 1, label: "周二" },
@@ -45,34 +49,27 @@ export default {
     const loading = ref(false);
     const allData = ref([]);
     const chartsMap = ref({});
+    /** 图表统一采集日 YYYY-MM-DD（北京）；仅来自 updated_at 或 R2 Last-Modified，绝不使用「今天」凑数 */
     const globalChartDay = ref(null);
+    /** 周线图表采集日（与日线独立） */
     const weeklyChartDay = ref(null);
-    const sharedList = ref([]);
+    const sharedList = ref([]); // 通用监控全量（无论是否触发）
     
-    // 会员收藏 / 自定义拖拽排序
-    const favCodes = ref([]);
+    /** 会员收藏 / 自定义排序 */
+    const favCodes = ref([]); // string codes，避免部分 WebView 对 Set 响应式异常
     const userOrder = ref([]);
     const dragCode = ref(null);
     const prefsSaving = ref(false);
 
-    // 搜索与排序
     const searchQuery = ref("");
     const sortColumn = ref(null);
     const sortOrder = ref("desc");
 
-    // 打赏与滚动
     const tipVisible = ref(false);
-    const tipChannel = ref("wechat");
+    const tipChannel = ref("wechat"); // wechat | alipay
     const tableScrollEl = ref(null);
 
-    // VIP 转化拦截弹窗状态
-    const vipModal = reactive({
-      visible: false,
-      etfCode: "",
-      etfName: "",
-      periodText: "",
-    });
-
+    /** 最新列在最右侧：滚到横向尽头（手机可左滑看更早列） */
     const scrollToLatestCol = async () => {
       await nextTick();
       const el = tableScrollEl.value;
@@ -95,6 +92,7 @@ export default {
       const u = String(settings.value.wechat_qr_url || settings.value.tip_wechat_qr_url || "").trim();
       return isImageUrl(u) ? u : "";
     });
+
     const tipAlipaySrc = computed(() => {
       const u = String(settings.value.alipay_qr_url || settings.value.tip_alipay_qr_url || "").trim();
       return isImageUrl(u) ? u : "";
@@ -112,6 +110,7 @@ export default {
       return `${m}月${d}日`;
     };
 
+    /** 标的名称：去掉「ETF」后面的文字（如 深证100ETF易方达 → 深证100ETF） */
     const formatEtfName = (name) => {
       if (!name) return "";
       const s = String(name).trim();
@@ -119,6 +118,7 @@ export default {
       return m ? m[1] : s;
     };
 
+    /** 看板单元格：上午/下午|日线 */
     const formatDayCell = (item) => {
       if (!item) return "-";
       const am = item.am_status && item.am_status !== "--" ? item.am_status : "-";
@@ -128,34 +128,40 @@ export default {
       return am + "/" + pm + "|" + day;
     };
 
+    /** 图表 icon 悬停：x月x日图表 */
     const chartDateTitle = (dateStr) => {
       const cn = formatDateCN(dateStr);
       return cn ? cn + "图表" : "图表";
     };
 
+    /** 数据单元格悬停：统一「x月x日」；无日期则空 */
     const dataDateTitle = (dateStr, kind = "") => {
       const cn = formatDateCN(dateStr);
       if (!cn) return kind || "";
       return kind ? cn + kind : cn;
     };
 
+    /** 周线数据悬停文案 */
     const weekDataTitle = (item) => {
       if (!item || !item.week_status) return "";
       const cn = formatDateCN(item.week_status_date);
       return cn ? cn + "周线" : "周线";
     };
 
+    /** 日线图表悬停：仅日线图表采集日 */
     const dailyChartTitle = (etfCode, colDate) => {
       const d = chartUpdateDay(etfCode) || globalChartDay.value || colDate;
       return chartDateTitle(d);
     };
 
+    /** 周线图表悬停：仅周线采集日（周六），不回落日线今天 */
     const weekChartTitle = () => {
       const d = weeklyChartDay.value;
       if (d && isValidDate(d)) return chartDateTitle(d);
       return "周线图表";
     };
 
+    /** 单元格主色：优先日线，其次下午、上午 */
     const cellPrimaryStatus = (item) => {
       if (!item) return null;
       if (item.day_status && item.day_status !== "-" && item.day_status !== "--") return item.day_status;
@@ -183,15 +189,25 @@ export default {
       return days;
     };
 
+    const shiftMonday = (mondayStr, weeksBack) => {
+      const [y, m, d] = parseYMD(mondayStr);
+      if (!y) return "";
+      const dt = new Date(y, m - 1, d - weeksBack * 7);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+        dt.getDate()
+      ).padStart(2, "0")}`;
+    };
+
     const getStatusVal = (str) => {
       if (!str || typeof str !== "string" || str === "-" || str === "--") return -9999;
       const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
       return match ? parseFloat(match[0]) : -9999;
     };
 
+    /** 本周一（本地日历），行情为空时仍能展示监控列表 */
     const calendarMonday = () => {
       const d = new Date();
-      const day = d.getDay();
+      const day = d.getDay(); // 0=Sun
       const diff = day === 0 ? -6 : 1 - day;
       d.setDate(d.getDate() + diff);
       const y = d.getFullYear();
@@ -215,6 +231,26 @@ export default {
       return calendarMonday();
     });
 
+    const latestDailyColIndex = computed(() => {
+      if (!latestMonday.value) return -1;
+      const weekDays = getWeekDays(latestMonday.value);
+      for (let idx = 4; idx >= 0; idx--) {
+        const dateStr = weekDays[idx];
+        const has = allData.value.some(
+          (i) =>
+            i.date === dateStr &&
+            i.day_status &&
+            i.day_status !== "-" &&
+            i.day_status !== "--"
+        );
+        if (has) return idx;
+      }
+      return -1;
+    });
+
+    const R2_CHART_BASE = "https://pub-973330e118204686a625fe51431d4336.r2.dev/charts";
+
+    /** 北京日历 YYYY-MM-DD */
     const bjYmd = (ms = Date.now()) => {
       try {
         return new Intl.DateTimeFormat("en-CA", {
@@ -241,6 +277,7 @@ export default {
       return bjYmd(ts);
     };
 
+    /** 北京最近交易日：若今天是工作日用今天，否则往前找（周末用周五） */
     const latestTradingDayBj = () => {
       for (let i = 0; i <= 7; i++) {
         const ms = Date.now() - i * 24 * 3600 * 1000;
@@ -265,6 +302,11 @@ export default {
       };
     };
 
+    /**
+     * 图表采集日（整表统一）：
+     * 只认 globalChartDay（来自接口 chart_date = R2 文件日）
+     * 绝不在这里用「今天」
+     */
     const chartUpdateDay = (_code) => globalChartDay.value || null;
 
     const chartColIndexForCode = (etfCode) => {
@@ -278,6 +320,12 @@ export default {
       return -1;
     };
 
+    const hasChartForCode = (etfCode) => {
+      const e = resolveChartEntry(etfCode);
+      return !!(e && e.url);
+    };
+
+    /** 采集日对应列才显示；有采集日就显示（不依赖 charts 是否非空） */
     const showDailyChartIcon = (etfCode, colIdx) => {
       if (colIdx < 0) return false;
       let target = chartColIndexForCode(etfCode);
@@ -287,13 +335,17 @@ export default {
         if (day && weekDays.length) {
           const wd = new Date(day + "T12:00:00+08:00").getDay();
           if (wd === 0 || wd === 6) {
-            target = 4;
+            target = 4; // 周五
           }
         }
       }
       return target === colIdx && target >= 0;
     };
 
+    /**
+     * 解析全局图表采集日
+     * 优先级：接口 chart_date > charts 内 max(updated_at) > 北京最近交易日（今天若工作日）
+     */
     const resolveGlobalChartDay = async (sampleCodes = [], apiChartDate = null) => {
       const fromApi = toBjDay(apiChartDate);
       if (fromApi) {
@@ -318,6 +370,7 @@ export default {
       return globalChartDay.value;
     };
 
+    /** 最近一个周六（北京），周线任务在周六 15:30 跑 */
     const lastSaturdayBj = () => {
       for (let i = 0; i <= 13; i++) {
         const ms = Date.now() - i * 24 * 3600 * 1000;
@@ -328,7 +381,13 @@ export default {
       return bjYmd(Date.now());
     };
 
-    const resolveWeeklyChartDay = async (apiWeeklyChartDate = null, _apiChartDate = null) => {
+    /**
+     * 周线图表采集日 = 最近完整闭合周的周六（任务跑批日）
+     */
+    const resolveWeeklyChartDay = async (
+      apiWeeklyChartDate = null,
+      _apiChartDate = null
+    ) => {
       const fromWeekly = toBjDay(apiWeeklyChartDate);
       if (fromWeekly) {
         weeklyChartDay.value = fromWeekly;
@@ -364,11 +423,6 @@ export default {
     const isBlankStatus = (s) =>
       !s || s === "-" || s === "--" || s === "None" || s === "null";
 
-    const normCode = (c) =>
-      String(c || "")
-        .replace(/\D/g, "")
-        .slice(-6);
-
     const findWeekStatusForMonday = (etfCode, mondayStr) => {
       if (!mondayStr) return null;
       const want = normCode(etfCode);
@@ -387,6 +441,11 @@ export default {
       }
       return best ? { status: best, date: bestDate } : null;
     };
+
+    const normCode = (c) =>
+      String(c || "")
+        .replace(/\D/g, "")
+        .slice(-6);
 
     const resolveLatestClosedWeekMonday = () => {
       let maxDate = "";
@@ -452,9 +511,6 @@ export default {
       return colDates;
     };
 
-    // ============================================================
-    // 标的排列与限免计算（完全沿用原版 dashboard-grok.js 逻辑）
-    // ============================================================
     const processedData = computed(() => {
       const empty = {
         list: [],
@@ -463,10 +519,7 @@ export default {
         weekStatusMonday: "",
         rankBy: "daily",
         rankDailyIdx: -1,
-        displayCols: BASE_COLS.slice(),
-        latestColKey: "d4",
       };
-
       const colDates = buildRecentTradingColDates();
       if (!colDates[0] && !colDates[1] && !colDates[2] && !colDates[3] && !colDates[4]) {
         const fb = latestMonday.value ? getWeekDays(latestMonday.value) : [];
@@ -474,7 +527,6 @@ export default {
         for (let i = 0; i < 5; i++) colDates[i] = fb[i];
       }
       const weekDays = colDates;
-
       const dateToIdx = new Map();
       weekDays.forEach((d, i) => {
         if (d) dateToIdx.set(d, i);
@@ -497,7 +549,7 @@ export default {
         return etfMap[code];
       };
 
-      // ① 灌入日线数据
+      // ① 日线灌入
       allData.value.forEach((item) => {
         if (!item.date || !isValidDate(item.date)) return;
         const idx = dateToIdx.get(item.date.trim());
@@ -509,21 +561,21 @@ export default {
         if (item.etf_name) row.etf_name = item.etf_name;
       });
 
-      // ② 并入通用监控列表
+      // ② 通用监控列表
       (sharedList.value || []).forEach((s) => {
         const code = normCode(s.etf_code || s.code);
         if (code.length !== 6) return;
         ensureRow(code, s.etf_name || s.name || code);
       });
 
-      // ③ 行情里出现过的代码兜底建行
+      // ③ 全局兜底
       allData.value.forEach((item) => {
         const code = normCode(item.etf_code);
         if (code.length !== 6) return;
         ensureRow(code, item.etf_name || code);
       });
 
-      // ④ 周线统一为闭合周
+      // ④ 周线闭合周
       const closedWeekMonday = resolveLatestClosedWeekMonday();
       const closedWeekDays = closedWeekMonday ? getWeekDays(closedWeekMonday) : [];
       const closedWeekFriday = closedWeekDays.length >= 5 ? closedWeekDays[4] : "";
@@ -545,11 +597,11 @@ export default {
       const weekStatusMonday = closedWeekMonday || latestMonday.value;
       let items = Object.values(etfMap);
 
-      const hasStatus = (s) => !(!s || s === "-" || s === "--");
+      const hasStatus = (s) => !!(s && s !== "-" && s !== "--");
       const cellHasDay = (row, idx) => hasStatus(row.days?.[idx]?.day_status);
       const cellHasHalf = (row, idx) => {
         const c = row.days?.[idx];
-        return !(!c || (!hasStatus(c.am_status) && !hasStatus(c.pm_status)));
+        return !!(c && (hasStatus(c.am_status) || hasStatus(c.pm_status)));
       };
       const cellHasAny = (row, idx) => cellHasDay(row, idx) || cellHasHalf(row, idx);
 
@@ -564,7 +616,7 @@ export default {
         }
       }
 
-      // 日线波幅列（有日线状态的最新列）
+      // 免费 Top3：最新日线列
       let dailyColIdx = -1;
       let dailyColDate = "";
       for (let idx = 0; idx < 5; idx++) {
@@ -577,7 +629,6 @@ export default {
 
       const hasAnyWeek = items.some((i) => hasStatus(i.week_status));
 
-      // 判断采集日优先级与周末周线模式
       const todayBj = bjYmd(Date.now());
       let isWeekendBj = false;
       try {
@@ -675,7 +726,7 @@ export default {
         return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
       };
 
-      // 原版免费看图 TOP3 规则（完全还原）：周线模式用周线排，日线模式用日线排
+      // 免费看图 TOP3 规则（完全同 Dashboard-grok.js）
       const freeTopN = 3;
       let freeTop3Codes = [];
       if (rankBy === "weekly") {
@@ -700,7 +751,6 @@ export default {
           .map((i) => i.etf_code);
       }
 
-      // 手动点击表头排序处理
       items.sort((a, b) => {
         if (sortColumn.value) {
           if (sortColumn.value === "etf_name") {
@@ -718,7 +768,6 @@ export default {
         return cmpDefaultRank(a, b);
       });
 
-      // 搜索过滤
       if (searchQuery.value) {
         const q = searchQuery.value.toLowerCase().trim();
         items = items.filter(
@@ -728,9 +777,7 @@ export default {
         );
       }
 
-      // 标的默认排列顺序（完全还原原版）：
-      // 1. 周线模式：整表纯按周线波动绝对值降序排列；
-      // 2. 日线模式：【免费 TOP3】 -> 【VIP 收藏】 -> 【其余标的】，组内按最新采集排序与拖拽序
+      // 默认排序结构：最新数据排列规则（免费TOP3 -> 收藏 -> 其余标的）
       if (!sortColumn.value) {
         if (rankBy === "weekly") {
           items.sort((a, b) => cmpWeekColumn(a, b, true));
@@ -779,7 +826,10 @@ export default {
         }
       }
 
-      // 列弹匣轮转（最右为最新列）
+      /**
+       * 弹匣轮转（手枪轮换显示）：最右 = 最新列
+       * 动态以 pivotIdx 为轴旋转整个列布局
+       */
       let pivotIdx = 5;
       if (rankBy === "weekly") {
         pivotIdx = 5;
@@ -821,34 +871,12 @@ export default {
         : BASE_COLS.slice();
     });
 
+    // 前三免费查看或 VIP 查看
     const canViewChart = (etfCode) => {
       if (store.state.isVip) return true;
       return (processedData.value.freeTop3Codes || []).includes(etfCode);
     };
 
-    const triggerVipModal = (item, period = "日线/半日线") => {
-      vipModal.etfCode = item.etf_code;
-      vipModal.etfName = formatEtfName(item.etf_name);
-      vipModal.periodText = period;
-      vipModal.visible = true;
-    };
-
-    const handleRegisterAction = async () => {
-      vipModal.visible = false;
-      store.state.menuOpen = false;
-      store.state.userMenuOpen = false;
-      await nextTick();
-      store.state.authModalVisible = true;
-    };
-
-    const handleUpgradeAction = () => {
-      vipModal.visible = false;
-      window.location.hash = "#/plan";
-    };
-
-    // ============================================================
-    // 会员自定义排版与拖拽排序
-    // ============================================================
     const isFavorite = (code) => {
       const list = Array.isArray(favCodes.value) ? favCodes.value : [];
       const c = String(code || "").replace(/\D/g, "").slice(-6);
@@ -954,9 +982,6 @@ export default {
       }
     };
 
-    // ============================================================
-    // 画廊浏览与连续翻页导航
-    // ============================================================
     const probeImage = (url) =>
       new Promise((resolve) => {
         const img = new Image();
@@ -971,21 +996,41 @@ export default {
       style.id = "bofutz-viewer-nav-style";
       style.textContent = `
         .bofutz-viewer-nav {
-          position: absolute; top: 50%; transform: translateY(-50%); z-index: 30;
-          width: 52px; height: 52px; border-radius: 999px;
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 30;
+          width: 52px;
+          height: 52px;
+          border-radius: 999px;
           border: 2.5px solid rgba(255,255,255,0.92);
-          background: rgba(15, 23, 42, 0.45); color: #fff;
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 6px 20px rgba(0,0,0,.28); -webkit-tap-highlight-color: transparent;
-          user-select: none; backdrop-filter: blur(6px);
+          background: rgba(15, 23, 42, 0.45);
+          color: #fff;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 6px 20px rgba(0,0,0,.28);
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          backdrop-filter: blur(6px);
           transition: background .15s ease, transform .15s ease, border-color .15s ease;
           padding: 0;
         }
-        .bofutz-viewer-nav:hover { background: rgba(15, 23, 42, 0.7); border-color: #fff; }
+        .bofutz-viewer-nav:hover {
+          background: rgba(15, 23, 42, 0.7);
+          border-color: #fff;
+        }
         .bofutz-viewer-nav:active { transform: translateY(-50%) scale(0.94); }
         .bofutz-viewer-nav svg {
-          width: 22px; height: 22px; display: block; fill: none;
-          stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+          width: 22px;
+          height: 22px;
+          display: block;
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 2.6;
+          stroke-linecap: round;
+          stroke-linejoin: round;
         }
         .bofutz-viewer-prev { left: 16px; }
         .bofutz-viewer-next { right: 16px; }
@@ -1013,7 +1058,8 @@ export default {
       const isMulti = imgList.length > 1;
       if (window.Viewer) {
         ensureViewerNavStyle();
-        let navPrev = null, navNext = null;
+        let navPrev = null;
+        let navNext = null;
         const clearNav = () => {
           try {
             navPrev && navPrev.remove();
@@ -1039,33 +1085,51 @@ export default {
           loop: isMulti,
           initialViewIndex: Math.min(initialIndex, imgList.length - 1),
           toolbar: {
-            zoomIn: 1, zoomOut: 1, oneToOne: 1, reset: 1,
-            prev: isMulti ? 1 : 0, play: 0, next: isMulti ? 1 : 0,
-            rotateLeft: 0, rotateRight: 0, flipHorizontal: 0, flipVertical: 0,
+            zoomIn: 1,
+            zoomOut: 1,
+            oneToOne: 1,
+            reset: 1,
+            prev: isMulti ? 1 : 0,
+            play: 0,
+            next: isMulti ? 1 : 0,
+            rotateLeft: 0,
+            rotateRight: 0,
+            flipHorizontal: 0,
+            flipVertical: 0,
           },
           ready() {
             if (!isMulti) return;
-            const root = (viewer && viewer.viewer) || document.querySelector(".viewer-container");
+            const root =
+              (viewer && viewer.viewer) ||
+              document.querySelector(".viewer-container");
             if (!root) return;
-            if (getComputedStyle(root).position === "static") root.style.position = "relative";
+            if (getComputedStyle(root).position === "static") {
+              root.style.position = "relative";
+            }
             clearNav();
             navPrev = document.createElement("button");
             navPrev.type = "button";
             navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
             navPrev.setAttribute("aria-label", "上一张");
-            navPrev.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="15 6 9 12 15 18"></polyline></svg>';
+            navPrev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 6 9 12 15 18"></polyline></svg>';
             navPrev.addEventListener("click", (e) => {
-              e.preventDefault(); e.stopPropagation();
-              try { viewer.prev(true); } catch (_) {}
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                viewer.prev(true);
+              } catch (_) {}
             });
             navNext = document.createElement("button");
             navNext.type = "button";
             navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
             navNext.setAttribute("aria-label", "下一张");
-            navNext.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+            navNext.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
             navNext.addEventListener("click", (e) => {
-              e.preventDefault(); e.stopPropagation();
-              try { viewer.next(true); } catch (_) {}
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                viewer.next(true);
+              } catch (_) {}
             });
             root.appendChild(navPrev);
             root.appendChild(navNext);
@@ -1099,7 +1163,9 @@ export default {
 
     const openDailyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
-        triggerVipModal(item, "日线/半日线");
+        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通监控 VIP？")) {
+          window.location.hash = "#/plan";
+        }
         return;
       }
       const rows = viewableBoardItems();
@@ -1107,8 +1173,9 @@ export default {
         store.showToast("暂无可查看的图表", "error");
         return;
       }
-      store.showToast("正在加载画廊图库…");
-      const dayLabel = formatDateCN(chartUpdateDay(item.etf_code) || globalChartDay.value) || "";
+      store.showToast("正在加载图库…");
+      const dayLabel =
+        formatDateCN(chartUpdateDay(item.etf_code) || globalChartDay.value) || "";
       const candidates = [];
       for (const row of rows) {
         const code = String(row.etf_code || "").replace(/\D/g, "").slice(-6) || row.etf_code;
@@ -1117,7 +1184,8 @@ export default {
         const r2Daily = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_daily.png`;
         const r2Half = `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_half_day.png`;
         const dailyUrl = (entry && entry.url) || r2Daily;
-        const rowDayLabel = formatDateCN(chartUpdateDay(code) || globalChartDay.value) || dayLabel;
+        const rowDayLabel =
+          formatDateCN(chartUpdateDay(code) || globalChartDay.value) || dayLabel;
         candidates.push({
           title: `${name} (${code}) ${rowDayLabel}日线`.replace(/\s+/g, " ").trim(),
           url: dailyUrl,
@@ -1153,7 +1221,9 @@ export default {
 
     const openWeeklyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
-        triggerVipModal(item, "周线");
+        if (confirm("此为 VIP 专属图表 (免费标的除外)。\n是否去开通通用 VIP？")) {
+          window.location.hash = "#/plan";
+        }
         return;
       }
       const rows = viewableBoardItems();
@@ -1161,12 +1231,14 @@ export default {
         store.showToast("暂无可查看的图表", "error");
         return;
       }
-      store.showToast("正在加载周线画廊…");
+      store.showToast("正在加载图库…");
       const candidates = [];
       for (const row of rows) {
         const code = String(row.etf_code || "").replace(/\D/g, "").slice(-6) || row.etf_code;
         const name = formatEtfName(row.etf_name) || code;
-        const rowDayLabel = formatDateCN(weeklyChartDay.value || globalChartDay.value || row.week_status_date) || "";
+        const rowDayLabel =
+          formatDateCN(weeklyChartDay.value || globalChartDay.value || row.week_status_date) ||
+          "";
         candidates.push({
           title: `${name} (${code}) ${rowDayLabel}周线`.replace(/\s+/g, " ").trim(),
           url: `https://pub-973330e118204686a625fe51431d4336.r2.dev/charts/${code}_weekly.png`,
@@ -1187,9 +1259,7 @@ export default {
 
     const getColorClass = (status) => {
       if (!status || status === "-" || status === "--") return "text-slate-300";
-      if (status.includes("+") || status.includes("▲")) return "text-red-500";
-      if (status.includes("-") || status.includes("▼")) return "text-emerald-500";
-      return "text-slate-300";
+      return status.includes("+") ? "text-red-500" : "text-emerald-500";
     };
 
     const initData = async () => {
@@ -1254,7 +1324,6 @@ export default {
     );
 
     return {
-      store: store.state,
       loading,
       searchQuery,
       sortColumn,
@@ -1262,17 +1331,14 @@ export default {
       handleSort,
       processedData,
       visibleCols,
-      formatEtfName,
-      formatDayCell,
-      dataDateTitle,
-      weekDataTitle,
-      dailyChartTitle,
-      weekChartTitle,
+      latestDailyColIndex,
+      chartColIndexForCode,
+      hasChartForCode,
       showDailyChartIcon,
-      openDailyChartViewer,
-      openWeeklyChartViewer,
-      getColorClass,
-      cellPrimaryStatus,
+      chartUpdateDay,
+      globalChartDay,
+      formatDateCN,
+      formatEtfName,
       isFavorite,
       toggleFavorite,
       onDragStart,
@@ -1280,16 +1346,25 @@ export default {
       onDropRow,
       canCustomizeBoard,
       dragCode,
-      tableScrollEl,
-      settings,
+      formatDayCell,
+      chartDateTitle,
+      dataDateTitle,
+      dailyChartTitle,
+      weekDataTitle,
+      weekChartTitle,
+      weeklyChartDay,
+      cellPrimaryStatus,
+      openDailyChartViewer,
+      openWeeklyChartViewer,
+      getColorClass,
       tipEnabled,
       tipVisible,
       tipChannel,
+      tableScrollEl,
       tipWechatSrc,
       tipAlipaySrc,
-      vipModal,
-      handleRegisterAction,
-      handleUpgradeAction,
+      settings,
+      store: store.state,
     };
   },
   template: `
@@ -1301,11 +1376,11 @@ export default {
 
       <div v-if="loading" class="text-center py-12 text-slate-400">
         <i class="fa-solid fa-spinner animate-spin text-2xl theme-text"></i>
-        <p class="mt-2 text-sm">读取云端量化数据中...</p>
+        <p class="mt-2 text-sm">读取云端数据中...</p>
       </div>
 
       <template v-else>
-        <!-- ===== 数据看板表格 ===== -->
+        <!-- ===== 通用数据表 ===== -->
         <div v-if="!processedData.list.length" class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
           <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-40"></i>
           <p>暂无相关行情数据</p>
@@ -1350,11 +1425,10 @@ export default {
                            :class="isFavorite(item.etf_code) ? 'text-amber-400' : 'text-slate-300'"></i>
                       </button>
                       <div class="min-w-0 flex-1 overflow-hidden">
-                        <div class="font-bold text-slate-800 flex items-center gap-1">
+                        <div class="font-bold text-slate-800 group-hover:theme-text flex items-center gap-0.5 flex-nowrap">
                           <span v-if="canCustomizeBoard" class="text-slate-300 text-[10px] cursor-grab active:cursor-grabbing select-none shrink-0" title="拖动排序">⋮⋮</span>
                           <span class="truncate text-[12px] sm:text-sm leading-tight" :title="formatEtfName(item.etf_name)">{{ formatEtfName(item.etf_name) }}</span>
-                          <span v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[10px] bg-emerald-100 text-emerald-700 px-1 py-0.2 rounded font-bold shrink-0">限免</span>
-                          <span v-else class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1 rounded font-bold shrink-0">VIP</span>
+                          <span v-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.2 rounded font-bold shrink-0">免费</span>
                         </div>
                         <div class="text-[11px] text-slate-400 font-mono">{{ item.etf_code }}</div>
                       </div>
@@ -1372,8 +1446,7 @@ export default {
                            :title="dataDateTitle(processedData.weekDays[col.dayIdx])">
                         <span class="text-[10px] sm:text-sm font-mono tracking-tight leading-tight">{{ formatDayCell(item.days[col.dayIdx]) }}</span>
                         <i v-if="showDailyChartIcon(item.etf_code, col.dayIdx)"
-                           class="fa-regular fa-image cursor-pointer text-sm sm:text-xs shrink-0 p-1"
-                           :class="processedData.freeTop3Codes.includes(item.etf_code) || store.isVip ? 'text-slate-400 hover:text-blue-500' : 'text-amber-500 hover:text-amber-600'"
+                           class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-sm sm:text-xs shrink-0 p-1"
                            :title="dailyChartTitle(item.etf_code, processedData.weekDays[col.dayIdx])"
                            @click.stop="openDailyChartViewer(item)"></i>
                       </div>
@@ -1381,8 +1454,7 @@ export default {
                     <template v-else>
                       <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1" :title="weekDataTitle(item)">
                         <span class="text-[10px] sm:text-sm font-mono leading-tight">{{ item.week_status || '-' }}</span>
-                        <i class="fa-regular fa-image cursor-pointer text-sm sm:text-xs shrink-0 p-1 -m-0.5"
-                           :class="processedData.freeTop3Codes.includes(item.etf_code) || store.isVip ? 'text-slate-400 hover:text-blue-500' : 'text-amber-500 hover:text-amber-600'"
+                        <i class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-sm sm:text-xs shrink-0 p-1 -m-0.5"
                            :title="weekChartTitle()"
                            @click.stop="openWeeklyChartViewer(item)"></i>
                       </div>
@@ -1395,10 +1467,10 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center">
-          标有「限免」的标的向所有访客开放全周期图表；支持表头点击排序及左右无缝翻页浏览全部标的通道图。
+          单元格格式：上午/下午|日线。未触发显示 “-”。显示最近 5 个交易日 + 最近完整周线；同一列同一日期。列弹匣轮转（最右为最新）。默认按最右列排序；免费 TOP3 → 收藏 → 其余。手机端默认定位到最新列，可左滑查看全部列。
         </p>
 
-        <!-- 打赏入口（兼容后台 tip_enabled） -->
+        <!-- 打赏入口 -->
         <div v-if="tipEnabled" class="text-center pt-2">
           <button type="button" @click="tipChannel = tipWechatSrc ? 'wechat' : (tipAlipaySrc ? 'alipay' : 'wechat'); tipVisible = true"
                   class="text-xs text-slate-400 hover:theme-text underline">
@@ -1407,62 +1479,7 @@ export default {
         </div>
       </template>
 
-      <!-- ===== 高转化·变现拦截转化弹窗 ===== -->
-      <div v-if="vipModal.visible" class="fixed inset-0 modal-overlay z-[120] flex items-center justify-center p-4" @click.self="vipModal.visible=false">
-        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4 text-center relative overflow-hidden border border-amber-100">
-          <div class="absolute top-0 right-0 bg-gradient-to-l from-red-500 to-amber-500 text-white text-[10px] font-extrabold px-3 py-1 rounded-bl-xl shadow-sm tracking-wider">
-            特惠开通·全解锁
-          </div>
-
-          <div class="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-xl ring-4 ring-amber-50">
-            <i class="fa-solid fa-crown"></i>
-          </div>
-
-          <div>
-            <h3 class="text-base font-extrabold text-slate-800">解锁【{{ vipModal.etfName }}】多空通道</h3>
-            <p class="text-xs text-slate-400 mt-0.5">代码: {{ vipModal.etfCode }} · 含 11:30 半日线与日收盘图</p>
-          </div>
-
-          <div class="bg-gradient-to-b from-slate-50 to-amber-50/30 rounded-xl p-3 text-xs text-slate-600 text-left space-y-1.5 border border-slate-100">
-            <div class="flex items-center justify-between text-slate-800 font-bold border-b border-slate-200/60 pb-1.5">
-              <span>开通会员立即解锁：</span>
-              <span class="text-red-500 font-extrabold">低至 0.6元/天</span>
-            </div>
-            <div class="flex items-center gap-1.5 pt-0.5">
-              <i class="fa-solid fa-check text-emerald-500"></i>
-              <span>全市场热门标的日线/半日线真实波幅</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <i class="fa-solid fa-check text-emerald-500"></i>
-              <span>盘中 11:30 异常收敛突破优先提示</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <i class="fa-solid fa-check text-emerald-500"></i>
-              <span>专属客服工单与标的票选入池权</span>
-            </div>
-          </div>
-
-          <div class="space-y-2 pt-1">
-            <template v-if="!store.isLoggedIn">
-              <button type="button" @click="handleRegisterAction" 
-                      class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white py-2.5 rounded-xl text-sm font-bold shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1.5">
-                <i class="fa-brands fa-weixin text-base"></i> 微信扫码·立领 3 天 VIP
-              </button>
-            </template>
-            <template v-else>
-              <button type="button" @click="handleUpgradeAction" 
-                      class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-md shadow-orange-500/20 flex items-center justify-center gap-1.5">
-                <i class="fa-solid fa-bolt"></i> 立即开通（享新手专享价）
-              </button>
-            </template>
-            <button type="button" @click="vipModal.visible=false" class="w-full py-1 text-xs text-slate-400 hover:text-slate-600">
-              暂不解锁，仅看 3 只限免标的
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== 打赏弹层 ===== -->
+      <!-- 打赏弹层 -->
       <div v-if="tipVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="tipVisible = false">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl text-center">
           <h3 class="font-bold text-slate-800">感谢支持</h3>
