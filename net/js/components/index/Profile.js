@@ -5,7 +5,7 @@
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
-import { planApi } from "../../api/plan.js";
+import { request } from "../../api/http.js";
 import { CONFIG } from "../../config.js";
 
 const { ref, reactive, computed, onMounted } = Vue;
@@ -105,7 +105,7 @@ export default {
       inviteeLoading.value = true;
       try {
         const [ordersRes, inviteesRes, meRes] = await Promise.all([
-          planApi.fetchUserOrders().catch(() => ({ data: [] })),
+          request("/api/user/orders").catch(() => ({ data: [] })),
           authApi.getInvitees().catch(() => ({ data: [] })),
           authApi.getMe().catch(() => null),
         ]);
@@ -115,7 +115,6 @@ export default {
 
         if (meRes && (meRes.data || meRes.username)) {
           const d = meRes.data || meRes;
-          const days = d.shared_vip_days ?? d.vip_days_left ?? 0;
           const days = d.shared_vip_days ?? d.vip_days_left ?? 0;
           store.setUserState({
             username: d.username,
