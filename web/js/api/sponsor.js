@@ -10,12 +10,15 @@ export const sponsorApi = {
     return request("/api/sponsor/active");
   },
 
-  /** 我的赞助（含过期） */
+  /** 我的赞助（含过期、剩余天数） */
   async fetchMine() {
     return request("/api/sponsor/mine");
   },
 
-  /** 下单：items=[{etf_code,etf_name}], days, amount, tx_id_last6, promo? */
+  /**
+   * 下单：items=[{etf_code,etf_name}], days, amount, tx_id_last6, promo?
+   * 提交后进入待审；审核通过后写入 symbol_sponsors
+   */
   async submitOrder(payload) {
     return request("/api/sponsor/order", {
       method: "POST",

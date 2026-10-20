@@ -1,5 +1,5 @@
 /**
- * 管理后台 API（已移除票选）
+ * 管理后台 API（已移除自主查询 / 次数套餐）
  */
 import { request } from "./http.js";
 
@@ -39,6 +39,12 @@ export const adminApi = {
     return request("/api/admin/users/purge_inactive", {
       method: "POST",
       body: JSON.stringify({ days, admin_confirm: adminConfirmSecret, dry_run: dryRun }),
+    });
+  },
+  async setUserLevel(userId, vipLevel) {
+    return request("/api/admin/users/set_level", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, vip_level: vipLevel }),
     });
   },
 
@@ -100,35 +106,6 @@ export const adminApi = {
     return request("/api/admin/sponsors/expire", {
       method: "POST",
       body: JSON.stringify({ id, admin_password: adminPassword }),
-    });
-  },
-
-  async fetchChartQueries(status = "") {
-    const q = status ? `?status=${encodeURIComponent(status)}` : "";
-    return request(`/api/admin/chart-queries${q}`);
-  },
-  async deleteChartQueries(ids, adminPassword) {
-    return request("/api/admin/chart-queries/delete", {
-      method: "POST",
-      body: JSON.stringify({
-        ids: Array.isArray(ids) ? ids : [ids],
-        admin_password: adminPassword,
-      }),
-    });
-  },
-  async fetchChartCreditPlans() {
-    return request("/api/admin/chart-credit-plans");
-  },
-  async saveChartCreditPlan(data) {
-    return request("/api/admin/chart-credit-plans", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-  async deleteChartCreditPlan(id) {
-    return request("/api/admin/chart-credit-plans", {
-      method: "DELETE",
-      body: JSON.stringify({ id }),
     });
   },
 
