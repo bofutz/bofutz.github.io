@@ -116,10 +116,12 @@ export default {
         if (meRes && (meRes.data || meRes.username)) {
           const d = meRes.data || meRes;
           const days = d.shared_vip_days ?? d.vip_days_left ?? 0;
+          const days = d.shared_vip_days ?? d.vip_days_left ?? 0;
           store.setUserState({
             username: d.username,
             referralCode: d.referral_code,
-            chartCredits: d.chart_credits ?? 0,
+            vipLevel: d.vip_level ?? 0,
+            vipDaysLeft: days,
           });
           if (d.security_set != null) {
             securitySet.value = !!d.security_set;
@@ -301,7 +303,7 @@ export default {
                 <th class="py-3 px-4">凭证(后6位)</th>
                 <th class="py-3 px-4">套餐/类型</th>
                 <th class="py-3 px-4">实付金额</th>
-                <th class="py-3 px-4">获得 VIP</th>
+                <th class="py-3 px-4">发放结果</th>
                 <th class="py-3 px-4">状态</th>
                 <th class="py-3 px-4">提交时间</th>
               </tr>
@@ -313,7 +315,7 @@ export default {
                 </td>
                 <td class="py-3.5 px-4 font-medium text-slate-800">
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-bold">{{ order.plan_id }}</span>
-                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'chart_credits' ? '查询次数' : order.order_type === 'custom_watchlist' ? '定制' : '监控VIP' }})</span>
+                  <span class="text-xs font-bold text-slate-500 ml-1">({{ order.order_type === 'symbol_sponsor' ? '赞助标的' : order.order_type === 'custom_watchlist' ? '定制' : '其他' }})</span>
                   <span v-if="order.order_type === 'custom_watchlist' && order.symbol_count" class="text-[10px] text-purple-500 ml-1 font-bold">
                     {{ order.symbol_count }}只
                   </span>
@@ -322,7 +324,7 @@ export default {
                 <td class="py-3.5 px-4 font-bold font-mono text-red-500">¥ {{ order.amount }}</td>
                 <td class="py-3.5 px-4 text-emerald-600 font-bold text-xs">
                   {{ order.status === 'approved'
-                      ? (order.vip_days_granted ? ('+' + order.vip_days_granted + '天') : (order.order_type === 'custom_watchlist' ? '定制激活' : '-'))
+                      ? (order.order_type === 'symbol_sponsor' ? '赞助生效' : (order.vip_days_granted ? ('+' + order.vip_days_granted + '天') : '-'))
                       : '-' }}
                 </td>
                 <td class="py-3.5 px-4 font-bold text-xs">

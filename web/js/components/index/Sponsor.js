@@ -1,13 +1,12 @@
 /**
  * 赞助监控标的
  * - 按周期计价（后台可配）
- * - 一人赞助，全体注册会员可见
- * - 有效期内可改代码/名称
- * - 他人可点赞感谢
+ * - 添加标的 → 进入对应金额收款界面 → 提交凭证 → 审核通过后进入公共池
+ * - 「我的赞助」展示：代码、名称、购买周期、剩余时间、状态
+ * - 有效期内可改代码/名称；他人可点赞
  */
 import { store } from "../../store.js";
 import { sponsorApi } from "../../api/sponsor.js";
-import { CONFIG } from "../../config.js";
 
 const { ref, reactive, computed, onMounted } = Vue;
 
@@ -41,6 +40,10 @@ export default {
     const unitPrice = computed(() => {
       const p = prices.value.find((x) => x.days === selectedDays.value);
       return p ? Number(p.price) : 0;
+    });
+    const selectedLabel = computed(() => {
+      const p = prices.value.find((x) => x.days === selectedDays.value);
+      return p ? p.label : `${selectedDays.value}天`;
     });
     const totalBase = computed(() => unitPrice.value * cart.value.length);
 
@@ -113,6 +116,7 @@ export default {
       floatingAmount.value = (base + cents).toFixed(2);
     };
 
+    /** 添加完成后进入收款界面 */
     const openPay = () => {
       if (!store.state.isLoggedIn) {
         store.state.authMode = "login";
@@ -123,7 +127,12 @@ export default {
         store.showToast("请先添加标的", "error");
         return;
       }
+      if (!(unitPrice.value > 0)) {
+        store.showToast("请选择有效周期", "error");
+        return;
+      }
       regenFloat();
+      txId.value = "";
       showPay.value = true;
     };
 
@@ -140,7 +149,7 @@ export default {
           amount: Number(floatingAmount.value),
           tx_id_last6: txId.value.trim(),
         });
-        store.showToast("订单已提交，审核通过后标的将进入公共监控池");
+        store.showToast("订单已提交，审核通过后标的将进入公共监控池，并显示在「我的赞助」");
         cart.value = [];
         txId.value = "";
         showPay.value = false;
@@ -235,6 +244,22 @@ export default {
     const isActive = (row) =>
       row.status === "active" && Number(row.expire_at) > Date.now();
 
+    /** 剩余天数（自然日） */
+    const remainDays = (row) => {
+      if (!row || !row.expire_at) return 0;
+      const left = Number(row.expire_at) - Date.now();
+      if (left <= 0) return 0;
+      return Math.ceil(left / 86400000);
+    };
+
+    const remainText = (row) => {
+      if (!isActive(row)) return "已过期";
+      const d = remainDays(row);
+      if (d <= 0) return "即将到期";
+      if (d === 1) return "不足 1 天";
+      return `剩余 ${d} 天`;
+    };
+
     onMounted(async () => {
       loading.value = true;
       const ch = settings.value.default_pay_channel || "wechat";
@@ -254,6 +279,7 @@ export default {
       form,
       searching,
       selectedDays,
+      selectedLabel,
       unitPrice,
       totalBase,
       payChannel,
@@ -274,6 +300,8 @@ export default {
       toggleLike,
       formatTime,
       isActive,
+      remainDays,
+      remainText,
       loadActive,
       loadMine,
     };
@@ -284,15 +312,15 @@ export default {
         <h2 class="text-2xl font-bold text-slate-800">赞助监控标的</h2>
         <p class="text-xs text-slate-500 mt-2 leading-relaxed">
           你赞助的标的会进入<strong class="text-slate-700">公共监控池</strong>，所有注册会员均可免费查看行情与图表。
-          有效期内可随时修改代码/名称。其他会员可用点赞感谢赞助者。
+          添加标的后进入收款界面完成支付；审核通过后在「我的赞助」可查看代码、名称、购买周期与剩余时间。有效期内可修改标的。
         </p>
       </div>
 
       <!-- 定价与加购 -->
       <div class="bg-white rounded-xl border border-slate-100 p-5 shadow-sm space-y-4">
-        <div class="text-sm font-bold text-slate-700">选择周期并添加标的</div>
+        <div class="text-sm font-bold text-slate-700">① 选择周期并添加标的</div>
         <div class="flex flex-wrap gap-2">
-          <button v-for="p in prices" :key="p.days" type="button" @click="selectedDays=p.days"
+          <button v-for="p in prices" :key="p.days" type="button" @click="selectedDays=p.days; regenFloat && regenFloat()"
                   class="px-3 py-2 rounded-lg border text-xs font-bold transition"
                   :class="selectedDays===p.days ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600'">
             {{ p.label }} · ¥{{ p.price }}/只
@@ -311,8 +339,8 @@ export default {
 
         <div v-if="cart.length" class="border rounded-lg overflow-hidden">
           <div class="bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 flex justify-between">
-            <span>待购清单（{{ cart.length }} 只）</span>
-            <span>合计约 ¥{{ totalBase }}（{{ selectedDays }}天）</span>
+            <span>待购清单（{{ cart.length }} 只）· {{ selectedLabel }}</span>
+            <span>合计约 ¥{{ totalBase.toFixed(2) }}</span>
           </div>
           <div class="divide-y">
             <div v-for="c in cart" :key="c.etf_code" class="px-3 py-2 text-sm flex justify-between items-center">
@@ -322,14 +350,14 @@ export default {
             </div>
           </div>
           <div class="p-3 text-right">
-            <button type="button" @click="openPay" class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold">
-              去支付
+            <button type="button" @click="openPay" class="theme-bg text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm">
+              ② 去支付 · ¥{{ totalBase.toFixed(2) }}
             </button>
           </div>
         </div>
       </div>
 
-      <!-- 我的赞助 -->
+      <!-- 我的赞助：代码、名称、购买周期、剩余时间 -->
       <div class="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
         <div class="px-4 py-3 border-b flex justify-between items-center">
           <span class="font-bold text-slate-700 text-sm">我的赞助</span>
@@ -338,14 +366,16 @@ export default {
           </button>
         </div>
         <div v-if="!store.isLoggedIn" class="py-8 text-center text-sm text-slate-400">登录后查看</div>
-        <div v-else-if="!mine.length" class="py-8 text-center text-sm text-slate-400">暂无赞助记录</div>
+        <div v-else-if="!mine.length" class="py-8 text-center text-sm text-slate-400">暂无赞助记录（支付并审核通过后显示）</div>
         <div v-else class="overflow-x-auto">
           <table class="w-full text-sm text-left">
             <thead class="bg-slate-50 text-xs text-slate-500 border-b">
               <tr>
                 <th class="py-2 px-3">代码</th>
                 <th class="py-2 px-3">名称</th>
-                <th class="py-2 px-3">有效期</th>
+                <th class="py-2 px-3">购买周期</th>
+                <th class="py-2 px-3">到期日</th>
+                <th class="py-2 px-3">剩余时间</th>
                 <th class="py-2 px-3">状态</th>
                 <th class="py-2 px-3 text-right">操作</th>
               </tr>
@@ -354,7 +384,12 @@ export default {
               <tr v-for="r in mine" :key="r.id">
                 <td class="py-2.5 px-3 font-mono font-bold">{{ r.etf_code }}</td>
                 <td class="py-2.5 px-3">{{ r.etf_name }}</td>
-                <td class="py-2.5 px-3 text-xs font-mono text-slate-500">至 {{ formatTime(r.expire_at) }}</td>
+                <td class="py-2.5 px-3 text-xs font-bold text-slate-600">{{ r.days || '-' }} 天</td>
+                <td class="py-2.5 px-3 text-xs font-mono text-slate-500">{{ formatTime(r.expire_at) }}</td>
+                <td class="py-2.5 px-3 text-xs font-bold"
+                    :class="isActive(r) ? (remainDays(r) <= 7 ? 'text-amber-600' : 'text-emerald-600') : 'text-slate-400'">
+                  {{ remainText(r) }}
+                </td>
                 <td class="py-2.5 px-3">
                   <span class="text-xs font-bold px-2 py-0.5 rounded-full"
                         :class="isActive(r) ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'">
@@ -385,7 +420,7 @@ export default {
                 <span class="font-sans font-normal text-slate-600 ml-2 text-sm">{{ r.etf_name }}</span>
               </div>
               <div class="text-[11px] text-slate-400 mt-0.5">
-                赞助者 {{ r.username || '会员' }} · 至 {{ formatTime(r.expire_at) }}
+                赞助者 {{ r.username || '会员' }} · {{ r.days || '-' }} 天 · 至 {{ formatTime(r.expire_at) }}
               </div>
             </div>
             <button type="button" @click="toggleLike(r)"
@@ -398,14 +433,22 @@ export default {
         </div>
       </div>
 
-      <!-- 支付弹层 -->
+      <!-- 支付弹层：对应金额收款界面 -->
       <div v-if="showPay" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="showPay=false">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
-          <h3 class="font-bold text-slate-800">支付赞助费用</h3>
-          <div class="text-center">
-            <div class="text-xs text-amber-700 bg-amber-50 inline-block px-2 py-0.5 rounded mb-1">请支付精准金额</div>
+          <h3 class="font-bold text-slate-800 text-center">支付赞助费用</h3>
+          <div class="text-center space-y-1">
+            <div class="text-xs text-amber-700 bg-amber-50 inline-block px-2 py-0.5 rounded border border-amber-100">请支付下方精准金额（勿多付少付）</div>
             <div class="text-3xl font-extrabold text-red-500 font-mono">¥ {{ floatingAmount }}</div>
-            <div class="text-xs text-slate-400 mt-1">{{ cart.length }} 只 × {{ selectedDays }} 天</div>
+            <div class="text-xs text-slate-500">
+              {{ cart.length }} 只 × {{ selectedLabel }}（单价 ¥{{ unitPrice }}）
+            </div>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-3 text-[11px] text-slate-600 space-y-0.5 max-h-28 overflow-y-auto">
+            <div v-for="c in cart" :key="c.etf_code" class="flex justify-between">
+              <span class="font-mono font-bold">{{ c.etf_code }}</span>
+              <span class="text-slate-500 truncate ml-2">{{ c.etf_name }}</span>
+            </div>
           </div>
           <div class="flex justify-center gap-2 text-xs">
             <button type="button" @click="payChannel='wechat'" class="px-3 py-1 rounded-full border"
@@ -414,15 +457,18 @@ export default {
                     :class="payChannel==='alipay'?'theme-bg text-white border-transparent':''">支付宝</button>
           </div>
           <div class="flex justify-center">
-            <img v-if="qrSrc" :src="qrSrc" class="w-40 h-40 object-contain border rounded-lg" alt="收款码">
-            <p v-else class="text-xs text-slate-400">请在后台配置收款码</p>
+            <img v-if="qrSrc" :src="qrSrc" class="w-44 h-44 object-contain border rounded-lg" alt="收款码">
+            <p v-else class="text-xs text-slate-400 py-8">请在后台配置收款码</p>
           </div>
-          <input v-model="txId" maxlength="6" placeholder="支付凭证后6位数字"
-                 class="w-full border rounded-lg px-3 py-2 text-center font-mono text-sm">
-          <div class="flex gap-2 justify-end">
+          <div>
+            <label class="text-[11px] text-slate-500 block mb-1 text-center">支付完成后填写凭证后 6 位数字</label>
+            <input v-model="txId" maxlength="6" placeholder="例如：123456"
+                   class="w-full border rounded-lg px-3 py-2.5 text-center font-mono text-sm tracking-widest">
+          </div>
+          <div class="flex gap-2 justify-end pt-1">
             <button type="button" @click="showPay=false" class="text-sm text-slate-500 px-3">取消</button>
-            <button type="button" @click="submitOrder" :disabled="submitLoading"
-                    class="theme-bg text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+            <button type="button" @click="submitOrder" :disabled="submitLoading || !/^\\d{6}$/.test(txId)"
+                    class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
               {{ submitLoading ? '提交中…' : '提交订单' }}
             </button>
           </div>
