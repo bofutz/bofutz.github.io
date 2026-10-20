@@ -1,6 +1,7 @@
 /**
  * 波幅探长 - 全局状态（精简版）
- * 登录即可看全量看板/图表；无 VIP 天数门槛
+ * 登录即可看全量看板/图表；无 VIP 天数门槛看图
+ * 已移除 chartCredits / 自主查询相关状态
  */
 import { CONFIG } from "./config.js";
 
@@ -10,8 +11,10 @@ const state = reactive({
   isLoggedIn: false,
   username: "",
   referralCode: "",
-  chartCredits: 0,
   securitySet: true,
+  vipLevel: 0,
+  vipDaysLeft: 0,
+  isVip: false,
 
   adminSecret: localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "",
   isAdminAuthenticated: false,
@@ -37,8 +40,6 @@ export const store = {
         state.isLoggedIn = true;
         state.username = localStorage.getItem(CONFIG.STORAGE_KEYS.USERNAME) || "";
         state.referralCode = localStorage.getItem(CONFIG.STORAGE_KEYS.REF_CODE) || "";
-        state.chartCredits =
-          parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.CHART_CREDITS), 10) || 0;
       } else {
         this.clearUserState();
       }
@@ -47,19 +48,20 @@ export const store = {
     }
   },
 
-  setUserState({ token, username, referralCode, chartCredits }) {
+  setUserState({ token, username, referralCode, vipLevel, vipDaysLeft, securitySet }) {
     if (token) localStorage.setItem(CONFIG.STORAGE_KEYS.TOKEN, token);
     if (username) localStorage.setItem(CONFIG.STORAGE_KEYS.USERNAME, username);
     if (referralCode != null)
       localStorage.setItem(CONFIG.STORAGE_KEYS.REF_CODE, referralCode);
-    if (chartCredits != null) {
-      const c = Math.max(0, parseInt(chartCredits, 10) || 0);
-      localStorage.setItem(CONFIG.STORAGE_KEYS.CHART_CREDITS, String(c));
-      state.chartCredits = c;
-    }
     state.isLoggedIn = true;
     state.username = username || state.username;
     state.referralCode = referralCode ?? state.referralCode;
+    if (vipLevel != null) state.vipLevel = Number(vipLevel) || 0;
+    if (vipDaysLeft != null) {
+      state.vipDaysLeft = Math.max(0, Number(vipDaysLeft) || 0);
+      state.isVip = state.vipDaysLeft > 0;
+    }
+    if (securitySet != null) state.securitySet = !!securitySet;
   },
 
   clearUserState() {
@@ -67,25 +69,18 @@ export const store = {
       CONFIG.STORAGE_KEYS.TOKEN,
       CONFIG.STORAGE_KEYS.USERNAME,
       CONFIG.STORAGE_KEYS.REF_CODE,
-      CONFIG.STORAGE_KEYS.CHART_CREDITS,
     ].forEach((k) => localStorage.removeItem(k));
     state.isLoggedIn = false;
     state.username = "";
     state.referralCode = "";
-    state.chartCredits = 0;
     state.securitySet = true;
+    state.vipLevel = 0;
+    state.vipDaysLeft = 0;
+    state.isVip = false;
   },
 
   setSecuritySet(val) {
     state.securitySet = !!val;
-  },
-
-  setChartCredits(n) {
-    const c = Math.max(0, parseInt(n, 10) || 0);
-    state.chartCredits = c;
-    try {
-      localStorage.setItem(CONFIG.STORAGE_KEYS.CHART_CREDITS, String(c));
-    } catch (_) {}
   },
 
   showToast(msg, type = "success") {

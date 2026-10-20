@@ -1,6 +1,7 @@
 /**
  * 波幅探长 - 全局配置
- * 注册即可看全量看板/图表；盈利点：会员赞助监控标的 + 自主查询次数
+ * 注册即可看全量看板/图表；盈利点：会员赞助监控标的
+ * 已移除：自主查询、次数套餐
  */
 export const CONFIG = {
   API_BASE: "https://vip.hahagw.eu.org",
@@ -12,7 +13,6 @@ export const CONFIG = {
     TOKEN: "etf_token",
     USERNAME: "etf_username",
     REF_CODE: "etf_ref",
-    CHART_CREDITS: "etf_chart_credits",
     ADMIN_SECRET: "admin_secret",
     AD_LAST_SHOWN: "etf_ad_last_shown",
   },
@@ -25,21 +25,17 @@ export const CONFIG = {
     { days: 365, price: 328, label: "全年" },
   ],
 
-  CHART_INTERVALS: {
-    half_day_closed: "最新收盘·半日线",
-    half_day_next: "下一收盘·半日线",
-    daily_closed: "最新收盘·日线",
-    daily_next: "下一收盘·日线",
-    weekly_closed: "最新收盘·周线",
-    weekly_next: "下一收盘·周线",
-    half_day: "最新收盘·半日线",
-    daily: "最新收盘·日线",
-    weekly: "最新收盘·周线",
-  },
-
   USERNAME_PATTERN: /^[A-Za-z0-9]+$/,
   USERNAME_MIN: 6,
   USERNAME_MAX: 32,
+
+  VIP_LEVEL_LABELS: {
+    0: "普通用户",
+    1: "月卡会员",
+    2: "季卡会员",
+    3: "半年会员",
+    4: "年卡会员",
+  },
 
   DEFAULT_PUBLIC_SETTINGS: {
     gift_register_days: "0",
@@ -55,14 +51,6 @@ export const CONFIG = {
     alipay_qr_url: "",
     wechat_qr_url: "",
     default_pay_channel: "wechat",
-
-    chart_query_batch_hours: "2",
-    chart_query_retain_trading_days: "2",
-    chart_query_intervals:
-      '["half_day_closed","half_day_next","daily_closed","daily_next","weekly_closed","weekly_next"]',
-    chart_query_deduct_on: "submit",
-    chart_run_slots:
-      '[{"time":"07:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"15:35","mode":"all","kinds":["half_day","daily"],"enabled":true},{"time":"19:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"22:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"09:00","mode":"query","kinds":["weekly"],"weekday":6,"enabled":true}]',
 
     /** 赞助标的周期价 JSON */
     symbol_prices:
