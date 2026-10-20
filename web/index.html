@@ -84,19 +84,15 @@
     import AdsPopup from "./js/components/common/AdsPopup.js";
 
     import Dashboard from "./js/components/index/Dashboard.js";
-    import Plan from "./js/components/index/Plan.js";
     import Profile from "./js/components/index/Profile.js";
     import Tickets from "./js/components/index/Tickets.js";
     import Guide from "./js/components/index/Guide.js";
-    import Query from "./js/components/index/Query.js";
     import Sponsor from "./js/components/index/Sponsor.js";
 
     const { createApp, ref, computed, onMounted, watch } = Vue;
 
     const routes = {
       "/": "dashboard-view",
-      "/plan": "plan-view",
-      "/query": "query-view",
       "/profile": "profile-view",
       "/tickets": "tickets-view",
       "/guide": "guide-view",
@@ -127,12 +123,14 @@
             const res = await authApi.getMe();
             const d = res?.data || res;
             if (!d) return;
+            const days = d.shared_vip_days ?? d.vip_days_left ?? 0;
             store.setUserState({
               username: d.username,
               referralCode: d.referral_code,
-              chartCredits: d.chart_credits ?? 0,
+              vipLevel: d.vip_level ?? 0,
+              vipDaysLeft: days,
+              securitySet: d.security_set,
             });
-            if (d.security_set != null) store.setSecuritySet?.(!!d.security_set);
           } catch (e) {
             if (String(e.message || "").includes("401") || e.status === 401) {
               store.clearUserState();
@@ -159,11 +157,9 @@
     app.component("toast-stack", Toast);
     app.component("ads-popup", AdsPopup);
     app.component("dashboard-view", Dashboard);
-    app.component("plan-view", Plan);
     app.component("profile-view", Profile);
     app.component("tickets-view", Tickets);
     app.component("guide-view", Guide);
-    app.component("query-view", Query);
     app.component("sponsor-view", Sponsor);
 
     app.mount("#app");

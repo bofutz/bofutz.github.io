@@ -38,7 +38,7 @@
     <header class="bg-white border-b h-16 shrink-0 flex items-center justify-between px-6 z-20">
       <h1 class="text-lg font-bold text-slate-800">
         波幅探长
-        <span class="text-xs text-slate-400 font-normal ml-1 bg-slate-100 px-2 py-0.5 rounded">管理后台 v3.0</span>
+        <span class="text-xs text-slate-400 font-normal ml-1 bg-slate-100 px-2 py-0.5 rounded">管理后台 v4.0</span>
       </h1>
       <button @click="logout" class="text-sm text-slate-500 hover:text-red-500">
         <i class="fa-solid fa-power-off mr-1"></i>退出
@@ -71,19 +71,17 @@
   import UserMgmt from "./js/components/admin/UserMgmt.js";
   import OrderMgmt from "./js/components/admin/OrderMgmt.js";
   import SharedWatch from "./js/components/admin/SharedWatch.js";
-  import ChartQueryMgmt from "./js/components/admin/ChartQueryMgmt.js";
   import SettingsMgmt from "./js/components/admin/SettingsMgmt.js";
   import TicketMgmt from "./js/components/admin/TicketMgmt.js";
   import SponsorMgmt from "./js/components/admin/SponsorMgmt.js";
-  import CreditPlanMgmt from "./js/components/admin/CreditPlanMgmt.js";
 
   const { createApp, ref, computed } = Vue;
 
   createApp({
     components: {
       "v-toast": Toast,
-      Dashboard, UserMgmt, OrderMgmt, SharedWatch, ChartQueryMgmt,
-      SettingsMgmt, TicketMgmt, SponsorMgmt, CreditPlanMgmt,
+      Dashboard, UserMgmt, OrderMgmt, SharedWatch,
+      SettingsMgmt, TicketMgmt, SponsorMgmt,
     },
     setup() {
       const adminSecret = ref(localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "");
@@ -96,8 +94,6 @@
         { k: "orders", t: "订单审核", icon: "fa-solid fa-file-invoice-dollar" },
         { k: "sponsors", t: "赞助标的", icon: "fa-solid fa-hand-holding-heart" },
         { k: "shared", t: "默认监控列表", icon: "fa-solid fa-list" },
-        { k: "chartQuery", t: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
-        { k: "credits", t: "次数套餐", icon: "fa-solid fa-coins" },
         { k: "tickets", t: "客服工单", icon: "fa-solid fa-headset" },
         { k: "settings", t: "系统设置", icon: "fa-solid fa-gear" },
       ];
@@ -141,8 +137,6 @@
           orders: "OrderMgmt",
           sponsors: "SponsorMgmt",
           shared: "SharedWatch",
-          chartQuery: "ChartQueryMgmt",
-          credits: "CreditPlanMgmt",
           settings: "SettingsMgmt",
           tickets: "TicketMgmt",
         };
