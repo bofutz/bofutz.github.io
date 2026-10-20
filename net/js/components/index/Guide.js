@@ -375,8 +375,8 @@ export default {
             市场有风险，决策与后果由使用者自行承担。
           </div>
           <div class="pt-2 text-center">
-            <a href="#/plan" class="inline-block theme-bg text-white text-xs font-bold px-5 py-2.5 rounded-lg no-underline">
-              了解开通套餐
+            <a href="#/sponsor" class="inline-block theme-bg text-white text-xs font-bold px-5 py-2.5 rounded-lg no-underline">
+              前往赞助标的
             </a>
           </div>
         </div>
