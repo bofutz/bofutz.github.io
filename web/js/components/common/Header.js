@@ -1,5 +1,5 @@
 /**
- * 顶栏导航（已移除票选；登录即可全量看图）
+ * 顶栏导航（已移除自主查询 / 次数套餐；登录即可全量看图）
  */
 import { store } from "../../store.js";
 
@@ -11,8 +11,6 @@ export default {
     const nav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line" },
       { path: "#/sponsor", label: "赞助标的", icon: "fa-solid fa-hand-holding-heart" },
-      { path: "#/query", label: "自主查询", icon: "fa-solid fa-magnifying-glass-chart" },
-      { path: "#/plan", label: "次数套餐", icon: "fa-solid fa-coins" },
       { path: "#/guide", label: "图表说明", icon: "fa-solid fa-book-open" },
     ];
     const mobileNav = [
@@ -118,10 +116,10 @@ export default {
               <div v-if="store.userMenuOpen"
                    class="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-50">
                 <div class="px-3 py-2 border-b border-slate-50 text-xs text-slate-500">
-                  查询次数 <strong class="theme-text font-mono">{{ store.chartCredits ?? 0 }}</strong>
-                  <div v-if="!store.securitySet" class="text-red-500 mt-1 font-medium">
+                  <div v-if="!store.securitySet" class="text-red-500 font-medium">
                     <i class="fa-solid fa-triangle-exclamation mr-0.5"></i>未设置安全问题
                   </div>
+                  <div v-else class="text-slate-500">账号安全已设置</div>
                 </div>
                 <a href="#/profile" @click="store.userMenuOpen=false"
                    class="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 no-underline">
