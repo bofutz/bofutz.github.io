@@ -37,13 +37,11 @@ export default {
       if (
         !confirm(
           `确认通过该订单？\n用户：${userLabel}\n类型：${
-            order.order_type === "chart_credits"
-              ? "查询次数"
-              : order.order_type === "symbol_sponsor"
+            order.order_type === "symbol_sponsor"
               ? "赞助标的"
               : order.order_type === "custom_watchlist"
-              ? "定制监控"
-              : "监控VIP"
+              ? "定制监控(已下线)"
+              : "其他"
           }\n金额：¥${order.amount}`
         )
       )
@@ -203,7 +201,7 @@ export default {
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 class="text-xl font-bold text-slate-800">订单审核</h2>
-          <p class="text-xs text-slate-400 mt-1">审核支付凭证：监控 VIP 按天 / 图表查询按次</p>
+          <p class="text-xs text-slate-400 mt-1">审核支付凭证：赞助标的等订单</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <div class="flex bg-slate-100 rounded-lg p-0.5 text-xs">
@@ -258,16 +256,16 @@ export default {
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-medium">{{ o.plan_id }}</span>
                   <span
                     class="text-[10px] ml-1.5 px-1.5 py-0.5 rounded font-bold"
-                    :class="o.order_type === 'chart_credits' ? 'bg-sky-50 text-sky-600' : o.order_type === 'custom_watchlist' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'"
+                    :class="o.order_type === 'symbol_sponsor' ? 'bg-emerald-50 text-emerald-600' : o.order_type === 'custom_watchlist' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'"
                   >
-                    {{ o.order_type === 'chart_credits' ? '次数' : o.order_type === 'symbol_sponsor' ? '赞助' : o.order_type === 'custom_watchlist' ? '定制' : '监控' }}
+                    {{ o.order_type === 'symbol_sponsor' ? '赞助' : o.order_type === 'custom_watchlist' ? '定制' : '其他' }}
                   </span>
                 </td>
                 <td class="py-3.5 px-4 font-bold text-slate-800 font-mono">¥{{ Number(o.amount).toFixed(2) }}</td>
                 <td class="py-3.5 px-4 font-mono font-bold text-orange-500">{{ o.tx_id_last6 || '-' }}</td>
                 <td class="py-3.5 px-4 text-xs font-bold text-emerald-600">
                   {{ o.status === 'approved'
-                      ? (o.vip_days_granted ? ('+' + o.vip_days_granted + '天') : (o.order_type === 'chart_credits' ? '次数' : '已发放'))
+                      ? (o.order_type === 'symbol_sponsor' ? '赞助生效' : (o.vip_days_granted ? ('+' + o.vip_days_granted + '天') : '已发放'))
                       : '-' }}
                 </td>
                 <td class="py-3.5 px-4">

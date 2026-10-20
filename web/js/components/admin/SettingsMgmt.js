@@ -39,12 +39,6 @@ export default {
       alipay_qr_url: "",
       wechat_qr_url: "",
       default_pay_channel: "wechat",
-      chart_query_batch_hours: "2",
-      chart_run_slots: '[{"time":"07:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"15:35","mode":"all","kinds":["half_day","daily"],"enabled":true},{"time":"19:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"22:00","mode":"query","kinds":["half_day","daily"],"enabled":true},{"time":"09:00","mode":"query","kinds":["weekly"],"weekday":6,"enabled":true}]',
-      chart_run_window_minutes: "25",
-      chart_query_retain_trading_days: "2",
-      chart_query_intervals: '["half_day_closed","half_day_next","daily_closed","daily_next","weekly_closed","weekly_next"]',
-      chart_query_deduct_on: "submit",
       symbol_prices: '[{"days":30,"price":30,"label":"1个月"},{"days":90,"price":88,"label":"季度"},{"days":180,"price":168,"label":"半年"},{"days":365,"price":328,"label":"全年"}]',
 
       // 票选
@@ -234,7 +228,7 @@ export default {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-lg font-bold text-slate-800 tracking-tight">系统设置</h2>
-          <p class="text-[11px] text-slate-400 mt-0.5">优惠码 → 注册与邀请 → 自主查询 → 支付 → 票选 → 广告 → 社交</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">优惠码 → 注册与邀请 → 支付 → 赞助定价 → 广告 → 社交</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button  @click="loadSettings" class="text-xs text-slate-500 px-3 py-1.5 rounded-lg border hover:bg-slate-50">刷新</button>
@@ -297,8 +291,8 @@ export default {
         </section>
 
 
-        <!-- 自主查询（周期 + 出图场次） -->
-        <section class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
+        <!-- 自主查询已下线 -->
+        <section v-if="false" class="bg-white rounded-xl border border-slate-100 p-5 space-y-4 shadow-sm">
           <h3 class="font-bold text-slate-700 text-sm border-b pb-2">自主查询 · 周期与出图场次</h3>
           <p class="text-[11px] text-slate-400 leading-relaxed">
             会员可选「最新收盘 / 下一收盘」的半日线、日线、周线。系统按下方场次自动对齐 charts 工作流：
