@@ -1293,8 +1293,9 @@ export default {
      */
     const openDailyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
-        if (confirm("注册登录后可查看全部图表。\n是否去注册登录？")) {
-          window.location.hash = "#/plan";
+        if (confirm("注册登录后可查看全部图表。\n是否立即登录 / 注册？")) {
+          store.state.authMode = "login";
+          store.state.authModalVisible = true;
         }
         return;
       }
@@ -1356,8 +1357,9 @@ export default {
      */
     const openWeeklyChartViewer = async (item) => {
       if (!canViewChart(item.etf_code)) {
-        if (confirm("注册登录后可查看全部图表。\n是否去注册登录？")) {
-          window.location.hash = "#/plan";
+        if (confirm("注册登录后可查看全部图表。\n是否立即登录 / 注册？")) {
+          store.state.authMode = "login";
+          store.state.authModalVisible = true;
         }
         return;
       }
