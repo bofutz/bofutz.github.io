@@ -4,26 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>波幅探长 - 股票/ETF波幅异动批量监控</title>
-  <meta name="description" content="波幅探长：股票/ETF波幅异动批量监控系统！" />
-  <link rel="icon" type="image/png" href="https://bofutz.github.io/webpic/logo.png">
+  <meta name="description" content="波幅探长：股票/ETF波幅异动批量监控。注册即可免费查看全量数据与图表。" />
+  <link rel="icon" type="image/png" href="./webpic/logo.png">
 
-  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Vue 3 -->
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <!-- Viewer.js -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.js"></script>
-  <!-- Turnstile -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 
   <style>
-    :root {
-      --theme: #4da6a0;
-      --theme-dark: #3d8a85;
-    }
+    [v-cloak] { display: none !important; }
+    :root { --theme: #4da6a0; --theme-dark: #3d8a85; }
     .theme-bg { background-color: var(--theme); }
     .theme-text { color: var(--theme); }
     .theme-border { border-color: var(--theme); }
@@ -33,109 +26,56 @@
       background: #f5f7f9;
       min-height: 100dvh;
     }
-    .modal-overlay {
-      background: rgba(15, 23, 42, 0.45);
-      backdrop-filter: blur(2px);
-    }
-    .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 999px;
-    }
-    .etf-name-column {
-      min-width: 120px;
-      max-width: 160px;
-    }
+    .modal-overlay { background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(3px); }
+    .custom-scrollbar::-webkit-scrollbar { height: 5px; width: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    .etf-name-column { min-width: 155px; max-width: 210px; }
     @media (min-width: 640px) {
-      .etf-name-column { min-width: 160px; max-width: 220px; }
+      .etf-name-column { min-width: 200px; max-width: 260px; }
     }
-  
-    /* 看板表格：桌面铺满卡片宽度；手机可横向滑动 */
     .dash-board-table {
-      table-layout: fixed;
-      width: 100%;
-      min-width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
+      table-layout: fixed; width: 100%; min-width: 100%;
+      border-collapse: separate; border-spacing: 0;
     }
-    .dash-board-table .dash-col-name {
-      width: 22%;
-      min-width: 140px;
-    }
-    .dash-board-table .dash-col-day {
-      width: 12.5%;
-      box-sizing: border-box;
-      padding-left: 0.2rem;
-      padding-right: 0.2rem;
-    }
+    .dash-board-table .dash-col-name { width: 25%; min-width: 165px; }
+    .dash-board-table .dash-col-day,
     .dash-board-table .dash-col-week {
-      width: 12.5%;
-      box-sizing: border-box;
-      padding-left: 0.2rem;
-      padding-right: 0.2rem;
+      width: 12.5%; box-sizing: border-box; padding-left: 0.2rem; padding-right: 0.2rem;
     }
-    .dash-board-table .dash-cell-inner {
-      min-height: 2.25rem;
-    }
+    .dash-board-table .dash-cell-inner { min-height: 2.25rem; }
     @media (max-width: 640px) {
-      /* 小屏：按内容宽度 + 横滑，避免挤叠 */
-      .dash-board-table {
-        table-layout: auto;
-        width: max-content;
-        min-width: 100%;
-      }
-      .dash-board-table .dash-col-name { width: 7.25rem; min-width: 7.25rem; max-width: 8.5rem; }
-      .dash-board-table .dash-col-day { min-width: 4.25rem; width: 4.25rem; }
-      .dash-board-table .dash-col-week { min-width: 3.5rem; width: 3.5rem; }
-      .dash-board-table .dash-cell-inner { min-height: 2.75rem; }
+      .dash-board-table { table-layout: auto; width: max-content; min-width: 100%; }
+      .dash-board-table .dash-col-name { width: 9.25rem; min-width: 9.25rem; max-width: 10.25rem; }
+      .dash-board-table .dash-col-day { min-width: 4.35rem; width: 4.35rem; }
+      .dash-board-table .dash-col-week { min-width: 3.6rem; width: 3.6rem; }
+      .dash-board-table .dash-cell-inner { min-height: 2.65rem; }
     }
-
-    .dash-table-scroll {
-      -webkit-overflow-scrolling: touch;
-      width: 100%;
-    }
+    .dash-table-scroll { -webkit-overflow-scrolling: touch; width: 100%; }
     .dash-board-table .dash-col-name,
     .dash-board-table th.etf-name-column,
     .dash-board-table td.etf-name-column {
-      position: sticky;
-      left: 0;
-      z-index: 20;
-      background: #fff;
+      position: sticky; left: 0; z-index: 20; background: #fff;
     }
     .dash-board-table thead th.etf-name-column,
     .dash-board-table thead th.dash-col-name {
-      z-index: 50;
-      background: #f8fafc;
+      z-index: 50; background: #f8fafc;
     }
-
   </style>
 </head>
 <body class="text-slate-800">
-  <div id="app" class="min-h-[100dvh] flex flex-col">
-    <!-- 顶栏 -->
+  <div id="app" v-cloak class="min-h-[100dvh] flex flex-col">
     <app-header></app-header>
-
-    <!-- 主内容 -->
-    <main class="flex-1 w-full px-3 sm:px-4 py-4 sm:py-6">
+    <main class="flex-1 w-full px-2.5 sm:px-4 py-3 sm:py-6">
       <component :is="currentView"></component>
     </main>
-
-    <!-- 页脚 -->
     <app-footer></app-footer>
-
-    <!-- 登录 / 注册 / 忘记密码 -->
     <auth-modal></auth-modal>
-
-    <!-- 全局 Toast -->
     <toast-stack></toast-stack>
-
-    <!-- 弹窗广告 -->
     <ads-popup></ads-popup>
   </div>
 
   <script type="module">
     import { store } from "./js/store.js";
-    import { CONFIG } from "./js/config.js";
     import { authApi } from "./js/api/auth.js";
 
     import Header from "./js/components/common/Header.js";
@@ -144,36 +84,31 @@
     import Toast from "./js/components/common/Toast.js";
     import AdsPopup from "./js/components/common/AdsPopup.js";
 
-    import Dashboard from "./js/components/index/Dashboard.js?v=20260817d";
-    import Plan from "./js/components/index/Plan.js";
+    import Dashboard from "./js/components/index/Dashboard.js";
     import Profile from "./js/components/index/Profile.js";
-    import Vote from "./js/components/index/Vote.js";
     import Tickets from "./js/components/index/Tickets.js";
     import Guide from "./js/components/index/Guide.js";
-    import Query from "./js/components/index/Query.js";
+    import Sponsor from "./js/components/index/Sponsor.js";
 
     const { createApp, ref, computed, onMounted, watch } = Vue;
 
     const routes = {
       "/": "dashboard-view",
-      "/plan": "plan-view",
-      "/query": "query-view",
       "/profile": "profile-view",
-      "/vote": "vote-view",
       "/tickets": "tickets-view",
       "/guide": "guide-view",
+      "/sponsor": "sponsor-view",
     };
 
     function parseHash() {
       const raw = (window.location.hash || "#/").replace(/^#/, "") || "/";
-      const path = raw.split("?")[0];
+      const path = raw.split("?")[0] || "/";
       return routes[path] ? path : "/";
     }
 
     const app = createApp({
       setup() {
         const routePath = ref(parseHash());
-
         const currentView = computed(() => routes[routePath.value] || "dashboard-view");
 
         const syncRoute = () => {
@@ -183,7 +118,6 @@
           window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
         };
 
-        /** 登录态刷新：天数 + 等级 + 安全问题标记 */
         const refreshMe = async () => {
           if (!store.state.isLoggedIn) return;
           try {
@@ -191,17 +125,12 @@
             const d = res?.data || res;
             if (!d) return;
             store.setUserState({
+              userId: d.id,
               username: d.username,
-              referralCode: d.referral_code,
-              vipDaysLeft: d.shared_vip_days ?? d.vip_days_left ?? 0,
-              vipLevel: d.vip_level ?? 0,
-              chartCredits: d.chart_credits ?? 0,
+              nickname: d.nickname || "",
+              securitySet: d.security_set,
             });
-            if (d.security_set != null) {
-              store.setSecuritySet?.(!!d.security_set);
-            }
           } catch (e) {
-            // token 失效
             if (String(e.message || "").includes("401") || e.status === 401) {
               store.clearUserState();
             }
@@ -215,17 +144,9 @@
           window.addEventListener("hashchange", syncRoute);
         });
 
-        watch(
-          () => store.state.isLoggedIn,
-          (v) => {
-            if (v) refreshMe();
-          }
-        );
+        watch(() => store.state.isLoggedIn, (v) => { if (v) refreshMe(); });
 
-        return {
-          currentView,
-          store: store.state,
-        };
+        return { currentView, store: store.state };
       },
     });
 
@@ -234,14 +155,11 @@
     app.component("auth-modal", AuthModal);
     app.component("toast-stack", Toast);
     app.component("ads-popup", AdsPopup);
-
     app.component("dashboard-view", Dashboard);
-    app.component("plan-view", Plan);
     app.component("profile-view", Profile);
-    app.component("vote-view", Vote);
     app.component("tickets-view", Tickets);
     app.component("guide-view", Guide);
-    app.component("query-view", Query);
+    app.component("sponsor-view", Sponsor);
 
     app.mount("#app");
   </script>
