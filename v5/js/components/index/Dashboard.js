@@ -1186,9 +1186,7 @@ export default {
                 {{ settings.tip_note || '觉得波幅探长对您有帮助？请作者喝杯咖啡吧' }}
               </h3>
               <p class="text-xs text-slate-500 leading-relaxed">
-                本站注册即可免费查看全量数据与图表。您可以自由输入任意金额打赏支持服务器与算力维护，或前往
-                <a href="#/sponsor" class="theme-text font-bold hover:underline">赞助监控标的</a>
-                让全站展示您的专属昵称并享受本人看板默认置顶。
+                本站注册即可免费查看全量数据与图表。您可以输入任意金额打赏支持服务器与算力维护。
               </p>
             </div>
 
@@ -1203,7 +1201,7 @@ export default {
               <button type="button" @click="openTipModal()"
                       class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
                 <i class="fa-solid fa-heart"></i>
-                <span>自由输入金额打赏</span>
+                <span>输入金额打赏</span>
               </button>
             </div>
           </div>
@@ -1253,7 +1251,7 @@ export default {
         </div>
       </div>
 
-      <!-- 自由打赏弹窗 -->
+      <!-- 打赏弹窗 -->
       <div v-if="tipVisible"
            class="fixed inset-0 modal-overlay z-[110] flex items-center justify-center p-4"
            @click.self="tipVisible = false">
@@ -1264,7 +1262,7 @@ export default {
                 <i class="fa-solid fa-mug-hot"></i>
               </span>
               <div>
-                <h3 class="font-bold text-slate-800 text-base">自由打赏支持</h3>
+                <h3 class="font-bold text-slate-800 text-base">打赏支持</h3>
                 <p class="text-[11px] text-slate-400">金额随心输入 · 感谢您支持波幅探长</p>
               </div>
             </div>
@@ -1274,10 +1272,10 @@ export default {
           </div>
 
           <div class="space-y-2">
-            <label class="text-xs font-bold text-slate-600 block">自由输入打赏金额（元）或点击快捷金额</label>
+            <label class="text-xs font-bold text-slate-600 block">输入打赏金额（元）或点击快捷金额</label>
             <div class="relative flex items-center">
               <span class="absolute left-3.5 text-lg font-bold text-slate-400">¥</span>
-              <input v-model="tipForm.amount" type="number" step="0.01" min="0.01" placeholder="自由输入打赏金额"
+              <input v-model="tipForm.amount" type="number" step="0.01" min="0.01" placeholder="输入打赏金额"
                      class="w-full border-2 border-amber-300 focus:border-amber-500 rounded-xl pl-8 pr-4 py-2 text-lg font-extrabold font-mono text-slate-800 outline-none">
             </div>
             <div class="flex flex-wrap gap-1.5 pt-1">
