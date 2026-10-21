@@ -1171,7 +1171,7 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center leading-relaxed px-2">
-          格式：上午/下午|日线；T+0 标的代码后标注 <strong>(0)</strong>。默认排序：赞助会员为「赞助标的 → 收藏 → TOP3 → 其它」，非赞助会员为「收藏 → TOP3 → 其它」。
+          格式：上午/下午|日线；T+0 标的代码后标注 <strong>(0)</strong>。
         </p>
 
         <!-- 看板底部：温暖打赏卡片 -->
