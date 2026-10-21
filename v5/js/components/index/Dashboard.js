@@ -1,10 +1,9 @@
 /**
- * 波幅探长 - 数据看板 (v5.1 全面优化版)
- * 1. 股票/ETF代码旁展示 (t+0) 或 (t+1) 交易条件标识，支持一键复制代码
- * 2. 赞助置顶规则：赞助会员本人登录时，其赞助标的在看板默认置顶（排在最前）；其他用户访问时，赞助标的排在免费 TOP3 下方
- * 3. 赞助署名展示真实会员昵称（❤️ 昵称 赞助），消除“热心会员”兜底误显
- * 4. 开发者增强：快捷筛选标签（全部 / T+0日内 / 会员赞助 / 自选收藏 / 今日异动）与盘面异动统计条
- * 5. 全面优化手机端表格与弹窗显示
+ * 波幅探长 - 数据看板 (v5.2 定制优化版)
+ * 1. 搜索行快捷筛选顺序：最新异动、我的收藏、T+0、会员赞助（保留“全部”重置项）
+ * 2. 赞助会员看板默认顺序：赞助标的 → 收藏 → TOP3 → 其它
+ * 3. 非赞助会员看板默认顺序：收藏 → TOP3 → 其它
+ * 4. 股票/ETF代码后标识：T+0 标的在代码后显示英文括号 (0)，非 T+0 标的不显示 (t+1)
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -43,7 +42,7 @@ export default {
     const prefsSaving = ref(false);
 
     const searchQuery = ref("");
-    const quickFilter = ref("all"); // all | t0 | sponsored | fav | active
+    const quickFilter = ref("all"); // all | active | fav | t0 | sponsored
     const sortColumn = ref(null);
     const sortOrder = ref("desc");
 
@@ -57,6 +56,14 @@ export default {
       guestChartModal.visible = false;
       store.state.authMode = mode;
       store.state.authModalVisible = true;
+    };
+
+    const setQuickFilter = (key) => {
+      if (key === "fav" && !store.state.isLoggedIn) {
+        goAuthFromPrompt("login");
+        return;
+      }
+      quickFilter.value = quickFilter.value === key ? "all" : key;
     };
 
     const tipVisible = ref(false);
@@ -554,22 +561,22 @@ export default {
           .map((i) => i.etf_code);
       }
 
+      const favSet = new Set(store.state.isLoggedIn ? (favCodes.value || []).map(String) : []);
+
       // 统计盘面信息
       const totalCount = items.length;
       const t0Count = items.filter((i) => i.trade_rule === "t+0").length;
       const sponsoredCount = items.filter((i) => i.is_sponsored || i.resolved_sponsor_name).length;
+      const favCount = items.filter((i) => favSet.has(String(i.etf_code))).length;
       const activeTodayCount = items.filter((i) =>
         rankBy === "weekly" ? absWeekVal(i) > -9999 : latestIdx >= 0 && cellHasAny(i, latestIdx)
       ).length;
 
       // 排序逻辑：
       // 若手动点击列头排序，则按指定列排序；
-      // 默认排序结构（满足要求4）：
-      //   Group -1: 当前登录会员本人赞助的标的（默认置顶！）
-      //   Group  0: 免费 TOP 3 标的
-      //   Group  1: 其他会员赞助的标的（排在前三下面！）
-      //   Group  2: 当前用户星标收藏的标的
-      //   Group  3: 其余标的
+      // 默认排序结构（严格按要求 2 & 3）：
+      //   · 赞助会员-数据看板：赞助标的 (Group 0) → 收藏 (Group 1) → TOP3 (Group 2) → 其它 (Group 3)
+      //   · 非赞助会员-数据看板：收藏 (Group 1) → TOP3 (Group 2) → 其它 (Group 3)
       if (sortColumn.value) {
         items.sort((a, b) => {
           if (sortColumn.value === "etf_name") {
@@ -588,23 +595,21 @@ export default {
       } else {
         const freeSet = new Set(freeTop3Codes.map(String));
         const freeIdx = new Map(freeTop3Codes.map((c, i) => [String(c), i]));
-        const favSet = new Set(store.state.isLoggedIn ? (favCodes.value || []).map(String) : []);
         const orderMap = new Map((userOrder.value || []).map((c, i) => [String(c), i]));
 
         const groupOf = (row) => {
           const c = String(row.etf_code);
-          if (row.is_my_sponsor) return -1; // 赞助会员本人赞助标的：默认置顶
-          if (freeSet.has(c)) return 0;     // 免费 TOP 3
-          if (row.is_sponsored || row.resolved_sponsor_name) return 1; // 其他用户视角：排在前三下面
-          if (favSet.has(c)) return 2;      // 自选收藏
-          return 3;                         // 其余标的
+          if (row.is_my_sponsor) return 0; // 赞助会员本人赞助标的（最优先）
+          if (favSet.has(c)) return 1;     // 我的收藏
+          if (freeSet.has(c)) return 2;    // TOP3
+          return 3;                        // 其它
         };
 
         items.sort((a, b) => {
           const ga = groupOf(a);
           const gb = groupOf(b);
           if (ga !== gb) return ga - gb;
-          if (ga === 0) return (freeIdx.get(String(a.etf_code)) ?? 0) - (freeIdx.get(String(b.etf_code)) ?? 0);
+          if (ga === 2) return (freeIdx.get(String(a.etf_code)) ?? 0) - (freeIdx.get(String(b.etf_code)) ?? 0);
           const primary = cmpDefaultRank(a, b);
           if (primary !== 0) return primary;
           if (orderMap.size) {
@@ -616,18 +621,17 @@ export default {
         });
       }
 
-      // 快捷筛选与搜索过滤
-      if (quickFilter.value === "t0") {
-        items = items.filter((i) => i.trade_rule === "t+0");
-      } else if (quickFilter.value === "sponsored") {
-        items = items.filter((i) => i.is_sponsored || i.resolved_sponsor_name);
-      } else if (quickFilter.value === "fav") {
-        const favSet = new Set((favCodes.value || []).map(String));
-        items = items.filter((i) => favSet.has(String(i.etf_code)) || i.is_my_sponsor);
-      } else if (quickFilter.value === "active") {
+      // 快捷筛选与搜索过滤（顺序：最新异动、我的收藏、T+0、会员赞助）
+      if (quickFilter.value === "active") {
         items = items.filter((i) =>
           rankBy === "weekly" ? absWeekVal(i) > -9999 : latestIdx >= 0 && cellHasAny(i, latestIdx)
         );
+      } else if (quickFilter.value === "fav") {
+        items = items.filter((i) => favSet.has(String(i.etf_code)));
+      } else if (quickFilter.value === "t0") {
+        items = items.filter((i) => i.trade_rule === "t+0");
+      } else if (quickFilter.value === "sponsored") {
+        items = items.filter((i) => i.is_sponsored || i.resolved_sponsor_name);
       }
 
       if (searchQuery.value) {
@@ -637,7 +641,7 @@ export default {
             (i.etf_name && i.etf_name.toLowerCase().includes(q)) ||
             (i.etf_code && i.etf_code.toLowerCase().includes(q)) ||
             (i.resolved_sponsor_name && i.resolved_sponsor_name.toLowerCase().includes(q)) ||
-            (i.trade_rule && i.trade_rule.toLowerCase().includes(q))
+            (i.trade_rule === "t+0" && (q === "0" || q === "(0)" || q.includes("t+0") || q.includes("t0")))
         );
       }
 
@@ -659,7 +663,7 @@ export default {
         rankDailyIdx: rankBy === "daily" ? latestIdx : -1,
         displayCols,
         latestColKey: displayCols[displayCols.length - 1].key,
-        stats: { totalCount, t0Count, sponsoredCount, activeTodayCount },
+        stats: { totalCount, t0Count, sponsoredCount, favCount, activeTodayCount },
       };
     });
 
@@ -715,7 +719,7 @@ export default {
         if (on && idx < 0) cur.push(code);
         if (!on && idx >= 0) cur.splice(idx, 1);
         favCodes.value = cur;
-        store.showToast(on ? "已加入自选收藏" : "已取消收藏");
+        store.showToast(on ? "已加入我的收藏" : "已取消收藏");
       } catch (err) {
         store.showToast(err.message || "收藏失败", "error");
       }
@@ -938,6 +942,7 @@ export default {
           favCodes.value = [];
           userOrder.value = [];
           mySponsoredCodes.value = [];
+          if (quickFilter.value === "fav") quickFilter.value = "all";
         }
       }
     );
@@ -946,6 +951,7 @@ export default {
       loading,
       searchQuery,
       quickFilter,
+      setQuickFilter,
       sortColumn,
       sortOrder,
       handleSort,
@@ -992,44 +998,44 @@ export default {
   },
   template: `
     <div class="max-w-7xl mx-auto space-y-3 select-none">
-      <!-- 搜索框 + 快捷筛选栏 -->
+      <!-- 搜索框 + 快捷筛选栏（严格按：最新异动，我的收藏，T+0，会员赞助） -->
       <div class="flex flex-col lg:flex-row gap-2.5 items-stretch lg:items-center justify-between">
         <div class="flex flex-col sm:flex-row gap-2 flex-1">
           <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center flex-1">
             <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3.5 text-xs sm:text-sm"></i>
-            <input v-model="searchQuery" type="search" placeholder="搜索代码 / 名称 / 赞助昵称 / t+0..."
+            <input v-model="searchQuery" type="search" placeholder="搜索代码 / 名称 / 赞助昵称 / (0)..."
                    class="w-full bg-transparent border-none outline-none text-xs sm:text-sm py-2.5 px-2.5">
             <button v-if="searchQuery" @click="searchQuery=''" class="text-slate-300 hover:text-slate-500 pr-3">
               <i class="fa-solid fa-circle-xmark text-xs"></i>
             </button>
           </div>
 
-          <!-- 快捷过滤胶囊（手机端可横滑） -->
+          <!-- 快捷过滤胶囊：最新异动 → 我的收藏 → T+0 → 会员赞助（再次点击可回到全部） -->
           <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
-            <button type="button" @click="quickFilter='all'"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
-                    :class="quickFilter==='all' ? 'theme-bg text-white border-transparent shadow-sm' : 'bg-white text-slate-600 border-slate-200/80 hover:bg-slate-50'">
-              全部 ({{ processedData.stats?.totalCount || 0 }})
-            </button>
-            <button type="button" @click="quickFilter='t0'"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
-                    :class="quickFilter==='t0' ? 'bg-indigo-600 text-white border-transparent shadow-sm' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50/50'">
-              ⚡ T+0 ({{ processedData.stats?.t0Count || 0 }})
-            </button>
-            <button type="button" @click="quickFilter='sponsored'"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
-                    :class="quickFilter==='sponsored' ? 'bg-amber-500 text-white border-transparent shadow-sm' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50/50'">
-              ❤️ 会员赞助 ({{ processedData.stats?.sponsoredCount || 0 }})
-            </button>
-            <button type="button" @click="quickFilter='active'"
+            <button type="button" @click="setQuickFilter('active')"
                     class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
                     :class="quickFilter==='active' ? 'bg-rose-500 text-white border-transparent shadow-sm' : 'bg-white text-rose-600 border-rose-100 hover:bg-rose-50/50'">
               🔥 最新异动 ({{ processedData.stats?.activeTodayCount || 0 }})
             </button>
-            <button v-if="store.isLoggedIn" type="button" @click="quickFilter='fav'"
+            <button type="button" @click="setQuickFilter('fav')"
                     class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
                     :class="quickFilter==='fav' ? 'bg-amber-400 text-slate-900 border-transparent shadow-sm' : 'bg-white text-slate-600 border-slate-200/80 hover:bg-slate-50'">
-              ★ 我的自选/赞助
+              ★ 我的收藏 ({{ processedData.stats?.favCount || 0 }})
+            </button>
+            <button type="button" @click="setQuickFilter('t0')"
+                    class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
+                    :class="quickFilter==='t0' ? 'bg-indigo-600 text-white border-transparent shadow-sm' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50/50'">
+              ⚡ T+0 ({{ processedData.stats?.t0Count || 0 }})
+            </button>
+            <button type="button" @click="setQuickFilter('sponsored')"
+                    class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
+                    :class="quickFilter==='sponsored' ? 'bg-amber-500 text-white border-transparent shadow-sm' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50/50'">
+              ❤️ 会员赞助 ({{ processedData.stats?.sponsoredCount || 0 }})
+            </button>
+            <button v-if="quickFilter !== 'all'" type="button" @click="quickFilter='all'"
+                    class="px-2 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
+                    title="显示全部标的">
+              全部 ({{ processedData.stats?.totalCount || 0 }})
             </button>
           </div>
         </div>
@@ -1069,7 +1075,7 @@ export default {
                 <tr class="text-xs text-slate-600 font-bold select-none">
                   <th class="py-2.5 sm:py-3 px-2 sm:px-3.5 text-left etf-name-column dash-col-name sticky top-0 left-0 bg-slate-50 z-40 cursor-pointer hover:bg-slate-100 transition-colors border-b border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
                       @click="handleSort('etf_name')">
-                    标的名称 / 代码(规则)
+                    标的名称 / 代码
                     <i v-if="sortColumn==='etf_name'" class="fa-solid text-[10px] ml-1" :class="sortOrder==='asc'?'fa-arrow-up':'fa-arrow-down'"></i>
                   </th>
                   <th v-for="col in visibleCols" :key="col.key"
@@ -1116,14 +1122,11 @@ export default {
                           <span v-else-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.2 rounded font-bold shrink-0">免费</span>
                         </div>
 
-                        <!-- 第二行：股票代码 + (t+0)/(t+1) + 赞助者昵称徽章 -->
+                        <!-- 第二行：股票代码 + T+0标示(0)（非T+0不写）+ 赞助者昵称徽章 -->
                         <div class="flex items-center gap-1 mt-0.5 flex-wrap">
                           <span class="text-[11px] text-slate-500 font-mono cursor-pointer hover:theme-text"
                                 title="点击复制标的代码"
-                                @click="copyCode(item.etf_code, $event)">{{ item.etf_code }}</span>
-                          <span class="text-[10px] font-mono font-bold px-1 rounded leading-tight shrink-0"
-                                :class="item.trade_rule === 't+0' ? 'bg-indigo-50 text-indigo-600 border border-indigo-200/70' : 'bg-slate-100 text-slate-500'"
-                                :title="item.trade_rule === 't+0' ? '支持 T+0 日内回转交易' : 'A股常规 T+1 交易制度'">({{ item.trade_rule }})</span>
+                                @click="copyCode(item.etf_code, $event)">{{ item.etf_code }}<span v-if="item.trade_rule === 't+0'" class="text-indigo-600 font-bold" title="支持 T+0 日内回转交易">(0)</span></span>
 
                           <span v-if="item.resolved_sponsor_name"
                                 class="inline-flex items-center gap-0.5 text-[10px] bg-amber-50 text-amber-800 border border-amber-200/90 px-1.5 py-0.2 rounded font-bold max-w-[110px] sm:max-w-[140px] truncate"
@@ -1168,7 +1171,7 @@ export default {
         </div>
 
         <p class="text-[11px] text-slate-400 text-center leading-relaxed px-2">
-          格式：上午/下午|日线；代码旁标注 <strong>(t+0)</strong> 日内回转或 <strong>(t+1)</strong> 交易规则。赞助会员本人赞助的标的默认<strong>置顶</strong>，其他用户排在免费 TOP3 下方。
+          格式：上午/下午|日线；T+0 标的代码后标注 <strong>(0)</strong>。默认排序：赞助会员为「赞助标的 → 收藏 → TOP3 → 其它」，非赞助会员为「收藏 → TOP3 → 其它」。
         </p>
 
         <!-- 看板底部：温暖打赏卡片 -->
