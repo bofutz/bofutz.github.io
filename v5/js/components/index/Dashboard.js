@@ -1044,7 +1044,7 @@ export default {
              class="bg-gradient-to-r from-[#4da6a0]/15 to-emerald-50 border border-[#4da6a0]/30 rounded-xl px-3 py-2 flex items-center justify-between gap-2 shrink-0">
           <span class="text-xs text-slate-700">
             <i class="fa-solid fa-unlock-keyhole theme-text mr-1"></i>
-            <strong>免费注册</strong>解锁全部标的图表与自选排序
+            <strong>免费注册</strong>解锁全部标的图表
           </span>
           <button type="button" @click="goAuthFromPrompt('register')"
                   class="theme-bg text-white text-xs font-bold px-3 py-1 rounded-lg shadow-sm hover:opacity-90 shrink-0">
