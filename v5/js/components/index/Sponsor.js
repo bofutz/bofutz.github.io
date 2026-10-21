@@ -1,9 +1,13 @@
 /**
- * 赞助监控标的 (v5.1)
- * 1. 支持分栏视图：「发起赞助 & 公共赞助池」与「我的赞助管理」（支持 #/sponsor?tab=mine 直达）
- * 2. 顶部支持快捷设置/修改赞助者昵称，保存后自动同步所有在期赞助标的的看板署名
- * 3. 在「待赞助清单结算区」与「扫码支付弹窗」双位置内置醒目的【优惠码输入框】，支持实时校验与减免抵扣
- * 4. 支持自动识别或手动指定标的交易条件 (t+0) / (t+1)
+ * 赞助监控标的 (v5.2 全面强化优惠码核销版)
+ * 1. 全流程常驻【优惠码】功能（不受后台开关误关影响，三大位置均可直接输入核销）：
+ *    - 位置 A：「① 选择赞助周期并添加标的」主表单内常驻【优惠码折扣】输入框，未加清单也可提前校验绑定优惠码
+ *    - 位置 B：「待赞助清单」结算栏内展示优惠码输入/切换框及「原价 vs 折后价」对比
+ *    - 位置 C：「扫码支付弹窗」内顶部金额下方常驻醒目的橙色【优惠码折扣抵扣】专区，支持随时输入/更换优惠码并实时重算扫码金额
+ * 2. 智能交互优化：
+ *    - 若用户在代码框输入了 6 位代码但未点「加入清单」就直接点「立即扫码支付」或「使用优惠码」，系统自动将该标的加入清单并计算折扣
+ *    - 切换赞助周期（月/季/半年/年）或增减标的时，已绑定的优惠码自动按新总价实时重算折扣，无需重新输入
+ * 3. 交易条件标识同步看板规则：T+0 标的代码后标注 (0)，非 T+0 标的不标注 (t+1)
  */
 import { store } from "../../store.js";
 import { sponsorApi } from "../../api/sponsor.js";
@@ -73,13 +77,12 @@ export default {
     const submitLoading = ref(false);
     const floatingCents = ref(0.01);
 
-    // 优惠码状态（始终显示，方便用户直接输入）
+    // ==================== 优惠码核心状态（全程常驻可用） ====================
     const promoInput = ref("");
     const promoChecking = ref(false);
-    const appliedPromo = ref(null);
+    const appliedPromo = ref(null); // { code, name, discount_type, discount_value, discount, amount, original }
 
     const settings = computed(() => store.state.publicSettings || {});
-    const promoEnabled = computed(() => String(settings.value.promo_enabled ?? "1") !== "0");
 
     const unitPrice = computed(() => {
       const p = prices.value.find((x) => x.days === selectedDays.value);
@@ -89,14 +92,40 @@ export default {
       const p = prices.value.find((x) => x.days === selectedDays.value);
       return p ? p.label : `${selectedDays.value}天`;
     });
-    const totalBase = computed(() => unitPrice.value * cart.value.length);
 
-    const discountedBase = computed(() => {
-      if (appliedPromo.value && appliedPromo.value.amount != null) {
-        return Number(appliedPromo.value.amount);
-      }
-      return totalBase.value;
+    /** 有效标的数：若清单为空但输入框已填6位代码，按 1 只预估以支持提前算优惠 */
+    const effectiveCount = computed(() => {
+      if (cart.value.length > 0) return cart.value.length;
+      const code = String(form.code || "").replace(/\D/g, "");
+      return code.length === 6 ? 1 : 0;
     });
+
+    const totalBase = computed(() => unitPrice.value * cart.value.length);
+    const previewBase = computed(() => unitPrice.value * Math.max(1, effectiveCount.value));
+
+    /** 根据已绑定优惠码规则动态计算当前清单折后价与减免额 */
+    const promoCalc = computed(() => {
+      const orig = totalBase.value;
+      if (!appliedPromo.value || !(orig > 0)) {
+        return { discount: 0, finalBase: orig };
+      }
+      const p = appliedPromo.value;
+      let discounted = orig;
+      if (p.discount_type === "percent" && Number(p.discount_value) > 0) {
+        const pct = Math.min(99, Math.max(0, Number(p.discount_value)));
+        discounted = orig * (1 - pct / 100);
+      } else if (p.discount_type === "fixed" && Number(p.discount_value) > 0) {
+        discounted = Math.max(0.01, orig - Number(p.discount_value));
+      } else if (p.amount != null && Number(p.original) === orig) {
+        discounted = Number(p.amount);
+      }
+      discounted = Math.max(0.01, Math.round(discounted * 100) / 100);
+      const saved = Math.max(0, Math.round((orig - discounted) * 100) / 100);
+      return { discount: saved, finalBase: discounted };
+    });
+
+    const discountedBase = computed(() => promoCalc.value.finalBase);
+    const discountSaved = computed(() => promoCalc.value.discount);
 
     const payableAmount = computed(() => {
       const base = discountedBase.value;
@@ -163,30 +192,61 @@ export default {
       promoInput.value = "";
     };
 
+    /** 若用户已在输入框填了 6 位代码但尚未点“加入清单”，自动帮其加入清单 */
+    const ensureCartFromForm = async () => {
+      const rawCode = String(form.code || "").trim().replace(/\D/g, "").slice(-6);
+      if (rawCode.length === 6 && !cart.value.some((x) => x.etf_code === rawCode)) {
+        if (!form.name) form.name = (await fetchName(rawCode)) || rawCode;
+        const mode =
+          form.trade_mode === "t+0" || form.trade_mode === "t+1"
+            ? form.trade_mode
+            : resolveTradeRule(rawCode, form.name);
+        cart.value.push({
+          etf_code: rawCode,
+          etf_name: form.name || rawCode,
+          trade_mode: mode,
+        });
+        form.code = "";
+        form.name = "";
+        form.trade_mode = "auto";
+        regenFloat();
+      }
+    };
+
     const applyPromoCode = async () => {
       const code = (promoInput.value || "").trim().toUpperCase();
       if (!code) {
         store.showToast("请输入优惠码", "error");
         return;
       }
-      if (!(totalBase.value > 0)) {
-        store.showToast("请先添加要赞助的标的", "error");
-        return;
-      }
+      await ensureCartFromForm();
+      const checkBase = totalBase.value > 0 ? totalBase.value : previewBase.value || 30;
+
       promoChecking.value = true;
       try {
         const res = await sponsorApi.checkPromo({
-          base_amount: totalBase.value,
+          base_amount: checkBase,
           promo_code: code,
         });
         appliedPromo.value = {
           code: res.code || code,
           name: res.name || code,
+          discount_type: res.discount_type || "percent",
+          discount_value: Number(res.discount_value || 0),
           discount: Number(res.discount || 0),
-          amount: Number(res.amount || totalBase.value),
-          original: Number(res.original || totalBase.value),
+          amount: Number(res.amount || checkBase),
+          original: Number(res.original || checkBase),
         };
-        store.showToast(`优惠码已生效，立减 ¥${Number(res.discount || 0).toFixed(2)}`);
+        promoInput.value = appliedPromo.value.code;
+        if (totalBase.value > 0) {
+          store.showToast(`优惠码 ${appliedPromo.value.code} 已生效，立减 ¥${discountSaved.value.toFixed(2)}`);
+        } else {
+          const ruleDesc =
+            appliedPromo.value.discount_type === "percent"
+              ? `减免 ${appliedPromo.value.discount_value}%`
+              : `立减 ¥${appliedPromo.value.discount_value}`;
+          store.showToast(`优惠码 ${appliedPromo.value.code}（${ruleDesc}）已绑定，添加标的后自动抵扣`);
+        }
       } catch (e) {
         appliedPromo.value = null;
         store.showToast(e.message || "优惠码无效或已过期", "error");
@@ -218,35 +278,40 @@ export default {
       form.code = "";
       form.name = "";
       form.trade_mode = "auto";
-      appliedPromo.value = null;
       regenFloat();
+      // 若用户在输入优惠码框填了内容但未点“使用优惠码”，自动帮其校验
+      if (promoInput.value.trim() && !appliedPromo.value) {
+        await applyPromoCode();
+      }
     };
 
     const removeCart = (code) => {
       cart.value = cart.value.filter((x) => x.etf_code !== code);
-      appliedPromo.value = null;
       regenFloat();
     };
 
     const selectPeriod = (days) => {
       selectedDays.value = days;
-      appliedPromo.value = null;
       regenFloat();
     };
 
-    const openPay = () => {
+    const openPay = async () => {
       if (!store.state.isLoggedIn) {
         store.state.authMode = "login";
         store.state.authModalVisible = true;
         return;
       }
+      await ensureCartFromForm();
       if (!cart.value.length) {
-        store.showToast("请先添加要赞助的标的", "error");
+        store.showToast("请先输入 6 位标的代码并加入清单", "error");
         return;
       }
       if (!(unitPrice.value > 0)) {
-        store.showToast("请选择有效周期", "error");
+        store.showToast("请选择有效赞助周期", "error");
         return;
+      }
+      if (promoInput.value.trim() && !appliedPromo.value) {
+        await applyPromoCode();
       }
       regenFloat();
       txId.value = "";
@@ -453,8 +518,8 @@ export default {
       unitPrice,
       totalBase,
       discountedBase,
+      discountSaved,
       payableAmount,
-      promoEnabled,
       promoInput,
       promoChecking,
       appliedPromo,
@@ -493,7 +558,7 @@ export default {
         <div>
           <h2 class="text-xl sm:text-2xl font-bold text-slate-800">赞助监控标的</h2>
           <p class="text-xs text-slate-500 mt-1 leading-relaxed">
-            一人赞助，全员共享；<strong>您赞助的标的将在您的数据看板默认置顶</strong>（其他用户排在前三下面），并展示您的<strong>专属昵称</strong>。
+            一人赞助，全员共享；<strong>您赞助的标的将在您的数据看板默认置顶</strong>，并展示您的<strong>专属昵称</strong>。
           </p>
         </div>
 
@@ -548,12 +613,13 @@ export default {
       <template v-if="activeTab === 'public'">
         <div class="bg-white rounded-xl border border-slate-100 p-4 sm:p-5 shadow-sm space-y-4">
           <div class="flex items-center justify-between flex-wrap gap-2">
-            <span class="text-sm font-bold text-slate-700">① 选择赞助周期并添加标的</span>
-            <span v-if="promoEnabled" class="text-[11px] text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200 font-bold">
-              <i class="fa-solid fa-ticket mr-1"></i>支持使用优惠码减免
+            <span class="text-sm font-bold text-slate-700">① 选择赞助周期、添加标的与优惠码</span>
+            <span class="text-[11px] text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200 font-bold">
+              <i class="fa-solid fa-ticket mr-1"></i>支持优惠码立减抵扣
             </span>
           </div>
 
+          <!-- 周期选择 -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button v-for="p in prices" :key="p.days" type="button" @click="selectPeriod(p.days)"
                     class="p-3 rounded-xl border text-left transition"
@@ -563,15 +629,18 @@ export default {
             </button>
           </div>
 
+          <!-- 标的输入行 -->
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
             <input v-model="form.code" @input="onCodeInput" maxlength="6" placeholder="输入 6 位股票/ETF代码（如 513090）"
-                   class="sm:col-span-4 border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm font-mono uppercase focus:theme-border outline-none">
+                   class="sm:col-span-4 border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm font-mono uppercase focus:theme-border outline-none"
+                   @keyup.enter="addToCart">
             <input v-model="form.name" placeholder="标的名称（输入代码自动识别，也可手填）"
-                   class="sm:col-span-4 border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm focus:theme-border outline-none">
+                   class="sm:col-span-4 border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm focus:theme-border outline-none"
+                   @keyup.enter="addToCart">
             <select v-model="form.trade_mode" class="sm:col-span-2 border border-slate-200 rounded-lg px-2.5 py-2.5 text-xs text-slate-700 focus:theme-border outline-none">
-              <option value="auto">交易规则: 自动识别</option>
-              <option value="t+1">标注 (t+1)</option>
-              <option value="t+0">标注 (t+0)</option>
+              <option value="auto">交易规则: 自动</option>
+              <option value="t+0">T+0 标的(0)</option>
+              <option value="t+1">常规标的</option>
             </select>
             <button type="button" @click="addToCart"
                     class="sm:col-span-2 theme-bg text-white px-4 py-2.5 rounded-lg text-xs font-bold shrink-0 hover:opacity-90 shadow-sm">
@@ -582,14 +651,47 @@ export default {
             <i class="fa-solid fa-spinner animate-spin mr-1"></i>正在自动识别标的名称…
           </p>
 
-          <!-- 待赞助清单 + 优惠码前置输入 + 结算按钮 -->
-          <div v-if="cart.length" class="border border-slate-200 rounded-xl overflow-hidden">
-            <div class="bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-600 flex justify-between items-center">
+          <!-- 位置 A：主表单常驻【优惠码】输入栏（未加清单也能直接看到并输入） -->
+          <div class="bg-gradient-to-r from-orange-50/80 via-amber-50/50 to-white border border-orange-200/80 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <i class="fa-solid fa-ticket text-xs"></i>
+              </span>
+              <div>
+                <div class="font-bold text-slate-800">优惠码折扣（选填）</div>
+                <div class="text-[11px] text-slate-500">输入优惠码点击「使用优惠码」，支付时自动减免对应金额</div>
+              </div>
+            </div>
+
+            <div v-if="!appliedPromo" class="flex items-center gap-2 sm:w-80">
+              <input v-model="promoInput" type="text" placeholder="请输入优惠码（如 VIP88）"
+                     class="flex-1 border border-orange-200 bg-white rounded-lg px-3 py-2 text-xs font-mono uppercase focus:theme-border outline-none"
+                     @keyup.enter="applyPromoCode">
+              <button type="button" @click="applyPromoCode" :disabled="promoChecking || !promoInput.trim()"
+                      class="px-3.5 py-2 rounded-lg text-xs font-bold bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 shrink-0 shadow-sm">
+                {{ promoChecking ? '校验中...' : '使用优惠码' }}
+              </button>
+            </div>
+            <div v-else class="flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700 sm:w-auto">
+              <span>
+                <i class="fa-solid fa-circle-check mr-1"></i>已绑定优惠码 <strong>{{ appliedPromo.code }}</strong>
+                <template v-if="appliedPromo.discount_type === 'percent'">（减免 {{ appliedPromo.discount_value }}%）</template>
+                <template v-else-if="appliedPromo.discount_type === 'fixed'">（立减 ¥{{ appliedPromo.discount_value }}）</template>
+                <template v-if="totalBase > 0"> · 已减 <strong>¥{{ discountSaved.toFixed(2) }}</strong></template>
+              </span>
+              <button type="button" @click="clearPromo" class="text-xs text-slate-500 hover:text-red-500 underline ml-2 shrink-0">取消</button>
+            </div>
+          </div>
+
+          <!-- 位置 B：待赞助清单 + 结算与立即扫码支付按钮 -->
+          <div v-if="cart.length" class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <div class="bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-600 flex justify-between items-center flex-wrap gap-2">
               <span>待赞助清单（{{ cart.length }} 只）· 周期：{{ selectedLabel }}</span>
               <span class="text-slate-800">
-                <template v-if="appliedPromo">
-                  <span class="line-through text-slate-400 mr-1">原价 ¥{{ totalBase.toFixed(2) }}</span>
-                  <span class="text-red-500 font-extrabold">折后 ¥{{ discountedBase.toFixed(2) }}</span>
+                <template v-if="appliedPromo && discountSaved > 0">
+                  <span class="line-through text-slate-400 mr-1.5">原价 ¥{{ totalBase.toFixed(2) }}</span>
+                  <span class="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[11px] mr-1.5">优惠码 -¥{{ discountSaved.toFixed(2) }}</span>
+                  <span class="text-red-500 font-extrabold text-sm">折后 ¥{{ discountedBase.toFixed(2) }}</span>
                 </template>
                 <template v-else>小计 ¥{{ totalBase.toFixed(2) }}</template>
               </span>
@@ -598,51 +700,30 @@ export default {
             <div class="divide-y divide-slate-100">
               <div v-for="c in cart" :key="c.etf_code" class="px-4 py-2.5 text-sm flex justify-between items-center">
                 <div class="flex items-center gap-1.5 flex-wrap">
-                  <span class="font-mono font-bold text-slate-800">{{ c.etf_code }}</span>
-                  <span class="text-[11px] font-mono px-1.5 py-0.2 rounded font-bold"
-                        :class="c.trade_mode === 't+0' ? 'bg-sky-50 text-sky-600 border border-sky-200' : 'bg-slate-100 text-slate-500'">
-                    ({{ c.trade_mode || getTradeTag(c) }})
-                  </span>
+                  <span class="font-mono font-bold text-slate-800">{{ c.etf_code }}<span v-if="(c.trade_mode || getTradeTag(c)) === 't+0'" class="text-indigo-600 font-bold">(0)</span></span>
                   <span class="text-slate-700 font-medium ml-1">{{ c.etf_name }}</span>
                 </div>
                 <button type="button" @click="removeCart(c.etf_code)" class="text-xs text-red-500 hover:underline">移除</button>
               </div>
             </div>
 
-            <!-- 清单底部：直接展示优惠码输入框 + 立即支付按钮 -->
-            <div class="p-3.5 bg-slate-50/80 border-t border-slate-100 space-y-3">
-              <div v-if="promoEnabled" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div class="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                  <i class="fa-solid fa-ticket text-orange-500"></i>
-                  <span>优惠码抵扣：</span>
-                </div>
-                <div v-if="!appliedPromo" class="flex gap-2 flex-1 max-w-sm">
-                  <input v-model="promoInput" type="text" placeholder="输入优惠码（如 VIP88）享折扣"
-                         class="flex-1 border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs font-mono uppercase focus:theme-border outline-none"
-                         @keyup.enter="applyPromoCode">
-                  <button type="button" @click="applyPromoCode" :disabled="promoChecking || !promoInput.trim()"
-                          class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 shrink-0">
-                    {{ promoChecking ? '校验中...' : '使用优惠码' }}
-                  </button>
-                </div>
-                <div v-else class="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 text-xs text-emerald-700 flex-1 max-w-sm">
-                  <span>
-                    <i class="fa-solid fa-circle-check mr-1"></i>已用优惠码 <strong>{{ appliedPromo.code }}</strong>（立减 <strong>¥{{ appliedPromo.discount.toFixed(2) }}</strong>）
-                  </span>
-                  <button type="button" @click="clearPromo" class="text-xs text-slate-500 hover:text-red-500 underline ml-2">取消</button>
-                </div>
-              </div>
-
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-                <span class="text-xs text-slate-500">
-                  点击右侧按钮打开收款码（支付弹窗内同样可输入或更换优惠码）
-                </span>
-                <button type="button" @click="openPay"
-                        class="theme-bg text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90 shrink-0">
-                  ② 扫码支付（实付 ¥{{ payableAmount }}）
-                </button>
-              </div>
+            <div class="p-3.5 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <span class="text-xs text-slate-500">
+                <i class="fa-solid fa-shield-heart text-emerald-600 mr-1"></i>点击右侧按钮打开收款码（支付弹窗内同样可输入或更换优惠码）
+              </span>
+              <button type="button" @click="openPay"
+                      class="theme-bg text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90 shrink-0">
+                ② 扫码支付（实付 ¥{{ payableAmount }}）
+              </button>
             </div>
+          </div>
+
+          <!-- 若尚未点“加入清单”但填了6位代码，也提供一键直达支付按钮 -->
+          <div v-else-if="form.code.trim().length === 6" class="flex justify-end pt-1">
+            <button type="button" @click="openPay"
+                    class="theme-bg text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:opacity-90">
+              ② 直接扫码支付该标的
+            </button>
           </div>
         </div>
 
@@ -665,11 +746,7 @@ export default {
             <div v-for="r in activeList" :key="r.id" class="px-4 sm:px-5 py-3.5 flex flex-wrap items-center gap-3 justify-between hover:bg-slate-50/60">
               <div>
                 <div class="flex items-center gap-1.5 flex-wrap">
-                  <span class="font-mono font-bold text-slate-800">{{ r.etf_code }}</span>
-                  <span class="text-[11px] font-mono px-1.5 py-0.2 rounded font-bold"
-                        :class="getTradeTag(r) === 't+0' ? 'bg-sky-50 text-sky-600 border border-sky-200' : 'bg-slate-100 text-slate-500'">
-                    ({{ getTradeTag(r) }})
-                  </span>
+                  <span class="font-mono font-bold text-slate-800">{{ r.etf_code }}<span v-if="getTradeTag(r) === 't+0'" class="text-indigo-600 font-bold">(0)</span></span>
                   <span class="font-bold text-slate-700 text-sm ml-0.5">{{ r.etf_name }}</span>
                   <span class="inline-flex items-center gap-1 text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
                     <i class="fa-solid fa-heart text-[9px] text-rose-500"></i>
@@ -740,8 +817,7 @@ export default {
               <tbody class="divide-y divide-slate-50">
                 <tr v-for="r in mine" :key="r.id" class="hover:bg-slate-50">
                   <td class="py-3 px-4 font-mono font-bold text-slate-800">
-                    {{ r.etf_code }}
-                    <span class="text-[11px] font-normal text-slate-500">({{ getTradeTag(r) }})</span>
+                    {{ r.etf_code }}<span v-if="getTradeTag(r) === 't+0'" class="text-indigo-600 font-bold">(0)</span>
                   </td>
                   <td class="py-3 px-4 font-medium">{{ r.etf_name }}</td>
                   <td class="py-3 px-4 text-xs font-bold text-slate-600">{{ r.days || '-' }} 天</td>
@@ -772,16 +848,17 @@ export default {
         </div>
       </template>
 
-      <!-- 支付弹窗：内置优惠码输入与实时折扣计算 -->
+      <!-- 位置 C：扫码支付弹窗（常驻展示醒目的优惠码输入与实时折扣计算，不依赖任何隐藏开关） -->
       <div v-if="showPay" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="showPay=false">
         <div class="bg-white rounded-2xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
           <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 class="font-bold text-slate-800 text-base">支付赞助标的费用</h3>
+            <h3 class="font-bold text-slate-800 text-base">扫码支付赞助费用</h3>
             <button type="button" @click="showPay=false" class="text-slate-400 hover:text-slate-600">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
 
+          <!-- 应付金额大字展示 -->
           <div class="text-center space-y-1 bg-slate-50 rounded-xl p-3.5 border border-slate-100">
             <div class="text-xs text-amber-700 bg-amber-50 inline-block px-2.5 py-0.5 rounded border border-amber-100">
               请按下方精准浮动金额扫码支付（便于快速核对）
@@ -791,29 +868,31 @@ export default {
             </div>
             <div class="text-xs text-slate-500">
               <span>{{ cart.length }} 只 × {{ selectedLabel }}（单价 ¥{{ unitPrice }}）</span>
-              <span v-if="appliedPromo" class="ml-1.5 line-through text-slate-400">原价 ¥{{ totalBase.toFixed(2) }}</span>
+              <span v-if="appliedPromo && discountSaved > 0" class="ml-1.5 line-through text-slate-400">原价 ¥{{ totalBase.toFixed(2) }}</span>
+              <span v-if="appliedPromo && discountSaved > 0" class="ml-1 text-emerald-600 font-bold">已省 ¥{{ discountSaved.toFixed(2) }}</span>
             </div>
           </div>
 
-          <!-- 优惠码输入与抵扣区（常驻醒目显示） -->
-          <div v-if="promoEnabled" class="bg-orange-50/60 border border-orange-200/80 rounded-xl p-3 space-y-2">
+          <!-- 优惠码输入与抵扣区（无条件常驻显示在支付弹窗核心位置） -->
+          <div class="bg-orange-50/70 border-2 border-orange-200 rounded-xl p-3.5 space-y-2">
             <div class="text-xs font-bold text-orange-800 flex items-center justify-between">
-              <span><i class="fa-solid fa-ticket mr-1 text-orange-500"></i>优惠码折扣抵扣</span>
-              <span v-if="appliedPromo" class="text-emerald-600">已立减 ¥{{ appliedPromo.discount.toFixed(2) }}</span>
+              <span><i class="fa-solid fa-ticket mr-1.5 text-orange-500"></i>优惠码折扣抵扣</span>
+              <span v-if="appliedPromo" class="text-emerald-600 font-extrabold">已立减 ¥{{ discountSaved.toFixed(2) }}</span>
+              <span v-else class="text-[11px] font-normal text-orange-600">输入优惠码立即减免应付金额</span>
             </div>
             <div v-if="!appliedPromo" class="flex gap-2">
-              <input v-model="promoInput" type="text" placeholder="请输入优惠码（不区分大小写）"
-                     class="flex-1 border border-orange-200 bg-white rounded-lg px-3 py-2 text-xs font-mono uppercase focus:theme-border outline-none"
+              <input v-model="promoInput" type="text" placeholder="请输入优惠码（如 VIP88）"
+                     class="flex-1 border border-orange-300 bg-white rounded-lg px-3 py-2 text-xs font-mono uppercase focus:theme-border outline-none"
                      @keyup.enter="applyPromoCode">
               <button type="button" @click="applyPromoCode" :disabled="promoChecking || !promoInput.trim()"
-                      class="px-3.5 py-2 rounded-lg text-xs font-bold bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 shrink-0 shadow-sm">
+                      class="px-4 py-2 rounded-lg text-xs font-bold bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 shrink-0 shadow-sm">
                 {{ promoChecking ? '校验中...' : '使用优惠码' }}
               </button>
             </div>
             <div v-else class="flex items-center justify-between bg-white border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700">
               <span>
                 <i class="fa-solid fa-tag mr-1"></i>
-                优惠码 <strong>{{ appliedPromo.code }}</strong> 已生效（立减 <strong>¥{{ appliedPromo.discount.toFixed(2) }}</strong>）
+                优惠码 <strong>{{ appliedPromo.code }}</strong> 已生效（立减 <strong>¥{{ discountSaved.toFixed(2) }}</strong>）
               </span>
               <button type="button" @click="clearPromo" class="text-xs text-slate-500 hover:text-red-500 underline ml-2">
                 更换/取消
@@ -824,7 +903,7 @@ export default {
           <!-- 清单摘要 -->
           <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 space-y-1 max-h-28 overflow-y-auto border border-slate-100">
             <div v-for="c in cart" :key="c.etf_code" class="flex justify-between">
-              <span class="font-mono font-bold text-slate-800">{{ c.etf_code }}({{ c.trade_mode || getTradeTag(c) }})</span>
+              <span class="font-mono font-bold text-slate-800">{{ c.etf_code }}<span v-if="(c.trade_mode || getTradeTag(c)) === 't+0'" class="text-indigo-600">(0)</span></span>
               <span class="text-slate-500 truncate ml-2">{{ c.etf_name }}</span>
             </div>
           </div>
@@ -873,9 +952,9 @@ export default {
           <input v-model="editModal.etf_name" placeholder="标的名称（可自动识别）"
                  class="w-full border rounded-lg px-3 py-2 text-sm focus:theme-border outline-none">
           <select v-model="editModal.trade_mode" class="w-full border rounded-lg px-3 py-2 text-sm focus:theme-border outline-none">
-            <option value="auto">交易规则：自动识别 (t+0 / t+1)</option>
-            <option value="t+1">固定显示 (t+1)</option>
-            <option value="t+0">固定显示 (t+0)</option>
+            <option value="auto">交易规则：自动识别</option>
+            <option value="t+0">T+0 标的 (0)</option>
+            <option value="t+1">常规标的</option>
           </select>
           <div class="flex justify-end gap-2 pt-1">
             <button type="button" @click="editModal.visible=false" class="text-sm text-slate-500 px-3">取消</button>
