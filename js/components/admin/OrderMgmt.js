@@ -1,6 +1,6 @@
 /**
  * 波幅探长 - 后台【订单审核】组件
- * 审核赞助标的订单与温暖打赏订单
+ * 审核定制标的订单与温暖打赏订单
  */
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
@@ -34,12 +34,15 @@ export default {
       }
     };
 
+    const isCustomOrder = (o) =>
+      o && (o.order_type === "symbol_custom" || o.order_type === "symbol_sponsor");
+
     const approve = async (order) => {
       const userLabel = order.nickname ? `${order.nickname} (${order.username})` : (order.username || "匿名访客");
       if (
         !confirm(
           `确认通过该订单？\n用户：${userLabel}\n类型：${
-            order.order_type === "symbol_sponsor" ? "赞助标的" : "打赏支持"
+            isCustomOrder(order) ? "定制标的" : "打赏支持"
           }\n金额：¥${order.amount}`
         )
       )
@@ -179,6 +182,7 @@ export default {
       allVisibleSelected,
       toggleSelect,
       toggleSelectAll,
+      isCustomOrder,
       approve,
       reject,
       deleteOne,
@@ -192,7 +196,7 @@ export default {
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 class="text-xl font-bold text-slate-800">订单审核</h2>
-          <p class="text-xs text-slate-400 mt-0.5">审核会员赞助标的与打赏支持订单</p>
+          <p class="text-xs text-slate-400 mt-0.5">审核会员定制标的与打赏支持订单</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <div class="flex bg-slate-100 rounded-lg p-0.5 text-xs">
@@ -201,7 +205,7 @@ export default {
                     class="px-3 py-1.5 rounded-md font-bold transition"
                     :class="orderStatusFilter===s.k ? 'bg-white shadow text-slate-800' : 'text-slate-500'">{{ s.t }}</button>
           </div>
-          <input v-model="searchQuery" type="text" placeholder="搜索邮箱 / 昵称 / 凭证"
+          <input v-model="searchQuery" type="text" placeholder="搜索邮箱 / 用户名 / 凭证"
                  class="border rounded-lg px-3 py-1.5 text-xs w-44">
           <button type="button" @click="deleteSelected" :disabled="deleting || !selectedIds.length"
                   class="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 bg-red-50 font-bold disabled:opacity-40 hover:bg-red-100">
@@ -223,7 +227,7 @@ export default {
                          class="rounded border-slate-300" title="全选当前列表">
                 </th>
                 <th class="py-3 px-4">时间</th>
-                <th class="py-3 px-4">用户（昵称 / 邮箱）</th>
+                <th class="py-3 px-4">用户（用户名 / 邮箱）</th>
                 <th class="py-3 px-4">类型 / 套餐</th>
                 <th class="py-3 px-4">实付金额</th>
                 <th class="py-3 px-4">凭证</th>
@@ -246,9 +250,9 @@ export default {
                   <span class="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600 font-medium">{{ o.plan_id }}</span>
                   <span
                     class="text-[10px] ml-1.5 px-1.5 py-0.5 rounded font-bold"
-                    :class="o.order_type === 'symbol_sponsor' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'"
+                    :class="isCustomOrder(o) ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'"
                   >
-                    {{ o.order_type === 'symbol_sponsor' ? '赞助标的' : '打赏支持' }}
+                    {{ isCustomOrder(o) ? '定制标的' : '打赏支持' }}
                   </span>
                   <span v-if="o.promo_code" class="text-[10px] ml-1 bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-mono">
                     {{ o.promo_code }}

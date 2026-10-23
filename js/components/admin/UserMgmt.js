@@ -1,6 +1,6 @@
 /**
  * 波幅探长 - 后台【用户管理】组件
- * 已移除安全问题列，支持管理用户展示昵称（赞助署名）、重置密码、删除与清理不活跃账号
+ * 支持管理唯一用户名（可用于直接登录，与定制标的无关）、查看有效定制数、重置密码、删除与清理不活跃账号
  */
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
@@ -59,7 +59,7 @@ export default {
       actionLoading.value = true;
       try {
         await adminApi.updateUserNickname(nickModal.userId, nickModal.nickname.trim());
-        store.showToast("用户昵称已更新并同步至其赞助标的");
+        store.showToast("用户名已更新（可用于登录）");
         nickModal.visible = false;
         await loadUsers();
       } catch (err) {
@@ -153,10 +153,10 @@ export default {
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 class="text-lg font-bold text-slate-800">用户管理</h2>
-          <p class="text-xs text-slate-400 mt-0.5">查看注册邮箱用户、管理赞助展示昵称、重置密码与清理不活跃账号</p>
+          <p class="text-xs text-slate-400 mt-0.5">查看注册邮箱用户、管理唯一登录用户名、查看有效定制数、重置密码与清理不活跃账号</p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <input v-model="keyword" type="search" placeholder="搜索注册邮箱 / 昵称 / ID"
+          <input v-model="keyword" type="search" placeholder="搜索注册邮箱 / 用户名 / ID"
                  class="border rounded-lg px-3 py-1.5 text-sm w-full sm:w-56 focus:theme-border outline-none">
           <button @click="purgeInactive" class="text-xs px-3 py-1.5 rounded-lg border text-amber-700 font-bold hover:bg-amber-50">
             清理不活跃
@@ -177,8 +177,8 @@ export default {
               <tr>
                 <th class="py-2.5 px-4">ID</th>
                 <th class="py-2.5 px-4">注册邮箱</th>
-                <th class="py-2.5 px-4">展示昵称（赞助署名）</th>
-                <th class="py-2.5 px-4">有效赞助</th>
+                <th class="py-2.5 px-4">唯一用户名（可登录）</th>
+                <th class="py-2.5 px-4">有效定制</th>
                 <th class="py-2.5 px-4">注册日期</th>
                 <th class="py-2.5 px-4">最后登录</th>
                 <th class="py-2.5 px-4 text-right">操作</th>
@@ -189,8 +189,8 @@ export default {
                 <td class="py-2.5 px-4 font-mono text-xs text-slate-400">{{ u.id }}</td>
                 <td class="py-2.5 px-4 font-medium text-slate-800 max-w-[220px] truncate font-mono text-xs">{{ u.username }}</td>
                 <td class="py-2.5 px-4">
-                  <span v-if="u.nickname" class="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-xs">
-                    {{ u.nickname }} 赞助
+                  <span v-if="u.nickname" class="font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded text-xs">
+                    {{ u.nickname }}
                   </span>
                   <span v-else class="text-xs text-slate-400">未设置</span>
                 </td>
@@ -201,7 +201,7 @@ export default {
                 <td class="py-2.5 px-4 text-xs text-slate-400 font-mono">{{ formatDate(u.created_at) }}</td>
                 <td class="py-2.5 px-4 text-xs text-slate-400 font-mono">{{ formatDate(u.last_login_at) }}</td>
                 <td class="py-2.5 px-4 text-right space-x-2">
-                  <button @click="openNickModal(u)" class="text-xs theme-text font-bold hover:underline">改昵称</button>
+                  <button @click="openNickModal(u)" class="text-xs theme-text font-bold hover:underline">改用户名</button>
                   <button @click="resetPwd(u)" class="text-xs text-slate-500 hover:underline">重置密码</button>
                   <button @click="removeUser(u)" class="text-xs text-red-500 hover:underline">删除</button>
                 </td>
@@ -214,13 +214,13 @@ export default {
         </div>
       </div>
 
-      <!-- 修改昵称弹窗 -->
+      <!-- 修改用户名弹窗 -->
       <div v-if="nickModal.visible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4"
            @click.self="nickModal.visible=false">
         <div class="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4 shadow-xl">
-          <h3 class="font-bold text-slate-800">修改用户展示昵称</h3>
+          <h3 class="font-bold text-slate-800">修改唯一登录用户名</h3>
           <p class="text-xs text-slate-500">注册邮箱：{{ nickModal.username }}</p>
-          <input v-model="nickModal.nickname" type="text" maxlength="16" placeholder="输入新昵称（如：老李）"
+          <input v-model="nickModal.nickname" type="text" maxlength="16" placeholder="输入唯一用户名（2～16位，可登录）"
                  class="w-full border rounded-lg px-3 py-2 text-sm focus:theme-border outline-none"
                  @keyup.enter="submitNickname">
           <div class="flex justify-end gap-2">

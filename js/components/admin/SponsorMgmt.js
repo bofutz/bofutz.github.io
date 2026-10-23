@@ -1,8 +1,8 @@
 /**
- * 后台 - 赞助标的管理
+ * 后台 - 定制标的管理（原 SponsorMgmt.js）
  * 1. 输入 6 位代码自动识别标的名称及 T+0 / T+1 交易制度
- * 2. 看板展示署名统一映射为 sponsor_name（显示为“(昵称) 赞助”，如“老李 赞助”）
- * 3. T+0 标的代码显示为红色，T+1 保持不变，不加 (0)
+ * 2. 支持管理定制标的所属会员、私密/公开分享状态（is_shared）及有效期
+ * 3. 已彻底移除赞助署名及点赞功能
  */
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
@@ -24,10 +24,11 @@ export default {
     const form = reactive({
       id: null,
       user_id: "",
+      account: "",
       etf_code: "",
       etf_name: "",
-      sponsor_name: "",
       trade_mode: "t+1",
+      is_shared: false,
       days: 30,
       status: "active",
     });
@@ -67,10 +68,11 @@ export default {
         Object.assign(form, {
           id: row.id,
           user_id: row.user_id || "",
+          account: row.nickname || row.username || "",
           etf_code: row.etf_code || "",
           etf_name: row.etf_name || "",
-          sponsor_name: row.sponsor_name || row.nickname || "",
           trade_mode: resolveTradeRule(row.etf_code, row.etf_name, row.trade_mode),
+          is_shared: Number(row.is_shared) === 1,
           days: row.days || 30,
           status: row.status || "active",
         });
@@ -78,10 +80,11 @@ export default {
         Object.assign(form, {
           id: null,
           user_id: "",
+          account: "",
           etf_code: "",
           etf_name: "",
-          sponsor_name: "",
           trade_mode: "t+1",
+          is_shared: true,
           days: 30,
           status: "active",
         });
@@ -107,20 +110,42 @@ export default {
         await adminApi.saveSponsor({
           id: form.id || null,
           user_id: form.user_id ? Number(form.user_id) : undefined,
+          account: form.account ? String(form.account).trim() : undefined,
           etf_code: code,
           etf_name: String(form.etf_name || code).trim(),
-          sponsor_name: String(form.sponsor_name || "").trim(),
           trade_mode: form.trade_mode || resolveTradeRule(code, form.etf_name),
+          is_shared: form.is_shared ? 1 : 0,
           days: Math.max(1, Number(form.days) || 30),
           status: form.status || "active",
         });
-        store.showToast(form.id ? "赞助记录已更新" : "赞助标的已添加");
+        store.showToast(form.id ? "定制记录已更新" : "定制标的已添加");
         modalVisible.value = false;
         await load();
       } catch (e) {
         store.showToast(e.message || "保存失败", "error");
       } finally {
         saving.value = false;
+      }
+    };
+
+    const toggleRowShare = async (row) => {
+      const nextShared = Number(row.is_shared) === 1 ? 0 : 1;
+      try {
+        await adminApi.saveSponsor({
+          id: row.id,
+          user_id: row.user_id,
+          etf_code: row.etf_code,
+          etf_name: row.etf_name,
+          trade_mode: row.trade_mode,
+          is_shared: nextShared,
+          days: row.days || 30,
+          status: row.status || "active",
+        });
+        row.is_shared = nextShared;
+        store.showToast(nextShared ? "已设为公开分享" : "已设为私密（仅购买会员可见）");
+        emit("refresh-stats");
+      } catch (e) {
+        store.showToast(e.message || "更新失败", "error");
       }
     };
 
@@ -175,6 +200,7 @@ export default {
       load,
       openModal,
       submitForm,
+      toggleRowShare,
       forceExpire,
       formatTime,
       remainDays,
@@ -186,8 +212,8 @@ export default {
     <div class="space-y-4 select-none">
       <div class="flex flex-wrap justify-between items-center gap-3">
         <div>
-          <h2 class="text-xl font-bold text-slate-800">赞助标的管理</h2>
-          <p class="text-xs text-slate-400 mt-0.5">管理会员赞助标的、修改看板展示的「(昵称) 赞助」署名与 T+0/T+1 属性</p>
+          <h2 class="text-xl font-bold text-slate-800">定制标的管理</h2>
+          <p class="text-xs text-slate-400 mt-0.5">管理会员定制标的、查看私密/公开分享状态（is_shared）与 T+0/T+1 属性</p>
         </div>
         <div class="flex flex-wrap gap-2">
           <select v-model="statusFilter" @change="load" class="border rounded-lg px-2.5 py-1.5 text-xs bg-white">
@@ -196,7 +222,7 @@ export default {
             <option value="all">全部</option>
           </select>
           <button type="button" @click="openModal()" class="theme-bg text-white text-xs px-3.5 py-1.5 rounded-lg font-bold hover:opacity-90">
-            + 手动新增赞助
+            + 手动新增定制
           </button>
           <button type="button" @click="load" class="bg-white border px-3 py-1.5 rounded-lg text-sm">
             <i class="fa-solid fa-rotate-right" :class="{'animate-spin': loading}"></i>
@@ -210,27 +236,21 @@ export default {
           <table class="w-full text-sm text-left whitespace-nowrap">
             <thead class="bg-slate-50 text-xs text-slate-500 border-b font-bold">
               <tr>
-                <th class="py-2.5 px-3">看板展示署名</th>
-                <th class="py-2.5 px-3">关联邮箱</th>
+                <th class="py-2.5 px-3">所属会员（用户名 / 邮箱）</th>
                 <th class="py-2.5 px-3">代码（红色=T+0）</th>
                 <th class="py-2.5 px-3">标的名称</th>
+                <th class="py-2.5 px-3">可见性（点击切换）</th>
                 <th class="py-2.5 px-3">周期</th>
                 <th class="py-2.5 px-3">到期日</th>
                 <th class="py-2.5 px-3">剩余时间</th>
-                <th class="py-2.5 px-3">获赞数</th>
                 <th class="py-2.5 px-3 text-right">操作</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
               <tr v-for="r in list" :key="r.id" class="hover:bg-slate-50">
-                <td class="py-2.5 px-3">
-                  <span class="inline-flex items-center gap-1 text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded">
-                    <i class="fa-solid fa-heart text-[10px] text-rose-500"></i>
-                    {{ r.sponsor_name || r.nickname || '匿名会员' }} 赞助
-                  </span>
-                </td>
-                <td class="py-2.5 px-3 text-xs text-slate-500 font-mono">
-                  {{ r.username || ('UID:' + (r.user_id || '-')) }}
+                <td class="py-2.5 px-3 text-xs text-slate-700 font-medium">
+                  <span v-if="r.nickname" class="font-bold text-slate-800 mr-1">{{ r.nickname }}</span>
+                  <span class="font-mono text-slate-400">{{ r.username || ('UID:' + (r.user_id || '-')) }}</span>
                 </td>
                 <td class="py-2.5 px-3 font-mono font-bold">
                   <span :class="displayRule(r)==='t+0' ? 'text-red-500' : 'text-slate-800'">{{ r.etf_code }}</span>
@@ -240,18 +260,25 @@ export default {
                   </span>
                 </td>
                 <td class="py-2.5 px-3 font-medium">{{ r.etf_name }}</td>
+                <td class="py-2.5 px-3">
+                  <button type="button" @click="toggleRowShare(r)"
+                          class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition"
+                          :class="Number(r.is_shared) === 1
+                            ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'">
+                    <i class="fa-solid mr-1 text-[10px]" :class="Number(r.is_shared) === 1 ? 'fa-share-nodes' : 'fa-lock'"></i>
+                    {{ Number(r.is_shared) === 1 ? '定制分享' : '仅会员本人可见' }}
+                  </button>
+                </td>
                 <td class="py-2.5 px-3 text-xs font-bold">{{ r.days || '-' }} 天</td>
                 <td class="py-2.5 px-3 text-xs font-mono text-slate-400">{{ formatTime(r.expire_at) }}</td>
                 <td class="py-2.5 px-3 text-xs font-bold"
                     :class="r.status==='active' && remainDays(r)>0 ? (remainDays(r)<=7?'text-amber-600':'text-emerald-600') : 'text-slate-400'">
                   {{ remainText(r) }}
                 </td>
-                <td class="py-2.5 px-3 font-mono text-xs text-rose-500 font-bold">
-                  <i class="fa-solid fa-thumbs-up mr-1"></i>{{ r.like_count || 0 }}
-                </td>
                 <td class="py-2.5 px-3 text-right space-x-1.5">
                   <button type="button" @click="openModal(r)" class="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded font-bold hover:bg-slate-200">
-                    编辑/改昵称
+                    编辑
                   </button>
                   <button v-if="r.status==='active'" type="button" @click="forceExpire(r)" class="text-xs text-red-500 hover:underline">
                     下线
@@ -259,18 +286,18 @@ export default {
                 </td>
               </tr>
               <tr v-if="!list.length">
-                <td colspan="9" class="py-10 text-center text-slate-400">暂无记录</td>
+                <td colspan="8" class="py-10 text-center text-slate-400">暂无记录</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- 编辑/新增赞助弹窗 -->
+      <!-- 编辑/新增定制弹窗 -->
       <div v-if="modalVisible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="modalVisible=false">
         <div class="bg-white rounded-2xl w-full max-w-md p-6 space-y-3.5 shadow-2xl">
           <div class="flex items-center justify-between">
-            <h3 class="font-bold text-slate-800">{{ form.id ? '编辑赞助记录 / 修改展示昵称' : '手动新增赞助标的' }}</h3>
+            <h3 class="font-bold text-slate-800">{{ form.id ? '编辑定制记录' : '手动新增定制标的' }}</h3>
             <button type="button" @click="modalVisible=false" class="text-slate-400 hover:text-slate-600">
               <i class="fa-solid fa-xmark"></i>
             </button>
@@ -292,8 +319,8 @@ export default {
           </div>
 
           <div>
-            <label class="text-xs text-slate-500 block mb-1">看板展示赞助者昵称（修改后看板立即显示「(昵称) 赞助」，如：老李 赞助）</label>
-            <input v-model="form.sponsor_name" maxlength="16" placeholder="例如：老李"
+            <label class="text-xs text-slate-500 block mb-1">关联会员（可填用户名、注册邮箱或用户ID，留空则为系统定制）</label>
+            <input v-model="form.account" placeholder="如：laoli 或 user@example.com"
                    class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
           </div>
 
@@ -312,18 +339,19 @@ export default {
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-xs text-slate-500 block mb-1">关联用户 ID（选填）</label>
-              <input v-model="form.user_id" type="number" placeholder="如 1（可留空）"
-                     class="w-full border px-3 py-2 rounded-lg text-sm font-mono focus:theme-border outline-none">
-            </div>
+          <div class="grid grid-cols-2 gap-2 items-center pt-1">
             <div>
               <label class="text-xs text-slate-500 block mb-1">状态</label>
               <select v-model="form.status" class="w-full border px-3 py-2 rounded-lg text-sm focus:theme-border outline-none">
                 <option value="active">active (生效中)</option>
                 <option value="expired">expired (已过期)</option>
               </select>
+            </div>
+            <div class="pt-4">
+              <label class="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                <input type="checkbox" v-model="form.is_shared" class="rounded border-slate-300">
+                <span>公开分享（定制分享）</span>
+              </label>
             </div>
           </div>
 

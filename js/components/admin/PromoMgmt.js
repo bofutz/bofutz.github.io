@@ -178,7 +178,7 @@ export default {
       <div class="flex flex-wrap justify-between items-center gap-2">
         <div>
           <h2 class="text-base font-bold text-slate-800">优惠码列表</h2>
-          <p class="text-xs text-slate-400 mt-0.5">设置优惠码、折扣力度与有效期（前台「赞助标的」清单与支付弹窗均可直接核销）</p>
+          <p class="text-xs text-slate-400 mt-0.5">设置优惠码、折扣力度与有效期（前台「定制标的」清单与支付弹窗均可直接核销）</p>
         </div>
         <div class="flex gap-2">
           <button type="button" @click="openModal()" class="theme-bg text-white text-xs px-3.5 py-2 rounded-lg font-bold hover:opacity-90">
