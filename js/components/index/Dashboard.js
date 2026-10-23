@@ -2,13 +2,13 @@
  * 波幅探长 - 首页数据看板 (js/components/index/Dashboard.js)
  * 严格保留与修复：
  * 1. “赞助”全部改为“定制”，“会员赞助”改为“定制分享”，彻底移除股票代码后的赞助署名及点赞功能
- * 2. 标的排序规则（核心不变）：
+ * 2. 标的排序规则：
  *    - 定制标的的会员：定制标的 -> 收藏 -> 最近异动 -> 其它
  *    - 非定制标的用户：收藏 -> 最近异动 -> 分享的定制标的 -> 其它
- *    - 在“最近异动”及各组内部：严格按最右列（最新采集数据）数值绝对值从大到小排列，先日线数据，再半日线数据（周线列按周线绝对值）
- * 3. 免费标的：严格由后台设定（free_top_n_charts）控制，按最新列波幅排序取前 N 名
- * 4. 列展示与循环轮换：共有6列（周一至周五5列 + 周六周线1列），最新数据列永远放在最右列，有新日期数据所有列正序前移循环轮换
- * 5. 数据与图表严格绑定采集日期，出现在对应的日期列中
+ *    - 组内严格按最右列（最新采集数据）数值绝对值从大到小排列，先日线数据，再半日线数据
+ * 3. 免费标的：由后台设定（free_top_n_charts）控制，按最新列波幅取前 N 名
+ * 4. 共有6列（周一至周五5列 + 周六周线1列），最新数据列永远放在最右列，有新日期数据所有列正序前移循环轮换
+ * 5. 修复图表 ICON 挂在昨天的问题：严格根据图表实际更新日期（或最新采集日）绑定到对应列
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -21,7 +21,6 @@ const { ref, reactive, computed, onMounted, nextTick, watch } = Vue;
 const settingOn = (val) =>
   val === undefined || val === null || val === "" || val === "1" || val === 1 || val === true || val === "true";
 
-// 共有6列基础模板：周一至周五(0~4)为半日/日线数据，周六(5)为周线数据
 const BASE_COLS = [
   { key: "d0", type: "day", dayIdx: 0, label: "周一" },
   { key: "d1", type: "day", dayIdx: 1, label: "周二" },
@@ -55,7 +54,6 @@ export default {
 
     const settings = computed(() => store.state.publicSettings || {});
 
-    /** 首页搜索框上方优惠活动文字提醒广告 */
     const promoBanner = computed(() => {
       const s = settings.value;
       const enabled = s.ad_enabled === "1" || s.ad_enabled === 1 || s.ad_enabled === true;
@@ -219,7 +217,6 @@ export default {
     const weekChartTitle = () =>
       weeklyChartDay.value && isValidDate(weeklyChartDay.value) ? chartDateTitle(weeklyChartDay.value) : "周线图表";
 
-    // 构造周一至周六对应的日期字符串 [周一, 周二, 周三, 周四, 周五, 周六]
     const getWeekDays = (dateStr) => {
       const [y, m, d] = parseYMD(dateStr);
       if (!y) return [];
@@ -256,7 +253,10 @@ export default {
 
     const toBjDay = (val) => {
       if (val == null || val === "") return null;
-      if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) return val.trim();
+      if (typeof val === "string" && /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(val.trim())) {
+        const parts = val.trim().split(/[-/]/);
+        return `${parts[0]}-${String(parts[1]).padStart(2, "0")}-${String(parts[2]).padStart(2, "0")}`;
+      }
       let ts = Number(val);
       if (!ts || isNaN(ts)) {
         const parsed = Date.parse(String(val));
@@ -278,7 +278,10 @@ export default {
     };
 
     /**
-     * 图表严格按照采集时间落在对应日期列
+     * 【关键修复】图表 ICON 显示逻辑：
+     * 1. 如果标的有独立的 updated_at，且落在某一列日期，显示在该列；
+     * 2. 否则如果系统配置了 globalChartDay，显示在该日期的列；
+     * 3. 兜底保护：只要最新交易日（如10-23）已有日线/半日线数据且该标的有数据，图表直接呈现在最新日线列，绝不错留在昨天！
      */
     const showDailyChartIcon = (etfCode, colDayIdx) => {
       if (colDayIdx < 0 || colDayIdx > 4) return false;
@@ -289,18 +292,27 @@ export default {
 
       const entry = resolveChartEntry(etfCode);
       const entryDay = entry?.updated_at ? toBjDay(entry.updated_at) : null;
-      const gDay = globalChartDay.value && isValidDate(globalChartDay.value) ? globalChartDay.value.trim() : "";
-      
-      const chartDay = entryDay || gDay;
-      return chartDay === colDate;
+      const gDay = globalChartDay.value && isValidDate(globalChartDay.value) ? toBjDay(globalChartDay.value) : "";
+
+      // 明确有时间戳的情况
+      if (entryDay && pd.weekDays.includes(entryDay)) {
+        return entryDay === colDate;
+      }
+      if (gDay && pd.weekDays.includes(gDay)) {
+        return gDay === colDate;
+      }
+
+      // 如果后端图表接口时间未带或为当天，直接绑定到最新的日线列
+      const latestDailyIdx = pd.latestDailyIdx;
+      return colDayIdx === latestDailyIdx;
     };
 
     const weekdayIndexFromDate = (dateStr) => {
       if (!isValidDate(dateStr)) return -1;
       const wd = new Date(dateStr.trim() + "T12:00:00+08:00").getDay();
-      if (wd === 0) return -1; // 周日
-      if (wd === 6) return 5;  // 周六 (周线)
-      return wd - 1;           // 周一(0) ~ 周五(4)
+      if (wd === 0) return -1;
+      if (wd === 6) return 5;
+      return wd - 1;
     };
 
     const isCustomByCurrentUser = (row) => {
@@ -324,7 +336,6 @@ export default {
     };
 
     const processedData = computed(() => {
-      // 1. 查找最新采集数据的日期
       let maxDailyDate = "";
       let maxWeekDate = "";
       allData.value.forEach((item) => {
@@ -338,7 +349,7 @@ export default {
         }
       });
 
-      // 判定全局最新采集日期与最新列 (0~4 为周一至周五, 5 为周六周线)
+      // 确定最新采集日期
       let latestColIdx = 4;
       let latestDate = maxDailyDate || maxWeekDate || bjYmd(Date.now());
       if (maxWeekDate && maxWeekDate >= maxDailyDate) {
@@ -354,10 +365,16 @@ export default {
         latestColIdx = idx >= 0 ? idx : 4;
       }
 
-      // 获取当前周期的完整 6 天 [周一, 周二, 周三, 周四, 周五, 周六]
+      // 获取当前周的日期序列（周一到周六）
       const weekDays = getWeekDays(latestDate);
 
-      // 后台默认监控列表次序
+      // 计算日线最新那一列的索引（0~4），供图表图标精准匹配
+      let latestDailyIdx = 4;
+      if (maxDailyDate) {
+        const dIdx = weekDays.indexOf(maxDailyDate);
+        if (dIdx >= 0 && dIdx <= 4) latestDailyIdx = dIdx;
+      }
+
       const defaultOrderMap = new Map();
       let sharedSeq = 0;
       (sharedList.value || []).forEach((s) => {
@@ -367,7 +384,6 @@ export default {
         defaultOrderMap.set(c, baseWeight + sharedSeq++);
       });
 
-      // 映射标的数据
       const etfMap = {};
       const ensureRow = (code, name, extra = null) => {
         const spInfo = (sharedCustomMap.value || {})[code];
@@ -440,7 +456,6 @@ export default {
 
       let items = Object.values(etfMap);
 
-      // 数值绝对值提取
       const absDayVal = (row, idx) => {
         const s = row.days?.[idx]?.day_status;
         if (isBlankStatus(s)) return -9999;
@@ -468,9 +483,6 @@ export default {
         return String(a.etf_code || "").localeCompare(String(b.etf_code || ""));
       };
 
-      /**
-       * 严格数值比较器：先日线绝对值，再半日线绝对值
-       */
       const cmpDayColumnStrict = (a, b, idx, isDesc = true) => {
         const da = absDayVal(a, idx);
         const db = absDayVal(b, idx);
@@ -479,7 +491,6 @@ export default {
           if (db === -9999) return -1;
           return isDesc ? db - da : da - db;
         }
-
         const ha = absHalfVal(a, idx);
         const hb = absHalfVal(b, idx);
         if (ha !== hb) {
@@ -487,7 +498,6 @@ export default {
           if (hb === -9999) return -1;
           return isDesc ? hb - ha : ha - hb;
         }
-
         return cmpDefaultWatchlistOrder(a, b);
       };
 
@@ -502,17 +512,13 @@ export default {
         return cmpDefaultWatchlistOrder(a, b);
       };
 
-      /**
-       * 6列循环轮播前移：
-       * 共有6列（周一至周五5列 + 周六周线1列），最新数据列永远放在最右列
-       */
+      // 6列循环轮播前移：以最新采集列为最右列 (下标 5)
       const displayCols = Array.from({ length: 6 }, (_, i) => {
         const colIdx = (latestColIdx + 1 + i) % 6;
         return BASE_COLS[colIdx];
       });
-      const latestCol = displayCols[5]; // 最右列
+      const latestCol = displayCols[5];
 
-      // 最右列内部波幅降序比较
       const cmpLatestColActiveRank = (a, b) => {
         if (latestCol.type === "week") {
           return cmpWeekColumnStrict(a, b, true);
@@ -521,7 +527,6 @@ export default {
         }
       };
 
-      // 标的是否属于“最近异动”（在最新列上有数值异动）
       const isLatestActive = (row) => {
         if (latestCol.type === "week") {
           return absWeekVal(row) > -9999;
@@ -535,11 +540,6 @@ export default {
         store.state.isLoggedIn &&
         (myCustomCodes.value.length > 0 || items.some((i) => i.is_my_custom));
 
-      /**
-       * 标的排序核心业务规则：
-       * - 定制标的的会员：定制标的(0) -> 收藏(1) -> 最近异动(2) -> 其它(3)
-       * - 非定制标的用户：收藏(0) -> 最近异动(1) -> 分享的定制标的(2) -> 其它(3)
-       */
       const groupOf = (row) => {
         const c = String(row.etf_code);
         if (isCustomMember) {
@@ -571,7 +571,6 @@ export default {
           return cmpLatestColActiveRank(a, b);
         });
       } else {
-        // 默认排序：先按分组优先级，同组内严格按最右列绝对值（日线优先，再半日线）
         items.sort((a, b) => {
           const ga = groupOf(a);
           const gb = groupOf(b);
@@ -582,7 +581,6 @@ export default {
         });
       }
 
-      // 免费标的：以后台设定 free_top_n_charts 为准，按最右列波幅绝对值从大到小取前 N
       const freeTopN = Math.max(1, parseInt(settings.value.free_top_n_charts, 10) || 3);
       const freeTopCodes = [...items]
         .filter((i) => isLatestActive(i))
@@ -590,7 +588,6 @@ export default {
         .slice(0, freeTopN)
         .map((i) => i.etf_code);
 
-      // 统计与筛选
       const totalCount = items.length;
       const t0Count = items.filter((i) => i.trade_rule === "t+0").length;
       const sharedCustomCount = items.filter((i) => i.is_shared_custom).length;
@@ -621,6 +618,7 @@ export default {
         list: items,
         freeTopCodes,
         weekDays,
+        latestDailyIdx,
         displayCols,
         latestColKey: latestCol.key,
         stats: { totalCount, t0Count, sharedCustomCount, favCount, activeTodayCount },
@@ -887,7 +885,9 @@ export default {
         }
         sharedCustomMap.value = spMap;
 
-        globalChartDay.value = toBjDay(chartsRes?.chart_date) || null;
+        // 兼容 chart_date 或 data.chart_date
+        const rawChartDate = chartsRes?.chart_date || chartsRes?.data?.chart_date || null;
+        globalChartDay.value = toBjDay(rawChartDate) || null;
       } catch (err) {
         store.showToast(err.message, "error");
       } finally {
@@ -969,7 +969,6 @@ export default {
   },
   template: `
     <div class="max-w-7xl mx-auto space-y-3 select-none">
-      <!-- 首页优惠活动文字提醒广告 -->
       <div v-if="promoBanner.visible"
            class="bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50 border border-orange-200/90 rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2 shadow-sm">
         <div class="flex items-center gap-2 min-w-0 text-xs sm:text-sm font-bold text-orange-800">
@@ -984,7 +983,6 @@ export default {
         </a>
       </div>
 
-      <!-- 搜索框 + 快捷筛选栏 -->
       <div class="flex flex-col lg:flex-row gap-2.5 items-stretch lg:items-center justify-between">
         <div class="flex flex-col sm:flex-row gap-2 flex-1">
           <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center flex-1">
@@ -1106,7 +1104,6 @@ export default {
                       </button>
 
                       <div class="min-w-0 flex-1 overflow-hidden">
-                        <!-- 第一行：标的名称 + 定制/分享/免费标识（无赞助） -->
                         <div class="font-bold text-slate-800 group-hover:theme-text flex items-center gap-1 flex-nowrap">
                           <span v-if="canCustomizeBoard" class="hidden sm:inline text-slate-300 text-[10px] cursor-grab active:cursor-grabbing select-none shrink-0" title="拖动排序">⋮⋮</span>
                           <span class="truncate text-[12px] sm:text-sm leading-tight" :title="formatEtfName(item.etf_name)">{{ formatEtfName(item.etf_name) }}</span>
@@ -1115,7 +1112,6 @@ export default {
                           <span v-else-if="processedData.freeTopCodes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.2 rounded font-bold shrink-0">免费</span>
                         </div>
 
-                        <!-- 第二行：股票代码（T+0为红色，T+1为灰色；彻底无赞助署名及点赞） -->
                         <div class="flex items-center gap-1.5 mt-0.5">
                           <span class="text-[11px] font-mono cursor-pointer hover:underline"
                                 :class="item.trade_rule === 't+0' ? 'text-red-500 font-bold' : 'text-slate-500'"
@@ -1147,7 +1143,7 @@ export default {
                         </template>
                         <span v-else class="text-[10px] sm:text-sm font-mono text-slate-300 leading-tight">-</span>
 
-                        <!-- 图表严格绑定到对应日期列 -->
+                        <!-- 图表严格显示在对应的日期列（最新日线自动精准落位） -->
                         <i v-if="showDailyChartIcon(item.etf_code, col.dayIdx)"
                            class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-xs sm:text-xs shrink-0 p-0.5"
                            :title="dailyChartTitle(item.etf_code, processedData.weekDays[col.dayIdx])"
@@ -1185,7 +1181,7 @@ export default {
           </p>
         </div>
 
-        <!-- 看板底部：打赏卡片 -->
+        <!-- 打赏卡片 -->
         <div v-if="tipEnabled"
              class="bg-gradient-to-br from-white via-amber-50/40 to-teal-50/30 rounded-2xl border border-amber-200/80 p-4 sm:p-6 shadow-sm">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
