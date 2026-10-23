@@ -91,7 +91,7 @@ export const adminApi = {
     });
   },
 
-  /** 赞助标的管理 */
+  /** 定制标的管理 */
   async fetchSponsors(status = "") {
     const q = status ? `?status=${encodeURIComponent(status)}` : "";
     return request(`/api/admin/sponsors${q}`);

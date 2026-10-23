@@ -8,7 +8,7 @@ export const etfApi = {
     return res.json();
   },
 
-  /** 合并后的监控列表：默认 + 有效赞助标的 */
+  /** 合并后的监控列表：默认 + 当前会员定制标的 + 其他会员分享的定制标的 */
   async fetchWatchlist() {
     return request("/api/watchlist");
   },

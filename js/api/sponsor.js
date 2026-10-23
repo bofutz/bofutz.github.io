@@ -1,21 +1,22 @@
 /**
- * 会员赞助监控标的 & 优惠码 & 自由打赏 API
- * 支持任何人点击一次即给赞助者点赞一次（无需登录限制）
+ * 会员定制监控标的 & 优惠码 & 自由打赏 API
+ * 支持定制标的默认仅本人可见，购买会员可自主选择是否公开分享（is_shared）
+ * 已删除点赞相关接口
  */
 import { request } from "./http.js";
 
 export const sponsorApi = {
-  /** 公开有效赞助列表（含点赞数、赞助者昵称、交易制度） */
+  /** 公开分享的定制标的列表（仅返回会员主动选择分享的有效定制标的） */
   async fetchActive() {
     return request("/api/sponsor/active");
   },
 
-  /** 我的赞助（含过期、剩余天数、交易制度） */
+  /** 我的定制标的（含私密与已分享、剩余天数、交易制度） */
   async fetchMine() {
     return request("/api/sponsor/mine");
   },
 
-  /** 校验优惠码并计算赞助折扣 */
+  /** 校验优惠码并计算定制折扣 */
   async checkPromo({ base_amount, promo_code }) {
     return request("/api/promo/check", {
       method: "POST",
@@ -26,7 +27,7 @@ export const sponsorApi = {
     });
   },
 
-  /** 提交赞助订单 */
+  /** 提交定制标的订单 */
   async submitOrder(payload) {
     return request("/api/sponsor/order", {
       method: "POST",
@@ -46,27 +47,16 @@ export const sponsorApi = {
     });
   },
 
-  /** 有效期内修改标的或交易规则 */
-  async updateSymbol(id, { etf_code, etf_name, trade_mode }) {
+  /** 有效期内修改标的代码、名称、交易规则或是否公开分享 */
+  async updateSymbol(id, { etf_code, etf_name, trade_mode, is_shared }) {
+    const body = { id: Number(id) };
+    if (etf_code !== undefined) body.etf_code = String(etf_code || "").trim().toUpperCase();
+    if (etf_name !== undefined) body.etf_name = String(etf_name || "").trim();
+    if (trade_mode !== undefined) body.trade_mode = trade_mode;
+    if (is_shared !== undefined) body.is_shared = is_shared ? 1 : 0;
     return request("/api/sponsor/update", {
       method: "POST",
-      body: JSON.stringify({
-        id: Number(id),
-        etf_code: String(etf_code || "").trim().toUpperCase(),
-        etf_name: etf_name ? String(etf_name).trim() : undefined,
-        trade_mode: trade_mode || undefined,
-      }),
-    });
-  },
-
-  /** 点赞感谢赞助者（任何人点击一次，即相当于点赞一次） */
-  async like(sponsorId, etfCode = "") {
-    return request("/api/sponsor/like", {
-      method: "POST",
-      body: JSON.stringify({
-        sponsor_id: sponsorId ? Number(sponsorId) : undefined,
-        etf_code: etfCode ? String(etfCode).trim() : undefined,
-      }),
+      body: JSON.stringify(body),
     });
   },
 };
