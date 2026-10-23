@@ -339,22 +339,31 @@ export default {
     };
 
     /**
-     * 日线图表小图标显示在图表实际对应的采集日期列上：
-     * 数据采集工作流分别采集上午盘和下午盘，而图表仅在下午收盘采集一次；
-     * 因此当今日仅有上午盘数据时，最新数据在今日列，而图表 icon 放在对应的图表采集日期列（如昨天那一列）。
+     * 日线图表小图标：严格按「图表实际采集日期」落在对应日线列。
+     * 数据与图表采集时间可不同（上午/下午盘数据 vs 仅收盘后出图一次）；
+     * 规则：图表采在哪一天，ICON 就显示在哪一天的列（例如今日收盘已出图 → 今日列）。
+     * 取「单标的 updated_at」与「全局 chart_date」中较新的、且落在当前列日期内的那天；
+     * 都没有时退回 processedData.chartColIdx。
+     * 不再用 colHasClose 拦截，避免今日已出图却错落到昨日列。
      */
     const showDailyChartIcon = (etfCode, colIdx) => {
       if (colIdx < 0) return false;
       const pd = processedData.value;
       if (!pd) return false;
       const colDates = pd.weekDays || [];
+      if (!colDates.length) return pd.chartColIdx === colIdx;
+
       const entry = resolveChartEntry(etfCode);
       const entryDay = entry?.updated_at ? toBjDay(entry.updated_at) : null;
-      if (entryDay && colDates.length) {
-        const eIdx = colDates.indexOf(entryDay);
-        if (eIdx >= 0 && pd.colHasClose?.[eIdx]) {
-          return eIdx === colIdx;
-        }
+      const gDay =
+        globalChartDay.value && isValidDate(globalChartDay.value) ? globalChartDay.value.trim() : "";
+
+      let bestDay = "";
+      if (entryDay && colDates.includes(entryDay)) bestDay = entryDay;
+      if (gDay && colDates.includes(gDay) && gDay >= bestDay) bestDay = gDay;
+
+      if (bestDay) {
+        return colDates.indexOf(bestDay) === colIdx;
       }
       return pd.chartColIdx === colIdx;
     };
@@ -562,18 +571,18 @@ export default {
         }
       }
 
-      // 计算日线图表对应的真实采集日期列：图表仅在下午收盘生成一次，若最新列仅有上午盘数据，则图表仍归属上一已完成收盘的交易日列
+      // 日线图表对应列 = 图表实际采集日（仅收盘后生成一次）
+      // 优先全局 chart_date；若无则退到最近有收盘数据的日线列；再退到最新有任意数据的列
+      // 不再强制 colHasClose，避免今日已出图却仍落在昨日列
       let chartColIdx = -1;
       const chartDayStr =
         globalChartDay.value && isValidDate(globalChartDay.value) ? globalChartDay.value.trim() : "";
       const gIdx = chartDayStr ? weekDays.indexOf(chartDayStr) : -1;
-      if (gIdx >= 0 && colHasClose[gIdx]) {
+      if (gIdx >= 0) {
         chartColIdx = gIdx;
       } else if (dailyColIdx >= 0) {
         chartColIdx = dailyColIdx;
-      } else if (gIdx >= 0) {
-        chartColIdx = gIdx;
-      } else {
+      } else if (latestIdx >= 0) {
         chartColIdx = latestIdx;
       }
       const chartColDate =
