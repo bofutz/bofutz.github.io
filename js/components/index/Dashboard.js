@@ -1,13 +1,13 @@
 /**
- * 波幅探长 - 首页数据看板
- * 核心改进：
+ * 波幅探长 - 首页数据看板 (js/components/index/Dashboard.js)
+ * 核心改进与修复：
  * 1. “赞助”全部改为“定制”，“会员赞助”改为“定制分享”，彻底移除股票代码后的赞助署名及点赞功能
  * 2. 标的排序规则：
  *    - 定制标的的会员：定制标的 -> 收藏 -> 最近异动 -> 其它
  *    - 非定制标的用户：收藏 -> 最近异动 -> 分享的定制标的 -> 其它
- * 3. 正三角（▲）设为红色，倒三角（▼）设为绿色
+ * 3. 修复双三角问题：仅当监控数据本身为正三角（▲/△）或倒三角（▼/▽）时，将该三角设为红色（▲）或绿色（▼），绝不在每个数字前重复添加额外的小三角
  * 4. 页面下方说明整行字体放大并醒目：“使用说明：格式：上午/下午|日线；红正三角（▲）代表上涨异动，绿倒三角（▼）代表下跌异动；红色代码代表 T+0 标的，其余为 T+1 标的。”
- * 5. 最新采集的数据一定在最右列，且正序排列；若出现新数据，上一数据自动前移，由此类推
+ * 5. 修复列顺序与最新列判定：严格按最新采集数据的真实日期决定最右列（例如周五尚未采集、最新数据为周四 10-22 时，最右列固定为周四，列顺序为 [周五(上周), 周线(上周), 周一, 周二, 周三, 周四(最新)]，周线紧挨在周一列的前一列）
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -175,28 +175,28 @@ export default {
     };
 
     /**
-     * 格式化单个状态片段并解析正负号与正/倒三角：
-     * 正三角（▲）为红色，倒三角（▼）为绿色
+     * 解析单个状态值（不重复插入多余三角！）：
+     * - 如果原始数据是正三角（▲ / △）或带 + 号，方向 dir = 1（显示为红色）
+     * - 如果原始数据是倒三角（▼ / ▽）或带 - 号，方向 dir = -1（显示为绿色）
+     * - 将空心 △/▽ 统一规范为实心 ▲/▼，原样保留文本，绝不在已有文本前再拼一个三角
      */
     const parseStatusParts = (raw) => {
       if (!raw || raw === "-" || raw === "--" || raw === "None" || raw === "null") {
         return { text: "-", dir: 0 };
       }
-      const s = String(raw).trim();
+      const s = String(raw).trim().replace(/△/g, "▲").replace(/▽/g, "▼");
       let dir = 0;
-      if (s.includes("▲") || s.includes("△") || s.includes("+")) {
+      if (s.includes("▲") || s.includes("+")) {
         dir = 1;
-      } else if (s.includes("▼") || s.includes("▽") || s.includes("-")) {
+      } else if (s.includes("▼") || (s.includes("-") && s !== "-")) {
         dir = -1;
       } else {
         const num = parseFloat(s);
         if (!isNaN(num) && num !== 0) dir = num > 0 ? 1 : -1;
       }
-      const cleanText = s.replace(/[▲△▼▽]/g, "").trim() || s;
       return {
-        text: cleanText,
+        text: s,
         dir,
-        triangle: dir > 0 ? "▲" : dir < 0 ? "▼" : "",
       };
     };
 
@@ -208,7 +208,7 @@ export default {
       return am === "-" && pm === "-" && day === "-" ? "-" : `${am}/${pm}|${day}`;
     };
 
-    /** 构造日线单元格带红正三角(▲)/绿倒三角(▼)的结构化片段 */
+    /** 构造日线单元格（上午/下午|日线）各段独立着色对象：正三角与正数为红，倒三角与负数为绿 */
     const getDayCellSegments = (item) => {
       if (!item) return null;
       const amRaw = item.am_status && item.am_status !== "--" ? item.am_status : "-";
@@ -222,7 +222,7 @@ export default {
       };
     };
 
-    /** 构造周线单元格带红正三角(▲)/绿倒三角(▼)的结构化片段 */
+    /** 构造周线单元格着色对象 */
     const getWeekCellSegment = (weekStatus) => {
       if (!weekStatus || weekStatus === "-" || weekStatus === "--") return null;
       return parseStatusParts(weekStatus);
@@ -238,7 +238,7 @@ export default {
       const cn = formatDateCN(item.week_status_date);
       return cn ? `${cn}周线` : "周线";
     };
-    const dailyChartTitle = (etfCode, colDate) => chartDateTitle(globalChartDay.value || colDate);
+    const dailyChartTitle = (etfCode, colDate) => chartDateTitle(colDate || globalChartDay.value);
     const weekChartTitle = () =>
       weeklyChartDay.value && isValidDate(weeklyChartDay.value) ? chartDateTitle(weeklyChartDay.value) : "周线图表";
 
@@ -265,7 +265,11 @@ export default {
     const getStatusVal = (str) => {
       if (!str || typeof str !== "string" || str === "-" || str === "--") return -9999;
       const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
-      return match ? parseFloat(match[0]) : -9999;
+      if (match) return parseFloat(match[0]);
+      // 若为纯三角异动标记（▲ 或 ▼），赋予 0.001 的基础异动权重以便识别为有异动
+      if (str.includes("▲") || str.includes("△")) return 0.001;
+      if (str.includes("▼") || str.includes("▽")) return -0.001;
+      return -9999;
     };
 
     const calendarMonday = () => {
@@ -329,16 +333,17 @@ export default {
         : { url: raw.chart_url || raw.url || "", updated_at: raw.updated_at || null };
     };
 
+    /** 日线图表小图标始终显示在最新采集的交易日列上 */
     const showDailyChartIcon = (etfCode, colIdx) => {
       if (colIdx < 0) return false;
+      const latestDailyIdx = processedData.value?.latestDailyIdx ?? -1;
+      if (latestDailyIdx >= 0) return latestDailyIdx === colIdx;
       const colDates = processedData.value?.weekDays || [];
-      if (!colDates.length) return false;
-      const targetDay = globalChartDay.value;
-      if (targetDay) {
-        const hitIdx = colDates.indexOf(targetDay);
+      if (globalChartDay.value && colDates.length) {
+        const hitIdx = colDates.indexOf(globalChartDay.value);
         if (hitIdx >= 0) return hitIdx === colIdx;
       }
-      return processedData.value?.rankDailyIdx === colIdx;
+      return false;
     };
 
     const normCode = (c) => String(c || "").replace(/\D/g, "").slice(-6);
@@ -513,7 +518,7 @@ export default {
       Object.values(etfMap).forEach((row) => {
         const cur = closedWeekMonday ? findWeekStatusForMonday(row.etf_code, closedWeekMonday) : null;
         row.week_status = cur ? cur.status : null;
-        row.week_status_date = cur ? closedWeekFriday || cur.date : null;
+        row.week_status_date = cur ? (closedWeekFriday && (!latestMonday.value || closedWeekFriday <= bjYmd(Date.now())) ? closedWeekFriday : cur.date) : null;
         row.trade_rule = resolveTradeRule(row.etf_code, row.etf_name, row.trade_mode);
         row.is_my_custom = isCustomByCurrentUser(row);
       });
@@ -545,33 +550,40 @@ export default {
       const wdToday = new Date(todayBj + "T12:00:00+08:00").getDay();
       const isWeekendBj = wdToday === 0 || wdToday === 6;
 
-      let maxWeekStatusDate = "";
-      for (const row of items) {
-        if (hasStatus(row.week_status) && row.week_status_date > maxWeekStatusDate) {
-          maxWeekStatusDate = row.week_status_date;
+      let maxWeekDataDate = "";
+      for (const item of allData.value || []) {
+        if (!isBlankStatus(item.week_status) && item.date && isValidDate(item.date)) {
+          const d = item.date.trim();
+          if (d > maxWeekDataDate) maxWeekDataDate = d;
         }
       }
-      const weeklyCollectDay =
-        (weeklyChartDay.value && isValidDate(weeklyChartDay.value) && weeklyChartDay.value) ||
-        maxWeekStatusDate ||
-        "";
-      const dailyCollectDay =
-        (latestIdx >= 0 && weekDays[latestIdx] ? weekDays[latestIdx] : "") ||
-        (globalChartDay.value && isValidDate(globalChartDay.value) && globalChartDay.value) ||
-        "";
+
+      const todayMonday = getWeekDays(todayBj)[0] || "";
+      const latestDayMonday = latestDayDate ? getWeekDays(latestDayDate)[0] || "" : "";
+      const isLatestFromPastWeek = !!(todayMonday && latestDayMonday && latestDayMonday < todayMonday);
 
       /**
-       * 判断最新采集列是日线还是周线：
-       * - 当存在最新交易日采集数据时，若该交易日日期晚于上次周线日期（例如新的一周周一～周四出现新数据），则最新采集列为该交易日（最右列），周线自动左移；
-       * - 若周线日期大于等于最新交易日日期且处于周末或周线已出，则周线为最新采集列（最右列）。
+       * 核心修复：精准判断最新采集列是「日线列」还是「周线列」
+       * 1. 当本周仅采集到周一～周四（latestIdx 为 0~3，例如周五工作流尚未运行时最新数据为周四 10-22），
+       *    只要没有单独晚于 latestDayDate 的周线记录（maxWeekDataDate <= latestDayDate），且当前不是周末/跨周未采集状态，
+       *    最新采集列必定是该日线列（如周四 10-22 在最右列），此时列顺序为：
+       *    [周五(上周), 周线(上周), 周一, 周二, 周三, 周四(最新)] —— 周线严格位于周一列的前一列！
+       * 2. 只有当周线记录日期晚于最新日线日期（maxWeekDataDate > latestDayDate），
+       *    或周五日线与周线均已出完（latestIdx === 4 且 dailyColDate === latestDayDate 且 maxWeekDataDate >= latestDayDate），
+       *    或处于周末 / 新一周周一尚未采集且上周周线已出时，周线才作为最新列排在最右列。
        */
       let rankBy = "daily";
       if (hasAnyWeek) {
-        if (latestIdx < 0) {
+        if (!latestDayDate) {
           rankBy = "weekly";
-        } else if (maxWeekStatusDate && latestDayDate && maxWeekStatusDate >= latestDayDate && isWeekendBj) {
+        } else if (maxWeekDataDate > latestDayDate) {
           rankBy = "weekly";
-        } else if (weeklyCollectDay && dailyCollectDay && weeklyCollectDay > dailyCollectDay && maxWeekStatusDate >= latestDayDate) {
+        } else if (
+          maxWeekDataDate === latestDayDate &&
+          ((latestIdx === 4 && dailyColDate === latestDayDate) || isWeekendBj || isLatestFromPastWeek)
+        ) {
+          rankBy = "weekly";
+        } else if ((isWeekendBj || isLatestFromPastWeek) && latestIdx === 4) {
           rankBy = "weekly";
         }
       }
@@ -746,11 +758,10 @@ export default {
        * 最新采集的数据，一定是在最右列，且正序排列。如果出现新数据，上一数据自动前移，由此类推。
        * BASE_COLS = [周一(0), 周二(1), 周三(2), 周四(3), 周五(4), 周线(5)]
        * 以 pivotIdx 为最右列（最新采集列），左侧依次正序循环排列：
-       * 例如：
-       * - 最新采集为周线(5) -> [周一, 周二, 周三, 周四, 周五, 周线]
-       * - 最新采集为周一(0) -> [周二, 周三, 周四, 周五, 周线, 周一]
-       * - 最新采集为周二(1) -> [周三, 周四, 周五, 周线, 周一, 周二]
-       * - 最新采集为周三(2) -> [周四, 周五, 周线, 周一, 周二, 周三]
+       * - 最新采集为周四(3) -> [周五(上周), 周线(上周), 周一, 周二, 周三, 周四(最新)]（周线在周一列的前一列）
+       * - 最新采集为周五(4) -> [周线(上周), 周一, 周二, 周三, 周四, 周五(最新)]
+       * - 最新采集为周线(5) -> [周一, 周二, 周三, 周四, 周五, 周线(最新)]
+       * - 最新采集为周一(0) -> [周二, 周三, 周四, 周五, 周线, 周一(最新)]
        */
       let pivotIdx = 5;
       if (rankBy !== "weekly") {
@@ -770,6 +781,7 @@ export default {
         freeTop3Codes,
         weekDays,
         rankBy,
+        latestDailyIdx: latestIdx,
         rankDailyIdx: rankBy === "daily" ? latestIdx : -1,
         displayCols,
         latestColKey: displayCols[displayCols.length - 1].key,
@@ -970,7 +982,12 @@ export default {
       const rows = viewableBoardItems();
       if (!rows.length) return store.showToast("暂无可查看的图表", "error");
       store.showToast("正在加载图库…");
-      const dayLabel = formatDateCN(globalChartDay.value) || "";
+      const latestDayIdx = processedData.value?.latestDailyIdx ?? -1;
+      const latestDayStr =
+        (latestDayIdx >= 0 && processedData.value?.weekDays?.[latestDayIdx]) ||
+        globalChartDay.value ||
+        "";
+      const dayLabel = formatDateCN(latestDayStr) || "";
       const candidates = [];
       for (const row of rows) {
         const code = normCode(row.etf_code);
@@ -997,7 +1014,7 @@ export default {
       const candidates = rows.map((row) => {
         const code = normCode(row.etf_code);
         const name = formatEtfName(row.etf_name) || code;
-        const dLabel = formatDateCN(weeklyChartDay.value || globalChartDay.value || row.week_status_date) || "";
+        const dLabel = formatDateCN(row.week_status_date || weeklyChartDay.value || globalChartDay.value) || "";
         return { title: `${name} (${code}) ${dLabel}周线`.trim(), url: `${CONFIG.R2_CHART_BASE}/${code}_weekly.png`, code };
       });
       const images = await probeImagesBatch(candidates, 12);
@@ -1052,8 +1069,8 @@ export default {
         const monday = resolveLatestClosedWeekMonday();
         if (monday) {
           const [y, m, d] = parseYMD(monday);
-          const sat = new Date(y, m - 1, d + 5);
-          weeklyChartDay.value = `${sat.getFullYear()}-${String(sat.getMonth() + 1).padStart(2, "0")}-${String(sat.getDate()).padStart(2, "0")}`;
+          const fri = new Date(y, m - 1, d + 4);
+          weeklyChartDay.value = `${fri.getFullYear()}-${String(fri.getMonth() + 1).padStart(2, "0")}-${String(fri.getDate()).padStart(2, "0")}`;
         }
       } catch (err) {
         store.showToast(err.message, "error");
@@ -1308,23 +1325,11 @@ export default {
                            :title="dataDateTitle(processedData.weekDays[col.dayIdx])">
                         <template v-if="getDayCellSegments(item.days[col.dayIdx])">
                           <span class="text-[10px] sm:text-sm font-mono tracking-tight leading-tight inline-flex items-center">
-                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).am)">
-                              <span v-if="getDayCellSegments(item.days[col.dayIdx]).am.triangle"
-                                    class="text-[9px] sm:text-[11px] mr-0.5"
-                                    :class="getDayCellSegments(item.days[col.dayIdx]).am.dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getDayCellSegments(item.days[col.dayIdx]).am.triangle }}</span>{{ getDayCellSegments(item.days[col.dayIdx]).am.text }}
-                            </span>
+                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).am)">{{ getDayCellSegments(item.days[col.dayIdx]).am.text }}</span>
                             <span class="text-slate-300 mx-0.5">/</span>
-                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).pm)">
-                              <span v-if="getDayCellSegments(item.days[col.dayIdx]).pm.triangle"
-                                    class="text-[9px] sm:text-[11px] mr-0.5"
-                                    :class="getDayCellSegments(item.days[col.dayIdx]).pm.dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getDayCellSegments(item.days[col.dayIdx]).pm.triangle }}</span>{{ getDayCellSegments(item.days[col.dayIdx]).pm.text }}
-                            </span>
+                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).pm)">{{ getDayCellSegments(item.days[col.dayIdx]).pm.text }}</span>
                             <span class="text-slate-300 mx-0.5">|</span>
-                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).day)">
-                              <span v-if="getDayCellSegments(item.days[col.dayIdx]).day.triangle"
-                                    class="text-[9px] sm:text-[11px] mr-0.5"
-                                    :class="getDayCellSegments(item.days[col.dayIdx]).day.dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getDayCellSegments(item.days[col.dayIdx]).day.triangle }}</span>{{ getDayCellSegments(item.days[col.dayIdx]).day.text }}
-                            </span>
+                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).day)">{{ getDayCellSegments(item.days[col.dayIdx]).day.text }}</span>
                           </span>
                         </template>
                         <span v-else class="text-[10px] sm:text-sm font-mono text-slate-300 leading-tight">-</span>
@@ -1339,11 +1344,7 @@ export default {
                       <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1" :title="weekDataTitle(item)">
                         <template v-if="getWeekCellSegment(item.week_status)">
                           <span class="text-[10px] sm:text-sm font-mono leading-tight inline-flex items-center"
-                                :class="getPartColorClass(getWeekCellSegment(item.week_status))">
-                            <span v-if="getWeekCellSegment(item.week_status).triangle"
-                                  class="text-[9px] sm:text-[11px] mr-0.5"
-                                  :class="getWeekCellSegment(item.week_status).dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getWeekCellSegment(item.week_status).triangle }}</span>{{ getWeekCellSegment(item.week_status).text }}
-                          </span>
+                                :class="getPartColorClass(getWeekCellSegment(item.week_status))">{{ getWeekCellSegment(item.week_status).text }}</span>
                         </template>
                         <span v-else class="text-[10px] sm:text-sm font-mono text-slate-300 leading-tight">-</span>
 
