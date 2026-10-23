@@ -102,7 +102,7 @@
           <div @click="selectTab('shared')" class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm cursor-pointer hover:border-[#4da6a0]/50 transition">
             <div class="text-[11px] text-slate-400 flex items-center justify-between">
               <span>默认监控标的</span>
-              <span class="text-amber-600 font-mono">赞助 {{ stats.sponsor_active || 0 }}</span>
+              <span class="text-amber-600 font-mono">定制 {{ stats.sponsor_active || 0 }}（分享 {{ stats.custom_shared || 0 }}）</span>
             </div>
             <div class="text-xl font-bold text-slate-800 font-mono mt-0.5">{{ stats.shared_count || 0 }}</div>
           </div>
@@ -156,6 +156,7 @@
         revenue: 0,
         shared_count: 0,
         sponsor_active: 0,
+        custom_shared: 0,
         tickets_pending: 0,
         new_users_7d: 0,
       });
@@ -170,7 +171,7 @@
 
       const tabs = [
         { k: "orders", t: "订单审核", icon: "fa-solid fa-file-invoice-dollar", badge: () => stats.orders_pending },
-        { k: "sponsors", t: "赞助标的", icon: "fa-solid fa-hand-holding-heart" },
+        { k: "sponsors", t: "定制标的", icon: "fa-solid fa-sliders" },
         { k: "shared", t: "默认监控列表", icon: "fa-solid fa-list" },
         { k: "users", t: "用户管理", icon: "fa-solid fa-users" },
         { k: "tickets", t: "客服工单", icon: "fa-solid fa-headset", badge: () => stats.tickets_pending },
