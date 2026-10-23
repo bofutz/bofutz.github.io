@@ -164,7 +164,7 @@ export default {
       <!-- 导航 -->
       <div class="flex flex-wrap justify-center gap-2 text-xs">
         <button type="button" @click="scrollTo('value')" class="px-4 py-1.5 rounded-full border transition-all"
-                :class="activeSection==='value' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">共建说明</button>
+                :class="activeSection==='value' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">功能说明</button>
         <button type="button" @click="scrollTo('board')" class="px-4 py-1.5 rounded-full border transition-all"
                 :class="activeSection==='board' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">数据看板</button>
         <button type="button" @click="scrollTo('read')" class="px-4 py-1.5 rounded-full border transition-all"
@@ -175,11 +175,11 @@ export default {
                 :class="activeSection==='risk' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">风险说明</button>
       </div>
 
-      <!-- 1. 共建说明 -->
+      <!-- 1. 功能说明 -->
       <section id="value" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div class="theme-bg px-6 py-4">
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-crown"></i> 注册看全量图表 · 会员赞助共建监控池
+            <i class="fa-solid fa-crown"></i> 注册看全量图表 · 会员专属定制标的
           </h2>
         </div>
         <div class="p-6 space-y-4">
@@ -193,8 +193,8 @@ export default {
               <p class="text-xs text-slate-600 leading-relaxed">池内标的都会列出；未触发显示 “-”，仍可打开半日 / 日 / 周线图。</p>
             </div>
             <div class="bg-slate-50 rounded-xl p-4">
-              <div class="font-bold text-slate-800 mb-1 text-sm">3. 多周期对照</div>
-              <p class="text-xs text-slate-600 leading-relaxed">半日看节奏，日线看结构，周线看方向。注册登录即可查看全部标的图表，会员赞助标的将展示赞助者昵称并供全员共享。</p>
+              <div class="font-bold text-slate-800 mb-1 text-sm">3. 专属定制与分享</div>
+              <p class="text-xs text-slate-600 leading-relaxed">半日看节奏，日线看结构，周线看方向。注册登录即可查看全部图表；会员定制标的默认仅自己可见并置顶，也可自主选择公开分享。</p>
             </div>
           </div>
           <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-amber-900">
@@ -212,9 +212,9 @@ export default {
         </div>
         <div class="p-6 text-sm text-slate-700 leading-relaxed space-y-3">
           <ul class="list-disc pl-5 space-y-2">
-            <li><strong>标的列：</strong>名称与代码（<span class="text-red-500 font-bold">红色代码</span>代表 T+0 标的，默认颜色代表 T+1 标的）；点击「(昵称) 赞助」徽章可为赞助会员点赞致谢。</li>
-            <li><strong>周一～周五：</strong>触发波幅阈值时显示 ± 百分比，未触发为 “-”。</li>
-            <li><strong>周线列：</strong>本周周线波幅结果，同样可为 “-”。</li>
+            <li><strong>标的列：</strong>名称与代码（<span class="text-red-500 font-bold">红色代码</span>代表 T+0 标的，默认颜色代表 T+1 标的）；定制会员的定制标的排在首位，非定制用户按「收藏、最近异动、分享的定制标的、其它」顺序排列。</li>
+            <li><strong>最新采集列在最右：</strong>最新采集的数据始终固定在表格最右列，其余列按正序排列；当出现新数据时，上一周期数据自动向左前移。</li>
+            <li><strong>红正三角与绿倒三角：</strong>触发波幅阈值时，<span class="text-red-500 font-bold">红正三角（▲）</span>代表上涨异动，<span class="text-emerald-600 font-bold">绿倒三角（▼）</span>代表下跌异动，未触发为 “-”。</li>
             <li><strong>图表图标：</strong>点击查看半日线 / 日线 / 周线大图（可放大翻页）。</li>
           </ul>
           <p class="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
@@ -365,7 +365,7 @@ export default {
           </div>
           <div class="pt-2 text-center">
             <a href="#/sponsor" class="inline-block theme-bg text-white text-xs font-bold px-5 py-2.5 rounded-lg no-underline">
-              前往赞助标的
+              前往定制标的
             </a>
           </div>
         </div>

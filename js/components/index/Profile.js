@@ -1,7 +1,7 @@
 /**
  * 波幅探长 - 个人中心
- * 1. 已彻底删除安全问题相关功能及代码
- * 2. 包含：用户昵称设置（用于在数据看板赞助标的后展示「(昵称) 赞助」）、我的订单记录、修改账号密码
+ * 1. 昵称改为唯一用户名（可用于直接登录，与定制标的无关）
+ * 2. 包含：用户名设置、我的订单记录、修改账号密码
  */
 import { store } from "../../store.js";
 import { authApi } from "../../api/auth.js";
@@ -21,7 +21,11 @@ export default {
     const saveNickname = async () => {
       const val = (nicknameInput.value || "").trim();
       if (!val || val.length < 2 || val.length > 16) {
-        store.showToast("昵称长度需为 2～16 个字符", "error");
+        store.showToast("用户名长度需为 2～16 个字符", "error");
+        return;
+      }
+      if (val.includes("@")) {
+        store.showToast("用户名不能包含 @ 符号", "error");
         return;
       }
       nicknameSaving.value = true;
@@ -30,9 +34,9 @@ export default {
         const saved = res.nickname || val;
         store.setUserState({ nickname: saved });
         nicknameInput.value = saved;
-        store.showToast(res.message || "昵称已保存！数据看板将展示您的昵称");
+        store.showToast(res.message || "用户名已保存！您现在可以使用该用户名登录");
       } catch (err) {
-        store.showToast(err.message || "昵称保存失败", "error");
+        store.showToast(err.message || "用户名保存失败", "error");
       } finally {
         nicknameSaving.value = false;
       }
@@ -113,7 +117,7 @@ export default {
     };
 
     const formatOrderType = (o) => {
-      if (o.order_type === "symbol_sponsor") return "赞助标的";
+      if (o.order_type === "symbol_custom" || o.order_type === "symbol_sponsor") return "定制标的";
       if (o.order_type === "tip") return "温暖打赏";
       return "历史订单";
     };
@@ -151,7 +155,7 @@ export default {
       </div>
 
       <template v-else>
-        <!-- 1. 账号信息与专属昵称设置 -->
+        <!-- 1. 账号信息与唯一用户名设置 -->
         <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
@@ -166,31 +170,30 @@ export default {
             <div class="flex gap-2 shrink-0">
               <a href="#/sponsor?tab=mine"
                  class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold no-underline">
-                我的赞助管理
+                我的定制管理
               </a>
               <a href="#/sponsor"
                  class="theme-bg text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:opacity-90 no-underline">
-                赞助新标的
+                定制新标的
               </a>
             </div>
           </div>
 
           <div class="space-y-2 max-w-xl">
             <label class="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <i class="fa-solid fa-signature theme-text"></i>
-              <span>设置您的昵称（赞助标的展示署名）</span>
+              <i class="fa-solid fa-id-badge theme-text"></i>
+              <span>唯一用户名（可直接用于登录）</span>
             </label>
             <p class="text-xs text-slate-500 leading-relaxed">
-              设置昵称后，您赞助的监控标的将在<strong>数据看板</strong>与<strong>公共赞助池</strong>醒目显示为
-              <span class="text-amber-700 font-bold">「❤️ {{ nicknameInput || '老李' }} 赞助」</span>，任何人点击一次即可为您点赞！
+              设置唯一用户名后，您既可以使用<strong>用户名</strong>登录，也可以使用<strong>注册邮箱</strong>登录（用户名仅作为账号标识与登录凭证，不在股票代码后展示）。
             </p>
             <div class="flex flex-col sm:flex-row gap-2 pt-1">
-              <input v-model="nicknameInput" type="text" maxlength="16" placeholder="请输入 2～16 位昵称（例如：老李）"
+              <input v-model="nicknameInput" type="text" maxlength="16" placeholder="请输入 2～16 位唯一用户名"
                      class="flex-1 px-3.5 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
                      @keyup.enter="saveNickname">
               <button type="button" @click="saveNickname" :disabled="nicknameSaving"
                       class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:opacity-90 shrink-0">
-                {{ nicknameSaving ? '保存中...' : '保存昵称' }}
+                {{ nicknameSaving ? '保存中...' : '保存用户名' }}
               </button>
             </div>
           </div>
@@ -225,7 +228,7 @@ export default {
                           :class="order.order_type==='tip' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">
                       {{ formatOrderType(order) }}
                     </span>
-                    <span v-if="order.order_type==='symbol_sponsor'" class="text-xs text-slate-500 ml-1.5">
+                    <span v-if="order.order_type==='symbol_custom' || order.order_type==='symbol_sponsor'" class="text-xs text-slate-500 ml-1.5">
                       {{ order.symbol_count || 1 }}只 · {{ order.sponsor_days || 30 }}天
                     </span>
                     <span v-if="order.promo_code" class="text-[10px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0.2 rounded ml-1.5 font-bold">

@@ -1,17 +1,16 @@
 /**
  * 波幅探长 - 首页数据看板
  * 核心改进：
- * 1. 标的默认排序规则：
- *    - 没登录时：最新异动 -> 剩下的按后台「默认监控列表」顺序排列
- *    - 未赞助已登录：收藏 -> 剩余最新异动 -> 按后台「默认监控列表」顺序排列
- *    - 赞助已登录：赞助 -> 收藏 -> 剩余最新异动 -> 按后台「默认监控列表」顺序排列
- * 2. 赞助标的署名修复：自动过滤“匿名会员/热心会员”占位词，优先展示真实昵称「(昵称) 赞助」（如“老李 赞助”），支持点击一次即点赞一次
- * 3. 后台开启优惠活动提醒广告时，在「搜索代码 / 名称...」输入框正上方展示文字提醒广告
- * 4. T+0 股票/ETF代码显示为红色，T+1 保持不变；不在代码后面加(0)
+ * 1. “赞助”全部改为“定制”，“会员赞助”改为“定制分享”，彻底移除股票代码后的赞助署名及点赞功能
+ * 2. 标的排序规则：
+ *    - 定制标的的会员：定制标的 -> 收藏 -> 最近异动 -> 其它
+ *    - 非定制标的用户：收藏 -> 最近异动 -> 分享的定制标的 -> 其它
+ * 3. 正三角（▲）设为红色，倒三角（▼）设为绿色
+ * 4. 页面下方说明整行字体放大并醒目：“使用说明：格式：上午/下午|日线；红正三角（▲）代表上涨异动，绿倒三角（▼）代表下跌异动；红色代码代表 T+0 标的，其余为 T+1 标的。”
+ * 5. 最新采集的数据一定在最右列，且正序排列；若出现新数据，上一数据自动前移，由此类推
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
-import { authApi } from "../../api/auth.js";
 import { sponsorApi } from "../../api/sponsor.js";
 import { dashboardPrefsApi } from "../../api/dashboardPrefs.js";
 import { CONFIG, resolveTradeRule } from "../../config.js";
@@ -20,12 +19,6 @@ const { ref, reactive, computed, onMounted, nextTick, watch } = Vue;
 
 const settingOn = (val) =>
   val === undefined || val === null || val === "" || val === "1" || val === 1 || val === true || val === "true";
-
-/** 判断是否为无效的占位赞助名 */
-const isPlaceholderSponsorName = (name) => {
-  const s = String(name || "").trim();
-  return !s || s === "匿名会员" || s === "热心会员" || s === "匿名" || s === "会员";
-};
 
 const BASE_COLS = [
   { key: "d0", type: "day", dayIdx: 0, label: "周一" },
@@ -45,8 +38,8 @@ export default {
     const globalChartDay = ref(null);
     const weeklyChartDay = ref(null);
     const sharedList = ref([]);
-    const activeSponsorsMap = ref({});
-    const mySponsoredCodes = ref([]);
+    const sharedCustomMap = ref({});
+    const myCustomCodes = ref([]);
 
     const favCodes = ref([]);
     const userOrder = ref([]);
@@ -180,6 +173,33 @@ export default {
       const m = s.match(/^(.*?ETF)/i);
       return m ? m[1] : s;
     };
+
+    /**
+     * 格式化单个状态片段并解析正负号与正/倒三角：
+     * 正三角（▲）为红色，倒三角（▼）为绿色
+     */
+    const parseStatusParts = (raw) => {
+      if (!raw || raw === "-" || raw === "--" || raw === "None" || raw === "null") {
+        return { text: "-", dir: 0 };
+      }
+      const s = String(raw).trim();
+      let dir = 0;
+      if (s.includes("▲") || s.includes("△") || s.includes("+")) {
+        dir = 1;
+      } else if (s.includes("▼") || s.includes("▽") || s.includes("-")) {
+        dir = -1;
+      } else {
+        const num = parseFloat(s);
+        if (!isNaN(num) && num !== 0) dir = num > 0 ? 1 : -1;
+      }
+      const cleanText = s.replace(/[▲△▼▽]/g, "").trim() || s;
+      return {
+        text: cleanText,
+        dir,
+        triangle: dir > 0 ? "▲" : dir < 0 ? "▼" : "",
+      };
+    };
+
     const formatDayCell = (item) => {
       if (!item) return "-";
       const am = item.am_status && item.am_status !== "--" ? item.am_status : "-";
@@ -187,6 +207,27 @@ export default {
       const day = item.day_status && item.day_status !== "--" ? item.day_status : "-";
       return am === "-" && pm === "-" && day === "-" ? "-" : `${am}/${pm}|${day}`;
     };
+
+    /** 构造日线单元格带红正三角(▲)/绿倒三角(▼)的结构化片段 */
+    const getDayCellSegments = (item) => {
+      if (!item) return null;
+      const amRaw = item.am_status && item.am_status !== "--" ? item.am_status : "-";
+      const pmRaw = item.pm_status && item.pm_status !== "--" ? item.pm_status : "-";
+      const dayRaw = item.day_status && item.day_status !== "--" ? item.day_status : "-";
+      if (amRaw === "-" && pmRaw === "-" && dayRaw === "-") return null;
+      return {
+        am: parseStatusParts(amRaw),
+        pm: parseStatusParts(pmRaw),
+        day: parseStatusParts(dayRaw),
+      };
+    };
+
+    /** 构造周线单元格带红正三角(▲)/绿倒三角(▼)的结构化片段 */
+    const getWeekCellSegment = (weekStatus) => {
+      if (!weekStatus || weekStatus === "-" || weekStatus === "--") return null;
+      return parseStatusParts(weekStatus);
+    };
+
     const chartDateTitle = (dateStr) => (formatDateCN(dateStr) ? `${formatDateCN(dateStr)}图表` : "图表");
     const dataDateTitle = (dateStr, kind = "") => {
       const cn = formatDateCN(dateStr);
@@ -289,14 +330,15 @@ export default {
     };
 
     const showDailyChartIcon = (etfCode, colIdx) => {
-      if (colIdx < 0 || !latestMonday.value || !globalChartDay.value) return false;
-      const weekDays = getWeekDays(latestMonday.value);
-      let target = weekDays.indexOf(globalChartDay.value);
-      if (target < 0) {
-        const wd = new Date(globalChartDay.value + "T12:00:00+08:00").getDay();
-        if (wd === 0 || wd === 6) target = 4;
+      if (colIdx < 0) return false;
+      const colDates = processedData.value?.weekDays || [];
+      if (!colDates.length) return false;
+      const targetDay = globalChartDay.value;
+      if (targetDay) {
+        const hitIdx = colDates.indexOf(targetDay);
+        if (hitIdx >= 0) return hitIdx === colIdx;
       }
-      return target === colIdx && target >= 0;
+      return processedData.value?.rankDailyIdx === colIdx;
     };
 
     const normCode = (c) => String(c || "").replace(/\D/g, "").slice(-6);
@@ -363,127 +405,11 @@ export default {
       return colDates;
     };
 
-    const isSponsoredByCurrentUser = (row) => {
+    const isCustomByCurrentUser = (row) => {
       if (!store.state.isLoggedIn || !row) return false;
       const code = normCode(row.etf_code);
-      if (mySponsoredCodes.value.includes(code)) return true;
-      const myUid = Number(store.state.userId);
-      if (myUid > 0) {
-        if (Array.isArray(row.sponsor_user_ids) && row.sponsor_user_ids.map(Number).includes(myUid)) return true;
-        if (Number(row.sponsor_user_id) === myUid) return true;
-      }
-      const myUname = String(store.state.username || "").trim().toLowerCase();
-      if (myUname) {
-        if (Array.isArray(row.sponsor_usernames) && row.sponsor_usernames.includes(myUname)) return true;
-        if (String(row.sponsor_username || "").trim().toLowerCase() === myUname) return true;
-      }
-      const myNick = String(store.state.nickname || "").trim();
-      if (myNick && row.sponsor_name) {
-        const names = String(row.sponsor_name).split("、").map((s) => s.trim());
-        if (names.includes(myNick)) return true;
-      }
-      return false;
-    };
-
-    /**
-     * 解析赞助标的展示署名：
-     * 1. 过滤掉“匿名会员”、“热心会员”等占位名，优先取真实昵称（nickname / sponsor_nickname / sponsor_name）
-     * 2. 若是当前登录用户本人赞助（或当前用户设置了昵称且原记录为占位符），优先使用当前用户的昵称或本地缓存昵称
-     * 3. 若有邮箱账号，取邮箱 @ 前缀兜底
-     */
-    const displaySponsorName = (row) => {
-      if (!row) return "";
-      const code = normCode(row.etf_code);
-      const activeSp = (activeSponsorsMap.value || {})[code];
-      const hasSponsorRecord =
-        !!row.sponsor_id ||
-        !!row.is_sponsored ||
-        !!row.sponsor_name ||
-        !!activeSp;
-      if (!hasSponsorRecord) return "";
-
-      const myNick = String(
-        store.state.nickname ||
-          localStorage.getItem(CONFIG.STORAGE_KEYS.NICKNAME) ||
-          localStorage.getItem("etf_sponsor_fallback_nick") ||
-          ""
-      ).trim();
-
-      // 若是当前登录会员本人赞助，且本人有昵称，直接展示本人昵称
-      if (isSponsoredByCurrentUser(row) && myNick && !isPlaceholderSponsorName(myNick)) {
-        return myNick;
-      }
-
-      // 依次从 activeSponsorsMap、row 字段中寻找有效非占位昵称
-      const candidates = [
-        row.sponsor_nickname,
-        row.nickname,
-        activeSp?.nickname,
-        activeSp?.sponsor_nickname,
-        activeSp?.sponsor_name,
-        row.sponsor_name,
-      ];
-
-      for (const cand of candidates) {
-        if (!cand) continue;
-        const parts = String(cand)
-          .split("、")
-          .map((s) => s.trim())
-          .filter((s) => !isPlaceholderSponsorName(s));
-        if (parts.length > 0) {
-          return parts.join("、");
-        }
-      }
-
-      // 尝试用赞助者关联邮箱前缀
-      const uname = String(
-        row.sponsor_username ||
-          activeSp?.username ||
-          (Array.isArray(row.sponsor_usernames) && row.sponsor_usernames[0]) ||
-          ""
-      ).trim();
-      if (uname) {
-        const prefix = uname.includes("@") ? uname.split("@")[0] : uname;
-        if (prefix && !isPlaceholderSponsorName(prefix)) return prefix;
-      }
-
-      // 若后端记录因旧版 bug 被存成了“匿名会员”，而本地或当前账号已有真实昵称，则用真实昵称兜底展示
-      if (myNick && !isPlaceholderSponsorName(myNick)) {
-        return myNick;
-      }
-      if (isSponsoredByCurrentUser(row)) {
-        const disp = store.getDisplayName ? store.getDisplayName() : "";
-        if (disp && !isPlaceholderSponsorName(disp)) return disp;
-      }
-
-      return String(row.sponsor_name || activeSp?.sponsor_name || "").trim();
-    };
-
-    /** 点击「(昵称) 赞助」徽章一次，即相当于点赞一次 */
-    const likeSponsorOnBoard = async (item, ev) => {
-      if (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
-      if (!item || !item.resolved_sponsor_name) return;
-
-      item.like_count = (Number(item.like_count) || 0) + 1;
-      const targetShared = (sharedList.value || []).find(
-        (s) => normCode(s.etf_code || s.code) === normCode(item.etf_code)
-      );
-      if (targetShared) {
-        targetShared.like_count = (Number(targetShared.like_count) || 0) + 1;
-      }
-
-      try {
-        const res = await sponsorApi.like(item.sponsor_id, item.etf_code);
-        if (res && res.like_count != null && targetShared) {
-          targetShared.like_count = Number(res.like_count);
-        }
-        store.showToast(`已为「${item.resolved_sponsor_name}」点赞！`);
-      } catch (e) {
-        store.showToast(e.message || "点赞失败", "error");
-      }
+      if (myCustomCodes.value.includes(code)) return true;
+      return !!row.is_my_custom;
     };
 
     const handleSort = (column) => {
@@ -512,19 +438,18 @@ export default {
       });
 
       // 记录后台「默认监控列表」的顺序索引
-      // sharedList 由 /api/watchlist 返回时，默认监控列表已按 sort_order ASC, id ASC 排在最前
       const defaultOrderMap = new Map();
       let sharedSeq = 0;
       (sharedList.value || []).forEach((s) => {
         const c = normCode(s.etf_code || s.code);
         if (!c || defaultOrderMap.has(c)) return;
-        const baseWeight = s.source === "sponsor" ? 100000 : 0;
+        const baseWeight = s.source === "custom" || s.source === "sponsor" ? 100000 : 0;
         defaultOrderMap.set(c, baseWeight + sharedSeq++);
       });
 
       const etfMap = {};
       const ensureRow = (code, name, extra = null) => {
-        const spInfo = (activeSponsorsMap.value || {})[code];
+        const spInfo = (sharedCustomMap.value || {})[code];
         if (!etfMap[code]) {
           etfMap[code] = {
             etf_code: code,
@@ -532,17 +457,10 @@ export default {
             days: [null, null, null, null, null],
             week_status: null,
             week_status_date: null,
-            sponsor_id: extra?.sponsor_id || spInfo?.id || null,
-            sponsor_name: extra?.sponsor_name || spInfo?.sponsor_name || "",
-            sponsor_nickname: extra?.nickname || extra?.sponsor_nickname || spInfo?.nickname || "",
-            sponsor_username: extra?.username || spInfo?.username || "",
-            sponsor_user_id: extra?.sponsor_user_id || spInfo?.user_id || null,
-            sponsor_user_ids: extra?.sponsor_user_ids || (spInfo?.user_id ? [String(spInfo.user_id)] : []),
-            sponsor_usernames:
-              extra?.sponsor_usernames || (spInfo?.username ? [String(spInfo.username).toLowerCase()] : []),
-            like_count: Number(extra?.like_count ?? spInfo?.like_count ?? 0) || 0,
-            is_sponsored:
-              !!extra?.is_sponsored || !!extra?.sponsor_name || !!extra?.sponsor_id || !!spInfo,
+            custom_id: extra?.custom_id || spInfo?.id || null,
+            is_my_custom: !!extra?.is_my_custom || myCustomCodes.value.includes(code),
+            is_shared_custom:
+              !!extra?.is_shared_custom || !!spInfo,
             trade_mode: extra?.trade_mode || spInfo?.trade_mode || "auto",
             source: extra?.source || "default",
             default_rank: defaultOrderMap.has(code) ? defaultOrderMap.get(code) : 999999,
@@ -551,42 +469,20 @@ export default {
           if (name && (!etfMap[code].etf_name || etfMap[code].etf_name === code)) {
             etfMap[code].etf_name = name;
           }
-          if (extra?.sponsor_id || spInfo?.id) {
-            etfMap[code].sponsor_id = extra?.sponsor_id || spInfo?.id;
+          if (extra?.custom_id || spInfo?.id) {
+            etfMap[code].custom_id = extra?.custom_id || spInfo?.id;
           }
-          if (extra?.sponsor_name || spInfo?.sponsor_name) {
-            const candidateName = extra?.sponsor_name || spInfo?.sponsor_name;
-            if (isPlaceholderSponsorName(etfMap[code].sponsor_name) || !isPlaceholderSponsorName(candidateName)) {
-              etfMap[code].sponsor_name = candidateName;
-            }
+          if (extra?.is_my_custom || myCustomCodes.value.includes(code)) {
+            etfMap[code].is_my_custom = true;
           }
-          if (extra?.nickname || extra?.sponsor_nickname || spInfo?.nickname) {
-            etfMap[code].sponsor_nickname =
-              extra?.nickname || extra?.sponsor_nickname || spInfo?.nickname;
-          }
-          if (extra?.username || spInfo?.username) {
-            etfMap[code].sponsor_username = extra?.username || spInfo?.username;
-          }
-          if (extra?.sponsor_user_id || spInfo?.user_id) {
-            etfMap[code].sponsor_user_id = extra?.sponsor_user_id || spInfo?.user_id;
-          }
-          if (extra?.sponsor_user_ids?.length) {
-            etfMap[code].sponsor_user_ids = extra.sponsor_user_ids;
-          }
-          if (extra?.sponsor_usernames?.length) {
-            etfMap[code].sponsor_usernames = extra.sponsor_usernames;
-          }
-          if (extra?.like_count != null || spInfo?.like_count != null) {
-            etfMap[code].like_count = Number(extra?.like_count ?? spInfo?.like_count) || 0;
-          }
-          if (extra?.is_sponsored || extra?.sponsor_name || extra?.sponsor_id || spInfo) {
-            etfMap[code].is_sponsored = true;
+          if (extra?.is_shared_custom || spInfo) {
+            etfMap[code].is_shared_custom = true;
           }
           if (extra?.trade_mode && extra.trade_mode !== "auto") {
             etfMap[code].trade_mode = extra.trade_mode;
           }
-          if (extra?.source === "sponsor") {
-            etfMap[code].source = "sponsor";
+          if (extra?.source === "custom" || extra?.source === "sponsor") {
+            etfMap[code].source = "custom";
           }
           if (defaultOrderMap.has(code)) {
             etfMap[code].default_rank = defaultOrderMap.get(code);
@@ -619,8 +515,7 @@ export default {
         row.week_status = cur ? cur.status : null;
         row.week_status_date = cur ? closedWeekFriday || cur.date : null;
         row.trade_rule = resolveTradeRule(row.etf_code, row.etf_name, row.trade_mode);
-        row.is_my_sponsor = isSponsoredByCurrentUser(row);
-        row.resolved_sponsor_name = displaySponsorName(row);
+        row.is_my_custom = isCustomByCurrentUser(row);
       });
 
       let items = Object.values(etfMap);
@@ -656,17 +551,29 @@ export default {
           maxWeekStatusDate = row.week_status_date;
         }
       }
-      const weeklyCollectDay = (weeklyChartDay.value && isValidDate(weeklyChartDay.value) && weeklyChartDay.value) || maxWeekStatusDate || "";
+      const weeklyCollectDay =
+        (weeklyChartDay.value && isValidDate(weeklyChartDay.value) && weeklyChartDay.value) ||
+        maxWeekStatusDate ||
+        "";
       const dailyCollectDay =
-        (globalChartDay.value && isValidDate(globalChartDay.value) && globalChartDay.value) ||
         (latestIdx >= 0 && weekDays[latestIdx] ? weekDays[latestIdx] : "") ||
+        (globalChartDay.value && isValidDate(globalChartDay.value) && globalChartDay.value) ||
         "";
 
+      /**
+       * 判断最新采集列是日线还是周线：
+       * - 当存在最新交易日采集数据时，若该交易日日期晚于上次周线日期（例如新的一周周一～周四出现新数据），则最新采集列为该交易日（最右列），周线自动左移；
+       * - 若周线日期大于等于最新交易日日期且处于周末或周线已出，则周线为最新采集列（最右列）。
+       */
       let rankBy = "daily";
-      if (hasAnyWeek && (isWeekendBj || (weeklyCollectDay && dailyCollectDay && weeklyCollectDay > dailyCollectDay) || weeklyCollectDay === todayBj)) {
-        rankBy = "weekly";
-      } else if (latestIdx < 0 && hasAnyWeek) {
-        rankBy = "weekly";
+      if (hasAnyWeek) {
+        if (latestIdx < 0) {
+          rankBy = "weekly";
+        } else if (maxWeekStatusDate && latestDayDate && maxWeekStatusDate >= latestDayDate && isWeekendBj) {
+          rankBy = "weekly";
+        } else if (weeklyCollectDay && dailyCollectDay && weeklyCollectDay > dailyCollectDay && maxWeekStatusDate >= latestDayDate) {
+          rankBy = "weekly";
+        }
       }
 
       const absDayVal = (row, idx) => {
@@ -714,14 +621,14 @@ export default {
         return cmpDefaultWatchlistOrder(a, b);
       };
 
-      /** 最新异动内部排序（按最新异动波幅绝对值从大到小，相同时按默认监控列表顺序） */
+      /** 最近异动内部排序（按最新异动波幅绝对值从大到小，相同时按默认监控列表顺序） */
       const cmpLatestActiveRank = (a, b) => {
         if (rankBy === "weekly") return cmpWeekColumn(a, b, true);
         if (latestIdx >= 0) return cmpDayColumn(a, b, latestIdx, true);
         return cmpDefaultWatchlistOrder(a, b);
       };
 
-      /** 判断标的是否属于「最新异动」 */
+      /** 判断标的是否属于「最近异动」 */
       const isLatestActive = (row) =>
         rankBy === "weekly" ? absWeekVal(row) > -9999 : latestIdx >= 0 && cellHasAny(row, latestIdx);
 
@@ -742,10 +649,13 @@ export default {
       }
 
       const favSet = new Set(store.state.isLoggedIn ? (favCodes.value || []).map(String) : []);
+      const isCustomMember =
+        store.state.isLoggedIn &&
+        (myCustomCodes.value.length > 0 || items.some((i) => i.is_my_custom));
 
       const totalCount = items.length;
       const t0Count = items.filter((i) => i.trade_rule === "t+0").length;
-      const sponsoredCount = items.filter((i) => i.is_sponsored || i.resolved_sponsor_name).length;
+      const sharedCustomCount = items.filter((i) => i.is_shared_custom).length;
       const favCount = items.filter((i) => favSet.has(String(i.etf_code))).length;
       const activeTodayCount = items.filter((i) => isLatestActive(i)).length;
 
@@ -766,19 +676,25 @@ export default {
         });
       } else {
         /**
-         * 默认排序三级/四级分组规则：
-         * - 没登录时：最新异动 (group 2) -> 剩下的按后台「默认监控列表」顺序排列 (group 3)
-         * - 未赞助已登录：收藏 (group 1) -> 剩余最新异动 (group 2) -> 后台「默认监控列表」顺序排列 (group 3)
-         * - 赞助已登录：赞助 (group 0) -> 收藏 (group 1) -> 剩余最新异动 (group 2) -> 后台「默认监控列表」顺序排列 (group 3)
+         * 严格执行第 4、5 条标的排序规则：
+         * 4. 定制标的的会员（isCustomMember === true）：
+         *    定制标的 (group 0) -> 收藏 (group 1) -> 最近异动 (group 2) -> 其它 (group 3)
+         * 5. 非定制标的用户（isCustomMember === false）：
+         *    收藏 (group 0) -> 最近异动 (group 1) -> 分享的定制标的 (group 2) -> 其它 (group 3)
          */
         const groupOf = (row) => {
           const c = String(row.etf_code);
-          if (store.state.isLoggedIn) {
-            if (row.is_my_sponsor) return 0; // 赞助
+          if (isCustomMember) {
+            if (row.is_my_custom) return 0; // 定制标的
             if (favSet.has(c)) return 1; // 收藏
+            if (isLatestActive(row)) return 2; // 最近异动
+            return 3; // 其它
+          } else {
+            if (store.state.isLoggedIn && favSet.has(c)) return 0; // 收藏
+            if (isLatestActive(row)) return 1; // 最近异动
+            if (row.is_shared_custom) return 2; // 分享的定制标的
+            return 3; // 其它
           }
-          if (isLatestActive(row)) return 2; // 最新异动（或剩余最新异动）
-          return 3; // 剩余标的：按后台「默认监控列表」顺序排列
         };
 
         items.sort((a, b) => {
@@ -786,13 +702,13 @@ export default {
           const gb = groupOf(b);
           if (ga !== gb) return ga - gb;
 
-          // Group 2（最新异动）：按异动波幅从大到小排，同波幅按「默认监控列表」顺序
-          if (ga === 2) {
+          const activeGroupIndex = isCustomMember ? 2 : 1;
+          if (ga === activeGroupIndex) {
             return cmpLatestActiveRank(a, b);
           }
 
-          // Group 0（赞助）与 Group 1（收藏）：优先有最新异动的排前面，其次按「默认监控列表」顺序
-          if (ga === 0 || ga === 1) {
+          // 定制标的、收藏、分享的定制标的内部：若有最近异动的优先靠前，否则按默认列表顺序
+          if (ga < 3) {
             const actA = isLatestActive(a);
             const actB = isLatestActive(b);
             if (actA && actB) return cmpLatestActiveRank(a, b);
@@ -800,7 +716,7 @@ export default {
             return cmpDefaultWatchlistOrder(a, b);
           }
 
-          // Group 3（剩余无异动标的）：严格按照后台「默认监控列表」顺序排列
+          // 其它标的：严格按后台默认监控列表顺序排列
           return cmpDefaultWatchlistOrder(a, b);
         });
       }
@@ -811,8 +727,8 @@ export default {
         items = items.filter((i) => favSet.has(String(i.etf_code)));
       } else if (quickFilter.value === "t0") {
         items = items.filter((i) => i.trade_rule === "t+0");
-      } else if (quickFilter.value === "sponsored") {
-        items = items.filter((i) => i.is_sponsored || i.resolved_sponsor_name);
+      } else if (quickFilter.value === "shared_custom") {
+        items = items.filter((i) => i.is_shared_custom);
       }
 
       if (searchQuery.value) {
@@ -821,11 +737,21 @@ export default {
           (i) =>
             (i.etf_name && i.etf_name.toLowerCase().includes(q)) ||
             (i.etf_code && i.etf_code.toLowerCase().includes(q)) ||
-            (i.resolved_sponsor_name && i.resolved_sponsor_name.toLowerCase().includes(q)) ||
             (i.trade_rule === "t+0" && (q.includes("t+0") || q.includes("t0")))
         );
       }
 
+      /**
+       * 第 8 条要求：
+       * 最新采集的数据，一定是在最右列，且正序排列。如果出现新数据，上一数据自动前移，由此类推。
+       * BASE_COLS = [周一(0), 周二(1), 周三(2), 周四(3), 周五(4), 周线(5)]
+       * 以 pivotIdx 为最右列（最新采集列），左侧依次正序循环排列：
+       * 例如：
+       * - 最新采集为周线(5) -> [周一, 周二, 周三, 周四, 周五, 周线]
+       * - 最新采集为周一(0) -> [周二, 周三, 周四, 周五, 周线, 周一]
+       * - 最新采集为周二(1) -> [周三, 周四, 周五, 周线, 周一, 周二]
+       * - 最新采集为周三(2) -> [周四, 周五, 周线, 周一, 周二, 周三]
+       */
       let pivotIdx = 5;
       if (rankBy !== "weekly") {
         if (latestIdx >= 0) pivotIdx = latestIdx;
@@ -834,7 +760,10 @@ export default {
           pivotIdx = ci >= 0 ? ci : 4;
         }
       }
-      const displayCols = Array.from({ length: BASE_COLS.length }, (_, i) => BASE_COLS[(pivotIdx + 1 + i) % BASE_COLS.length]);
+      const displayCols = Array.from(
+        { length: BASE_COLS.length },
+        (_, i) => BASE_COLS[(pivotIdx + 1 + i) % BASE_COLS.length]
+      );
 
       return {
         list: items,
@@ -844,7 +773,7 @@ export default {
         rankDailyIdx: rankBy === "daily" ? latestIdx : -1,
         displayCols,
         latestColKey: displayCols[displayCols.length - 1].key,
-        stats: { totalCount, t0Count, sponsoredCount, favCount, activeTodayCount },
+        stats: { totalCount, t0Count, sharedCustomCount, favCount, activeTodayCount },
       };
     });
 
@@ -865,24 +794,14 @@ export default {
       if (!canCustomizeBoard.value) {
         favCodes.value = [];
         userOrder.value = [];
-        mySponsoredCodes.value = [];
+        myCustomCodes.value = [];
         return;
       }
       try {
-        const [prefRes, mineRes, meRes] = await Promise.all([
+        const [prefRes, mineRes] = await Promise.all([
           dashboardPrefsApi.fetch().catch(() => ({})),
           sponsorApi.fetchMine().catch(() => ({ data: [] })),
-          !store.state.nickname ? authApi.getMe().catch(() => null) : Promise.resolve(null),
         ]);
-        if (meRes) {
-          const d = meRes.data || meRes;
-          if (d && d.nickname) {
-            store.setUserState({ nickname: d.nickname });
-            localStorage.setItem("etf_sponsor_fallback_nick", d.nickname);
-          }
-        } else if (store.state.nickname) {
-          localStorage.setItem("etf_sponsor_fallback_nick", store.state.nickname);
-        }
 
         const data = prefRes?.data || prefRes || {};
         favCodes.value = (data.favorites || []).map(normCode).filter((c) => c.length === 6);
@@ -891,17 +810,7 @@ export default {
         const myActive = (mineRes?.data || []).filter(
           (r) => r.status === "active" && Number(r.expire_at) > now
         );
-        mySponsoredCodes.value = myActive.map((r) => normCode(r.etf_code)).filter(Boolean);
-
-        // 若当前用户已设置昵称，但历史赞助记录里仍为空或占位符，自动触发一次昵称同步回写后端
-        const currentNick = String(store.state.nickname || "").trim();
-        if (
-          currentNick &&
-          !isPlaceholderSponsorName(currentNick) &&
-          myActive.some((r) => isPlaceholderSponsorName(r.sponsor_name))
-        ) {
-          authApi.updateNickname(currentNick).catch(() => {});
-        }
+        myCustomCodes.value = myActive.map((r) => normCode(r.etf_code)).filter(Boolean);
       } catch (_) {}
     };
 
@@ -1100,7 +1009,17 @@ export default {
 
     const getColorClass = (status) => {
       if (!status || status === "-" || status === "--") return "text-slate-300";
-      return status.includes("+") ? "text-red-500" : "text-emerald-500";
+      const p = parseStatusParts(status);
+      if (p.dir > 0) return "text-red-500";
+      if (p.dir < 0) return "text-emerald-600";
+      return "text-slate-400";
+    };
+
+    const getPartColorClass = (part) => {
+      if (!part || part.text === "-") return "text-slate-300";
+      if (part.dir > 0) return "text-red-500 font-bold";
+      if (part.dir < 0) return "text-emerald-600 font-bold";
+      return "text-slate-500";
     };
 
     const initData = async () => {
@@ -1117,7 +1036,7 @@ export default {
         chartsMap.value = chartsRes.charts || chartsRes || {};
         sharedList.value = Array.isArray(sharedRes?.data ?? sharedRes) ? (sharedRes?.data ?? sharedRes) : [];
 
-        // 汇总有效赞助池的详细字段（含 nickname、username 等），解决单接口信息缺失导致的“匿名会员”问题
+        // 汇总公开分享的定制标的池
         const spMap = {};
         const activeArr = Array.isArray(activeSpRes?.data ?? activeSpRes)
           ? (activeSpRes?.data ?? activeSpRes)
@@ -1125,21 +1044,9 @@ export default {
         for (const r of activeArr) {
           const c = normCode(r.etf_code);
           if (!c) continue;
-          if (!spMap[c]) {
-            spMap[c] = { ...r };
-          } else if (
-            isPlaceholderSponsorName(spMap[c].sponsor_name) &&
-            !isPlaceholderSponsorName(r.nickname || r.sponsor_name)
-          ) {
-            spMap[c].sponsor_name = r.nickname || r.sponsor_name;
-            spMap[c].nickname = r.nickname || spMap[c].nickname;
-          }
-          const validNick = String(r.nickname || r.sponsor_name || "").trim();
-          if (validNick && !isPlaceholderSponsorName(validNick)) {
-            localStorage.setItem("etf_sponsor_fallback_nick", validNick);
-          }
+          if (!spMap[c]) spMap[c] = { ...r };
         }
-        activeSponsorsMap.value = spMap;
+        sharedCustomMap.value = spMap;
 
         globalChartDay.value = toBjDay(chartsRes?.chart_date) || latestTradingDayBj();
         const monday = resolveLatestClosedWeekMonday();
@@ -1164,21 +1071,17 @@ export default {
     watch(
       () => store.state.isLoggedIn,
       async (v) => {
-        if (v) await loadDashboardPrefs();
-        else {
+        if (v) {
+          await loadDashboardPrefs();
+          const sharedRes = await etfApi.fetchWatchlist().catch(() => ({ data: [] }));
+          sharedList.value = Array.isArray(sharedRes?.data ?? sharedRes) ? (sharedRes?.data ?? sharedRes) : [];
+        } else {
           favCodes.value = [];
           userOrder.value = [];
-          mySponsoredCodes.value = [];
+          myCustomCodes.value = [];
           if (quickFilter.value === "fav") quickFilter.value = "all";
-        }
-      }
-    );
-
-    watch(
-      () => store.state.nickname,
-      (v) => {
-        if (v && !isPlaceholderSponsorName(v)) {
-          localStorage.setItem("etf_sponsor_fallback_nick", v.trim());
+          const sharedRes = await etfApi.fetchWatchlist().catch(() => ({ data: [] }));
+          sharedList.value = Array.isArray(sharedRes?.data ?? sharedRes) ? (sharedRes?.data ?? sharedRes) : [];
         }
       }
     );
@@ -1199,7 +1102,6 @@ export default {
       formatEtfName,
       isFavorite,
       toggleFavorite,
-      likeSponsorOnBoard,
       copyCode,
       onDragStart,
       onDragOver,
@@ -1207,6 +1109,8 @@ export default {
       canCustomizeBoard,
       dragCode,
       formatDayCell,
+      getDayCellSegments,
+      getWeekCellSegment,
       dataDateTitle,
       dailyChartTitle,
       weekDataTitle,
@@ -1215,6 +1119,7 @@ export default {
       openDailyChartViewer,
       openWeeklyChartViewer,
       getColorClass,
+      getPartColorClass,
       guestChartModal,
       openGuestChartPrompt,
       goAuthFromPrompt,
@@ -1256,7 +1161,7 @@ export default {
         <div class="flex flex-col sm:flex-row gap-2 flex-1">
           <div class="bg-white rounded-xl shadow-sm border border-slate-100 flex items-center flex-1">
             <i class="fa-solid fa-magnifying-glass text-slate-400 pl-3.5 text-xs sm:text-sm"></i>
-            <input v-model="searchQuery" type="search" placeholder="搜索代码 / 名称 / 赞助昵称 / T+0..."
+            <input v-model="searchQuery" type="search" placeholder="搜索代码 / 名称 / T+0..."
                    class="w-full bg-transparent border-none outline-none text-xs sm:text-sm py-2.5 px-2.5">
             <button v-if="searchQuery" @click="searchQuery=''" class="text-slate-300 hover:text-slate-500 pr-3">
               <i class="fa-solid fa-circle-xmark text-xs"></i>
@@ -1267,7 +1172,7 @@ export default {
             <button type="button" @click="setQuickFilter('active')"
                     class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
                     :class="quickFilter==='active' ? 'bg-rose-500 text-white border-transparent shadow-sm' : 'bg-white text-rose-600 border-rose-100 hover:bg-rose-50/50'">
-              🔥 最新异动 ({{ processedData.stats?.activeTodayCount || 0 }})
+              🔥 最近异动 ({{ processedData.stats?.activeTodayCount || 0 }})
             </button>
             <button type="button" @click="setQuickFilter('fav')"
                     class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
@@ -1279,10 +1184,10 @@ export default {
                     :class="quickFilter==='t0' ? 'bg-red-500 text-white border-transparent shadow-sm' : 'bg-white text-red-600 border-red-100 hover:bg-red-50/50'">
               ⚡ T+0 ({{ processedData.stats?.t0Count || 0 }})
             </button>
-            <button type="button" @click="setQuickFilter('sponsored')"
+            <button type="button" @click="setQuickFilter('shared_custom')"
                     class="px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition"
-                    :class="quickFilter==='sponsored' ? 'bg-amber-500 text-white border-transparent shadow-sm' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50/50'">
-              ❤️ 会员赞助 ({{ processedData.stats?.sponsoredCount || 0 }})
+                    :class="quickFilter==='shared_custom' ? 'bg-teal-600 text-white border-transparent shadow-sm' : 'bg-white text-teal-700 border-teal-200 hover:bg-teal-50/50'">
+              🎯 定制分享 ({{ processedData.stats?.sharedCustomCount || 0 }})
             </button>
             <button v-if="quickFilter !== 'all'" type="button" @click="quickFilter='all'"
                     class="px-2 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
@@ -1332,9 +1237,15 @@ export default {
                   </th>
                   <th v-for="col in visibleCols" :key="col.key"
                       class="py-2.5 sm:py-3 px-1 sm:px-2 sticky top-0 bg-slate-50 z-30 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-200"
-                      :class="col.type==='week' ? 'dash-col-week' : 'dash-col-day'"
+                      :class="[
+                        col.type==='week' ? 'dash-col-week' : 'dash-col-day',
+                        processedData.latestColKey===col.key ? 'bg-teal-50/70 text-teal-800' : ''
+                      ]"
                       @click="handleSort(col.type==='week' ? 'week_status' : col.key)">
-                    <div>{{ col.label }}</div>
+                    <div class="flex items-center justify-center gap-0.5">
+                      <span>{{ col.label }}</span>
+                      <span v-if="processedData.latestColKey===col.key" class="text-[9px] bg-[#4da6a0] text-white px-1 py-0.2 rounded font-bold">最新</span>
+                    </div>
                     <div v-if="col.type==='day' && processedData.weekDays[col.dayIdx]" class="text-[9px] font-normal text-slate-400 font-mono leading-none mt-0.5">
                       {{ processedData.weekDays[col.dayIdx].slice(5) }}
                     </div>
@@ -1347,13 +1258,13 @@ export default {
               <tbody class="divide-y divide-slate-50 text-sm">
                 <tr v-for="item in processedData.list" :key="item.etf_code"
                     class="hover:bg-[#4da6a0]/5 transition-colors group"
-                    :class="{ 'opacity-60': dragCode === item.etf_code, 'bg-amber-50/20': item.is_my_sponsor }"
+                    :class="{ 'opacity-60': dragCode === item.etf_code, 'bg-teal-50/20': item.is_my_custom }"
                     :draggable="canCustomizeBoard ? true : false"
                     @dragstart="onDragStart(item, $event)"
                     @dragover="onDragOver($event)"
                     @drop="onDropRow(item, $event)">
                   <td class="p-1.5 sm:p-2.5 text-left relative sticky left-0 bg-white group-hover:bg-[#f6faf9] z-10 etf-name-column dash-col-name border-r border-slate-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
-                    <div v-if="item.is_my_sponsor" class="absolute left-0 top-0 bottom-0 w-1 bg-rose-500" title="您赞助的标的（已为您默认置顶）"></div>
+                    <div v-if="item.is_my_custom" class="absolute left-0 top-0 bottom-0 w-1 bg-rose-500" title="您定制的标的（已为您默认置顶）"></div>
                     <div v-else-if="processedData.freeTop3Codes.includes(item.etf_code)" class="absolute left-0 top-0 bottom-0 w-1 theme-bg"></div>
 
                     <div class="flex items-start gap-1 min-w-0">
@@ -1366,30 +1277,21 @@ export default {
                       </button>
 
                       <div class="min-w-0 flex-1 overflow-hidden">
-                        <!-- 第一行：标的名称 + 免费/置顶标识 -->
+                        <!-- 第一行：标的名称 + 定制/分享/免费标识 -->
                         <div class="font-bold text-slate-800 group-hover:theme-text flex items-center gap-1 flex-nowrap">
                           <span v-if="canCustomizeBoard" class="hidden sm:inline text-slate-300 text-[10px] cursor-grab active:cursor-grabbing select-none shrink-0" title="拖动排序">⋮⋮</span>
                           <span class="truncate text-[12px] sm:text-sm leading-tight" :title="formatEtfName(item.etf_name)">{{ formatEtfName(item.etf_name) }}</span>
-                          <span v-if="item.is_my_sponsor" class="text-[9px] bg-rose-100 text-rose-600 px-1 py-0.2 rounded font-bold shrink-0">我的赞助</span>
+                          <span v-if="item.is_my_custom" class="text-[9px] bg-rose-100 text-rose-600 px-1 py-0.2 rounded font-bold shrink-0">定制</span>
+                          <span v-else-if="item.is_shared_custom" class="text-[9px] bg-teal-50 text-teal-700 border border-teal-200 px-1 py-0.2 rounded font-bold shrink-0">定制</span>
                           <span v-else-if="processedData.freeTop3Codes.includes(item.etf_code)" class="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.2 rounded font-bold shrink-0">免费</span>
                         </div>
 
-                        <!-- 第二行：股票代码（T+0为红色，T+1保持不变，不加(0)） + 可点击点赞的「(昵称) 赞助」徽章 -->
-                        <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <!-- 第二行：股票代码（T+0为红色，T+1保持不变；已删除代码后赞助及点赞内容） -->
+                        <div class="flex items-center gap-1.5 mt-0.5">
                           <span class="text-[11px] font-mono cursor-pointer hover:underline"
                                 :class="item.trade_rule === 't+0' ? 'text-red-500 font-bold' : 'text-slate-500'"
                                 :title="(item.trade_rule === 't+0' ? 'T+0 标的' : 'T+1 标的') + ' · 点击复制代码'"
                                 @click="copyCode(item.etf_code, $event)">{{ item.etf_code }}</span>
-
-                          <button v-if="item.resolved_sponsor_name"
-                                  type="button"
-                                  @click.stop="likeSponsorOnBoard(item, $event)"
-                                  class="inline-flex items-center gap-1 text-[10px] bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 border border-amber-200/90 px-1.5 py-0.2 rounded font-bold max-w-[135px] sm:max-w-[165px] truncate transition cursor-pointer"
-                                  :title="'点击为赞助会员【' + item.resolved_sponsor_name + '】点赞（已获赞 ' + (item.like_count || 0) + ' 次）'">
-                            <i class="fa-solid fa-heart text-[8px] text-rose-500 shrink-0"></i>
-                            <span class="truncate">{{ item.resolved_sponsor_name }} 赞助</span>
-                            <span v-if="item.like_count > 0" class="text-[9px] text-rose-600 font-mono shrink-0">+{{ item.like_count }}</span>
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -1399,12 +1301,34 @@ export default {
                       class="p-1 sm:p-2.5 font-medium"
                       :class="[
                         col.type==='week' ? 'dash-col-week' : 'dash-col-day',
-                        getColorClass(col.type==='week' ? item.week_status : cellPrimaryStatus(item.days[col.dayIdx]))
+                        processedData.latestColKey===col.key ? 'bg-teal-50/20' : ''
                       ]">
                     <template v-if="col.type==='day'">
                       <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1"
                            :title="dataDateTitle(processedData.weekDays[col.dayIdx])">
-                        <span class="text-[10px] sm:text-sm font-mono tracking-tight leading-tight">{{ formatDayCell(item.days[col.dayIdx]) }}</span>
+                        <template v-if="getDayCellSegments(item.days[col.dayIdx])">
+                          <span class="text-[10px] sm:text-sm font-mono tracking-tight leading-tight inline-flex items-center">
+                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).am)">
+                              <span v-if="getDayCellSegments(item.days[col.dayIdx]).am.triangle"
+                                    class="text-[9px] sm:text-[11px] mr-0.5"
+                                    :class="getDayCellSegments(item.days[col.dayIdx]).am.dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getDayCellSegments(item.days[col.dayIdx]).am.triangle }}</span>{{ getDayCellSegments(item.days[col.dayIdx]).am.text }}
+                            </span>
+                            <span class="text-slate-300 mx-0.5">/</span>
+                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).pm)">
+                              <span v-if="getDayCellSegments(item.days[col.dayIdx]).pm.triangle"
+                                    class="text-[9px] sm:text-[11px] mr-0.5"
+                                    :class="getDayCellSegments(item.days[col.dayIdx]).pm.dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getDayCellSegments(item.days[col.dayIdx]).pm.triangle }}</span>{{ getDayCellSegments(item.days[col.dayIdx]).pm.text }}
+                            </span>
+                            <span class="text-slate-300 mx-0.5">|</span>
+                            <span :class="getPartColorClass(getDayCellSegments(item.days[col.dayIdx]).day)">
+                              <span v-if="getDayCellSegments(item.days[col.dayIdx]).day.triangle"
+                                    class="text-[9px] sm:text-[11px] mr-0.5"
+                                    :class="getDayCellSegments(item.days[col.dayIdx]).day.dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getDayCellSegments(item.days[col.dayIdx]).day.triangle }}</span>{{ getDayCellSegments(item.days[col.dayIdx]).day.text }}
+                            </span>
+                          </span>
+                        </template>
+                        <span v-else class="text-[10px] sm:text-sm font-mono text-slate-300 leading-tight">-</span>
+
                         <i v-if="showDailyChartIcon(item.etf_code, col.dayIdx)"
                            class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-xs sm:text-xs shrink-0 p-0.5"
                            :title="dailyChartTitle(item.etf_code, processedData.weekDays[col.dayIdx])"
@@ -1413,7 +1337,16 @@ export default {
                     </template>
                     <template v-else>
                       <div class="dash-cell-inner flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1" :title="weekDataTitle(item)">
-                        <span class="text-[10px] sm:text-sm font-mono leading-tight">{{ item.week_status || '-' }}</span>
+                        <template v-if="getWeekCellSegment(item.week_status)">
+                          <span class="text-[10px] sm:text-sm font-mono leading-tight inline-flex items-center"
+                                :class="getPartColorClass(getWeekCellSegment(item.week_status))">
+                            <span v-if="getWeekCellSegment(item.week_status).triangle"
+                                  class="text-[9px] sm:text-[11px] mr-0.5"
+                                  :class="getWeekCellSegment(item.week_status).dir > 0 ? 'text-red-500' : 'text-emerald-600'">{{ getWeekCellSegment(item.week_status).triangle }}</span>{{ getWeekCellSegment(item.week_status).text }}
+                          </span>
+                        </template>
+                        <span v-else class="text-[10px] sm:text-sm font-mono text-slate-300 leading-tight">-</span>
+
                         <i class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-xs sm:text-xs shrink-0 p-0.5"
                            :title="weekChartTitle()"
                            @click.stop="openWeeklyChartViewer(item)"></i>
@@ -1426,9 +1359,15 @@ export default {
           </div>
         </div>
 
-        <p class="text-[11px] text-slate-400 text-center leading-relaxed px-2">
-          格式：上午/下午|日线；<span class="text-red-500 font-bold">红色代码</span>代表 T+0 标的，其余为 T+1 标的。
-        </p>
+        <!-- 第 7 条要求：页面下方使用说明整行字体放大并醒目 -->
+        <div class="bg-amber-50/95 border-2 border-amber-300 rounded-xl px-4 py-3 text-center shadow-sm">
+          <p class="text-sm sm:text-base font-extrabold text-slate-800 leading-relaxed tracking-wide">
+            <span class="text-amber-700"><i class="fa-solid fa-circle-info mr-1"></i>使用说明：</span>
+            格式：<span class="font-mono text-slate-900">上午/下午|日线</span>；
+            <span class="text-red-500">红正三角（▲）</span>代表上涨异动，<span class="text-emerald-600">绿倒三角（▼）</span>代表下跌异动；
+            <span class="text-red-500">红色代码</span>代表 T+0 标的，其余为 T+1 标的。
+          </p>
+        </div>
 
         <!-- 看板底部：温暖打赏卡片 -->
         <div v-if="tipEnabled"
@@ -1486,11 +1425,11 @@ export default {
             <div class="bg-slate-50 rounded-xl p-4 space-y-2.5 text-xs text-slate-600 border border-slate-100">
               <div class="flex items-start gap-2.5">
                 <i class="fa-solid fa-circle-check text-emerald-500 mt-0.5"></i>
-                <span><strong>全量多周期图表开放：</strong>使用邮箱注册登录即可查看所有标的的<strong>半日线、日线、周线</strong>趋势大图。</span>
+                <span><strong>全量多周期图表开放：</strong>注册登录即可查看所有标的的<strong>半日线、日线、周线</strong>趋势大图。</span>
               </div>
               <div class="flex items-start gap-2.5">
                 <i class="fa-solid fa-circle-check text-emerald-500 mt-0.5"></i>
-                <span><strong>赞助置顶与自选排序：</strong>赞助会员本人赞助的标的默认置顶，支持星标收藏与拖拽排序。</span>
+                <span><strong>专属定制与自选排序：</strong>会员定制标的默认仅自己可见并置顶，支持自主选择是否分享及星标收藏。</span>
               </div>
             </div>
             <div class="space-y-2">
