@@ -1,7 +1,7 @@
 /**
- * 波幅探长 - 邮箱登录 / 注册 / 邮箱验证码找回密码弹窗
- * 1. 注册和登录界面均明确提示使用电子邮箱注册和登录
- * 2. 注册按钮与文案统一为“注册”
+ * 波幅探长 - 用户名/邮箱登录 · 注册 · 邮箱验证码找回密码弹窗
+ * 1. 登录支持输入「用户名」或「注册电子邮箱」登录
+ * 2. 注册要求填写电子邮箱与唯一用户名（用户名全站唯一且可直接用于登录，与定制标的无关）
  * 3. 找回密码流程：输入注册邮箱 -> 输入邮箱验证码 -> 重新输入密码
  */
 import { store } from "../../store.js";
@@ -18,8 +18,8 @@ export default {
     const countdown = ref(0);
 
     const form = reactive({
-      username: "",
-      nickname: "",
+      username: "", // 登录时为 用户名或邮箱；注册时为 注册电子邮箱
+      nickname: "", // 注册时设置的唯一用户名（可用于登录）
       password: "",
       emailCode: "",
       turnstileToken: "",
@@ -183,22 +183,35 @@ export default {
     };
 
     const submit = async () => {
-      if (!isEmail(form.username)) {
-        store.showToast("请使用有效的电子邮箱地址", "error");
-        return;
-      }
-      if (!form.password) {
-        store.showToast("请输入登录密码", "error");
-        return;
-      }
-
       if (store.state.authMode === "register") {
+        if (!isEmail(form.username)) {
+          store.showToast("请使用有效的电子邮箱地址注册", "error");
+          return;
+        }
+        const handle = String(form.nickname || "").trim();
+        if (!handle || handle.length < 2 || handle.length > 16) {
+          store.showToast("请设置 2～16 位的唯一用户名", "error");
+          return;
+        }
+        if (handle.includes("@")) {
+          store.showToast("用户名不能包含 @ 符号", "error");
+          return;
+        }
         if (!form.emailCode || form.emailCode.trim().length !== 6) {
           store.showToast("请输入 6 位邮箱验证码", "error");
           return;
         }
-        if (form.password.length < 6) {
+        if (!form.password || form.password.length < 6) {
           store.showToast("登录密码至少需要 6 位", "error");
+          return;
+        }
+      } else {
+        if (!String(form.username || "").trim()) {
+          store.showToast("请输入用户名或注册邮箱", "error");
+          return;
+        }
+        if (!form.password) {
+          store.showToast("请输入登录密码", "error");
           return;
         }
       }
@@ -206,13 +219,15 @@ export default {
       loading.value = true;
       try {
         if (store.state.authMode === "register") {
+          const savedHandle = form.nickname.trim();
           const res = await authApi.register({
             username: form.username,
             password: form.password,
             emailCode: form.emailCode,
-            nickname: form.nickname,
+            nickname: savedHandle,
           });
-          store.showToast(res.message || "注册成功，请使用邮箱登录");
+          store.showToast(res.message || "注册成功！请使用用户名或邮箱登录");
+          form.username = savedHandle;
           switchMode("login");
         } else {
           const data = await authApi.login(form.username, form.password);
@@ -312,23 +327,23 @@ export default {
           </template>
         </div>
 
-        <!-- 登录 / 注册界面（均提示使用电子邮箱） -->
+        <!-- 登录 / 注册界面 -->
         <div v-if="store.authMode !== 'forgot'" class="p-5 sm:p-6 space-y-3.5">
           <div class="bg-emerald-50 text-emerald-700 text-xs p-2.5 rounded-xl text-center border border-emerald-100 leading-relaxed">
-            <i class="fa-solid fa-envelope-circle-check mr-1"></i>
-            请使用<strong>电子邮箱</strong>{{ store.authMode === 'login' ? '登录' : '注册' }}，登录后可查看全部标的波幅数据与多周期图表
+            <i class="fa-solid fa-user-shield mr-1"></i>
+            <span v-if="store.authMode === 'login'">支持使用<strong>用户名</strong>或<strong>注册邮箱</strong>登录，解锁全部标的波幅数据与图表</span>
+            <span v-else>使用<strong>电子邮箱</strong>验证注册，并设置您的唯一<strong>用户名</strong>（可用于直接登录）</span>
           </div>
-
-          <input v-model="form.username" type="email"
-                 :placeholder="store.authMode==='register' ? '请输入电子邮箱（用于注册与登录）' : '请输入注册电子邮箱'"
-                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
-                 @keyup.enter="store.authMode==='login' && submit()">
 
           <div v-if="store.authMode==='register'">
-            <input v-model="form.nickname" type="text" maxlength="16" placeholder="设置您的昵称（选填，如：老李）"
+            <input v-model="form.nickname" type="text" maxlength="16" placeholder="设置唯一用户名（2～16位，可用于登录）"
                    class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-            <p class="text-[11px] text-slate-400 mt-1">设置昵称后，您赞助的标的将在看板展示「(昵称) 赞助」</p>
           </div>
+
+          <input v-model="form.username" :type="store.authMode==='register' ? 'email' : 'text'"
+                 :placeholder="store.authMode==='register' ? '请输入电子邮箱（用于接收验证码及登录）' : '请输入用户名或注册电子邮箱'"
+                 class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
+                 @keyup.enter="store.authMode==='login' && submit()">
 
           <div v-show="store.authMode==='register'" class="flex justify-center min-h-[65px]">
             <div id="turnstile-container"></div>

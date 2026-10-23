@@ -1,7 +1,7 @@
 /**
  * 顶栏导航
- * - 顶部主导航：数据看板、赞助标的、图表说明、客服工单
- * - 右侧个人菜单：个人中心（昵称/订单/密码）、我的赞助（查看/更换标的）、退出登录
+ * - 顶部主导航：数据看板、定制标的、图表说明、客服工单
+ * - 右侧个人菜单：个人中心（用户名/订单/密码）、我的定制（查看/更换标的/分享设置）、退出登录
  * - 未登录按钮：“登录”、“注册”
  */
 import { store } from "../../store.js";
@@ -20,7 +20,7 @@ export default {
 
     const mainNav = [
       { path: "#/", label: "数据看板", icon: "fa-solid fa-chart-line", match: "exact" },
-      { path: "#/sponsor", label: "赞助标的", icon: "fa-solid fa-hand-holding-heart", match: "sponsor" },
+      { path: "#/sponsor", label: "定制标的", icon: "fa-solid fa-sliders", match: "sponsor" },
       { path: "#/guide", label: "图表说明", icon: "fa-solid fa-book-open", match: "prefix" },
       { path: "#/tickets", label: "客服工单", icon: "fa-solid fa-headset", match: "prefix" },
     ];
@@ -30,13 +30,13 @@ export default {
       const [base] = raw.split("?");
       const cleanBase = !base || base === "#" ? "#/" : base;
       if (item.match === "exact") return cleanBase === "#/" || cleanBase === "";
-      if (item.match === "sponsor") return cleanBase === "#/sponsor";
+      if (item.match === "sponsor") return cleanBase === "#/sponsor" || cleanBase === "#/custom";
       return cleanBase === item.path;
     };
 
     const isSponsorMineActive = computed(() => {
       const raw = currentHash.value || "";
-      return raw.startsWith("#/sponsor") && raw.includes("tab=mine");
+      return (raw.startsWith("#/sponsor") || raw.startsWith("#/custom")) && raw.includes("tab=mine");
     });
 
     const openAuth = (mode = "login") => {
@@ -120,8 +120,8 @@ export default {
           <template v-if="store.isLoggedIn">
             <a v-if="!store.nickname" href="#/profile"
                class="hidden lg:inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 no-underline font-medium"
-               title="设置昵称后，您赞助的标的将在看板显示您的昵称">
-              <i class="fa-solid fa-pen-to-square text-[10px]"></i>设置昵称
+               title="设置唯一用户名后，您可直接使用用户名登录">
+              <i class="fa-solid fa-user-pen text-[10px]"></i>设置用户名
             </a>
 
             <div class="relative">
@@ -142,7 +142,7 @@ export default {
                   </div>
                   <div class="text-[11px] text-slate-400 truncate font-mono">{{ store.username }}</div>
                   <div v-if="!store.nickname" class="text-[11px] text-amber-600 pt-0.5">
-                    <i class="fa-solid fa-circle-info mr-0.5"></i>尚未设置昵称（赞助署名）
+                    <i class="fa-solid fa-circle-info mr-0.5"></i>尚未设置登录用户名
                   </div>
                 </div>
 
@@ -152,15 +152,15 @@ export default {
                     <span class="flex items-center gap-2">
                       <i class="fa-solid fa-user-gear w-4 text-slate-400"></i>个人中心
                     </span>
-                    <span class="text-[11px] text-slate-400">昵称 / 订单 / 密码</span>
+                    <span class="text-[11px] text-slate-400">用户名 / 订单 / 密码</span>
                   </a>
                   <a href="#/sponsor?tab=mine" @click="store.userMenuOpen=false"
                      class="flex items-center justify-between px-3.5 py-2 text-sm hover:bg-slate-50 no-underline"
                      :class="isSponsorMineActive ? 'theme-text font-bold' : 'text-slate-700'">
                     <span class="flex items-center gap-2">
-                      <i class="fa-solid fa-sliders w-4 text-slate-400"></i>我的赞助
+                      <i class="fa-solid fa-sliders w-4 text-slate-400"></i>我的定制
                     </span>
-                    <span class="text-[11px] text-slate-400">查看 / 更换标的</span>
+                    <span class="text-[11px] text-slate-400">查看 / 更换 / 分享</span>
                   </a>
                 </div>
 
@@ -207,8 +207,8 @@ export default {
             <i class="fa-solid fa-user-gear text-slate-400"></i>个人中心
           </a>
           <a href="#/sponsor?tab=mine" @click="store.menuOpen=false"
-             class="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-amber-50/70 text-amber-800 border border-amber-200/70 no-underline">
-            <i class="fa-solid fa-sliders text-amber-600"></i>我的赞助
+             class="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-teal-50/70 text-teal-800 border border-teal-200/70 no-underline">
+            <i class="fa-solid fa-sliders text-teal-600"></i>我的定制
           </a>
         </div>
       </div>
