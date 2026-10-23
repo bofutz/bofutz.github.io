@@ -7,7 +7,12 @@
  *    - 非定制标的用户：收藏 -> 最近异动 -> 分享的定制标的 -> 其它
  * 3. 修复双三角问题：仅当监控数据本身为正三角（▲/△）或倒三角（▼/▽）时，将该三角设为红色（▲）或绿色（▼），绝不在每个数字前重复添加额外的小三角
  * 4. 页面下方说明整行字体放大并醒目：“使用说明：格式：上午/下午|日线；红正三角（▲）代表上涨异动，绿倒三角（▼）代表下跌异动；红色代码代表 T+0 标的，其余为 T+1 标的。”
- * 5. 修复列顺序与最新列判定：严格按最新采集数据的真实日期决定最右列（例如周五尚未采集、最新数据为周四 10-22 时，最右列固定为周四，列顺序为 [周五(上周), 周线(上周), 周一, 周二, 周三, 周四(最新)]，周线紧挨在周一列的前一列）
+ * 5. 修复列顺序与最新列判定：严格按最新采集数据的真实日期决定最右列
+ *    - 周五日线已采集：最右列=周五，列顺序 [周线(上周), 周一, 周二, 周三, 周四, 周五(最新)]
+ *    - 周五尚未采集、最新为周四：最右列=周四，列顺序 [周五(上周), 周线(上周), 周一, 周二, 周三, 周四(最新)]
+ *    - 周六周线已采集：最右列=周线，列顺序 [周一, 周二, 周三, 周四, 周五, 周线(最新)]
+ *    周线始终是「周一之前」的数据，仅当它本身是最新采集时才排到最右。
+ * 6. 默认标的排序等价于对最右列点击降序排序（波幅绝对值从大到小），排序箭头显示在最新列旁；免费 topN 与该排序一致。
  */
 import { store } from "../../store.js";
 import { etfApi } from "../../api/etf.js";
@@ -592,29 +597,29 @@ export default {
       const isLatestFromPastWeek = !!(todayMonday && latestDayMonday && latestDayMonday < todayMonday);
 
       /**
-       * 核心修复：精准判断最新采集列是「日线列」还是「周线列」
-       * 1. 当本周仅采集到周一～周四（latestIdx 为 0~3，例如周五工作流尚未运行时最新数据为周四 10-22），
-       *    只要没有单独晚于 latestDayDate 的周线记录（maxWeekDataDate <= latestDayDate），且当前不是周末/跨周未采集状态，
-       *    最新采集列必定是该日线列（如周四 10-22 在最右列），此时列顺序为：
-       *    [周五(上周), 周线(上周), 周一, 周二, 周三, 周四(最新)] —— 周线严格位于周一列的前一列！
-       * 2. 只有当周线记录日期晚于最新日线日期（maxWeekDataDate > latestDayDate），
-       *    或周五日线与周线均已出完（latestIdx === 4 且 dailyColDate === latestDayDate 且 maxWeekDataDate >= latestDayDate），
-       *    或处于周末 / 新一周周一尚未采集且上周周线已出时，周线才作为最新列排在最右列。
+       * 精准判断最新采集列是「日线列」还是「周线列」：
+       * - 工作流：上午收盘采上午盘；下午收盘采下午+日线；周六采周线。
+       * - 只要本周存在日线/半日数据，且周线数据日期不晚于最新日线，则最新列是日线列（周五收盘后最右=周五）。
+       * - 仅当：无日线数据、或周线日期严格晚于最新日线、或已进入周末/新周且上周周线已出、周一尚未采集时，
+       *   周线才作为最新列排在最右。
+       * - 禁止：周五日线已出却因 week_status 挂在同一日期上而误判周线为最新。
        */
       let rankBy = "daily";
       if (hasAnyWeek) {
         if (!latestDayDate) {
           rankBy = "weekly";
         } else if (maxWeekDataDate > latestDayDate) {
+          // 周线采集时间晚于最新日线（典型：周六采周线）
           rankBy = "weekly";
-        } else if (
-          maxWeekDataDate === latestDayDate &&
-          ((latestIdx === 4 && dailyColDate === latestDayDate) || isWeekendBj || isLatestFromPastWeek)
-        ) {
-          rankBy = "weekly";
-        } else if ((isWeekendBj || isLatestFromPastWeek) && latestIdx === 4) {
-          rankBy = "weekly";
+        } else if (isWeekendBj || isLatestFromPastWeek) {
+          // 周末或新一周周一尚未有数据：若上周周线已出，周线为最新
+          if (maxWeekDataDate && maxWeekDataDate >= (closedWeekFriday || latestDayDate || "")) {
+            rankBy = "weekly";
+          } else if (latestIdx === 4 && hasAnyWeek) {
+            rankBy = "weekly";
+          }
         }
+        // 工作日（含周五收盘后）：即使 week_status 与 latestDayDate 同日，仍保持 daily，最右列=当日
       }
 
       const absDayVal = (row, idx) => {
@@ -681,10 +686,11 @@ export default {
           .sort((a, b) => cmpWeekColumn(a, b, true))
           .slice(0, freeTopN)
           .map((i) => i.etf_code);
-      } else if (dailyColIdx >= 0) {
+      } else if (latestIdx >= 0) {
+        // 与最右列默认降序排序同一指标（日线优先，半日兜底），保证免费 topN 与截图二一致
         freeTop3Codes = [...items]
-          .filter((i) => absDayVal(i, dailyColIdx) > -9999)
-          .sort((a, b) => cmpDayColumn(a, b, dailyColIdx, true))
+          .filter((i) => absDayVal(i, latestIdx) > -9999 || absHalfVal(i, latestIdx) > -9999)
+          .sort((a, b) => cmpDayColumn(a, b, latestIdx, true))
           .slice(0, freeTopN)
           .map((i) => i.etf_code);
       }
@@ -717,47 +723,35 @@ export default {
         });
       } else {
         /**
-         * 严格执行第 4、5 条标的排序规则：
-         * 4. 定制标的的会员（isCustomMember === true）：
-         *    定制标的 (group 0) -> 收藏 (group 1) -> 最近异动 (group 2) -> 其它 (group 3)
-         * 5. 非定制标的用户（isCustomMember === false）：
-         *    收藏 (group 0) -> 最近异动 (group 1) -> 分享的定制标的 (group 2) -> 其它 (group 3)
+         * 默认排序 = 等价于对「最右列（最新采集列）」点击降序排序（波幅绝对值从大到小）。
+         * 在波幅相同或无异动时，再套用分组优先级，保证定制/收藏仍可置顶：
+         * - 定制会员：定制 -> 收藏 -> 最近异动 -> 其它
+         * - 非定制：收藏 -> 最近异动 -> 分享的定制 -> 其它
+         * 这样最右列旁会显示 ↓，且 freeTopN 与列表前几名一致（如截图二）。
          */
         const groupOf = (row) => {
           const c = String(row.etf_code);
           if (isCustomMember) {
-            if (row.is_my_custom) return 0; // 定制标的
-            if (favSet.has(c)) return 1; // 收藏
-            if (isLatestActive(row)) return 2; // 最近异动
-            return 3; // 其它
+            if (row.is_my_custom) return 0;
+            if (favSet.has(c)) return 1;
+            if (isLatestActive(row)) return 2;
+            return 3;
           } else {
-            if (store.state.isLoggedIn && favSet.has(c)) return 0; // 收藏
-            if (isLatestActive(row)) return 1; // 最近异动
-            if (row.is_shared_custom) return 2; // 分享的定制标的
-            return 3; // 其它
+            if (store.state.isLoggedIn && favSet.has(c)) return 0;
+            if (isLatestActive(row)) return 1;
+            if (row.is_shared_custom) return 2;
+            return 3;
           }
         };
 
         items.sort((a, b) => {
+          // 主序：最右列波幅（与点击该列排序完全一致）
+          const ampCmp = cmpLatestActiveRank(a, b);
+          if (ampCmp !== 0) return ampCmp;
+          // 波幅相同：分组优先级
           const ga = groupOf(a);
           const gb = groupOf(b);
           if (ga !== gb) return ga - gb;
-
-          const activeGroupIndex = isCustomMember ? 2 : 1;
-          if (ga === activeGroupIndex) {
-            return cmpLatestActiveRank(a, b);
-          }
-
-          // 定制标的、收藏、分享的定制标的内部：若有最近异动的优先靠前，否则按默认列表顺序
-          if (ga < 3) {
-            const actA = isLatestActive(a);
-            const actB = isLatestActive(b);
-            if (actA && actB) return cmpLatestActiveRank(a, b);
-            if (actA !== actB) return actA ? -1 : 1;
-            return cmpDefaultWatchlistOrder(a, b);
-          }
-
-          // 其它标的：严格按后台默认监控列表顺序排列
           return cmpDefaultWatchlistOrder(a, b);
         });
       }
