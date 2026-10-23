@@ -8,8 +8,8 @@ const { reactive } = Vue;
 const state = reactive({
   isLoggedIn: false,
   userId: null,
-  username: "",
-  nickname: "",
+  username: "", // 注册电子邮箱
+  nickname: "", // 唯一用户名（可登录，与定制标的无关）
 
   adminSecret: localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "",
   isAdminAuthenticated: false,
@@ -28,7 +28,7 @@ const state = reactive({
 export const store = {
   state,
 
-  /** 获取展示用名称：优先昵称，否则取邮箱前缀 */
+  /** 获取展示用名称：优先用户名，否则取邮箱前缀 */
   getDisplayName() {
     if (state.nickname && state.nickname.trim()) {
       return state.nickname.trim();
@@ -122,7 +122,7 @@ export const store = {
     }
   },
 
-  /** 解析赞助周期价 */
+  /** 解析定制标的周期价 */
   getSymbolPrices() {
     const raw = state.publicSettings.symbol_prices;
     try {

@@ -16,7 +16,7 @@ export const CONFIG = {
     ADMIN_SECRET: "admin_secret",
   },
 
-  /** 默认赞助周期价（后台可覆盖） */
+  /** 默认定制周期价（保持原套餐价格不变，后台可覆盖） */
   DEFAULT_SYMBOL_PRICES: [
     { days: 30, price: 30, label: "1个月" },
     { days: 90, price: 88, label: "季度" },
@@ -90,7 +90,7 @@ export function resolveTradeRule(code, name, customMode = "") {
 
 /**
  * 根据 6 位股票/ETF代码自动查询腾讯行情名称，并自动识别是 t+0 还是 t+1
- * 前台「赞助标的」与后台「默认监控列表」「赞助标的」共用
+ * 前台「定制标的」与后台「默认监控列表」「定制标的」共用
  */
 export async function fetchSecurityInfo(rawCode, fallbackName = "") {
   const m = String(rawCode || "").match(/\d{6}/);
