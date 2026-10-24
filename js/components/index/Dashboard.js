@@ -29,7 +29,7 @@ const BASE_COLS = [
   { key: "d2", type: "day", dayIdx: 2, label: "周三" },
   { key: "d3", type: "day", dayIdx: 3, label: "周四" },
   { key: "d4", type: "day", dayIdx: 4, label: "周五" },
-  { key: "week", type: "week", dayIdx: 5, label: "周线" },
+  { key: "week", type: "week", dayIdx: 5, label: "周六(周线)" },
 ];
 
 export default {
@@ -341,9 +341,14 @@ export default {
     const processedData = computed(() => {
       let maxDailyDate = "";
       let maxWeekDate = "";
+      let maxAnySaturdayDate = "";
       allData.value.forEach((item) => {
         if (!item?.date || !isValidDate(item.date)) return;
         const d = item.date.trim();
+        const wd = new Date(d + "T12:00:00+08:00").getDay();
+        if (wd === 6 && d > maxAnySaturdayDate) {
+          maxAnySaturdayDate = d;
+        }
         if (!isBlankStatus(item.day_status) || !isBlankStatus(item.am_status) || !isBlankStatus(item.pm_status)) {
           if (d > maxDailyDate) maxDailyDate = d;
         }
@@ -352,21 +357,21 @@ export default {
         }
       });
 
+      // 如果周六工作流已写入当天的记录（即便部分或全部标的 week_status 为 null），也计入最新周线日期
+      const effectiveWeekDate = maxAnySaturdayDate > maxWeekDate ? maxAnySaturdayDate : maxWeekDate;
+
       // 确定最新采集日期与最新列索引 (0:周一 ~ 4:周五, 5:周六周线)
-      // 说明：周线数据的交易日(item.date)在行情源中常记为周五(如10-23)或周六(如10-24)。
-      // 当周六运行工作流采集出本周周线数据，或当前北京时间处于周末(周六/周日)且本周周线已产出时，
-      // 最新数据列必须推进为 5 (周六周线)，使周六(10-24)排在最右列，周一~周五全部前移一列。
       let latestColIdx = 4;
-      let latestDate = maxDailyDate || maxWeekDate || bjYmd(Date.now());
+      let latestDate = maxDailyDate || effectiveWeekDate || bjYmd(Date.now());
       const todayBjStr = bjYmd(Date.now());
       const todayBjWd = new Date(todayBjStr + "T12:00:00+08:00").getDay();
       const isWeekendNow = todayBjWd === 6 || todayBjWd === 0;
 
-      if (maxWeekDate && maxWeekDate >= maxDailyDate) {
-        const wd = new Date(maxWeekDate + "T12:00:00+08:00").getDay();
-        if (wd === 6 || wd === 0 || maxWeekDate > maxDailyDate || isWeekendNow) {
+      if (effectiveWeekDate && effectiveWeekDate >= maxDailyDate) {
+        const wd = new Date(effectiveWeekDate + "T12:00:00+08:00").getDay();
+        if (wd === 6 || wd === 0 || effectiveWeekDate > maxDailyDate || isWeekendNow) {
           latestColIdx = 5;
-          latestDate = maxWeekDate;
+          latestDate = effectiveWeekDate;
         } else {
           const idx = weekdayIndexFromDate(maxDailyDate);
           latestColIdx = idx >= 0 ? idx : 4;
@@ -378,6 +383,18 @@ export default {
 
       // 获取滚动6列对应的准确日期（在最新列之后而循环排到左侧的列自动减7天，保证时间正序）
       const weekDays = getRollingWeekDays(latestDate, latestColIdx);
+
+      // 计算当前周线列（weekDays[5]）所属周的起止日期范围 [weekMonday, weekSaturday]
+      // 严禁将上一周（如 10-17）的旧周线数据混入本周（10-24）的周线列！
+      const weekColDate = weekDays[5] || "";
+      let weekRangeStart = weekColDate;
+      if (isValidDate(weekColDate)) {
+        const [wy, wm, wdNum] = parseYMD(weekColDate);
+        const mon = new Date(wy, wm - 1, wdNum - 5);
+        weekRangeStart = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, "0")}-${String(
+          mon.getDate()
+        ).padStart(2, "0")}`;
+      }
 
       // 计算日线最新那一列的索引（0~4），供图表图标精准匹配
       let latestDailyIdx = 4;
@@ -457,10 +474,20 @@ export default {
         if (itemIdx >= 0 && itemIdx <= 4) {
           row.days[itemIdx] = item;
         }
-        if (!isBlankStatus(item.week_status)) {
-          if (!row.week_status_date || itemDate >= row.week_status_date) {
-            row.week_status = item.week_status;
-            row.week_status_date = itemDate;
+        // 只匹配属于当前周线列对应那一周（[weekRangeStart, weekColDate]）的周线数据！
+        // 如果当周已经有最新日期的周线记录（例如 10-24 为 null），绝不回退去取上周（10-17）的旧周线数据
+        if (weekColDate && itemDate >= weekRangeStart && itemDate <= weekColDate) {
+          if (maxAnySaturdayDate === weekColDate) {
+            // 当存在周六（如 2026-10-24）当天的记录时，严格以周六这天的 week_status 为准
+            if (itemDate === weekColDate) {
+              row.week_status = !isBlankStatus(item.week_status) ? item.week_status : null;
+              row.week_status_date = !isBlankStatus(item.week_status) ? itemDate : null;
+            }
+          } else if (!isBlankStatus(item.week_status)) {
+            if (!row.week_status_date || itemDate >= row.week_status_date) {
+              row.week_status = item.week_status;
+              row.week_status_date = itemDate;
+            }
           }
         }
       });
@@ -1089,7 +1116,7 @@ export default {
                       @click="handleSort(col.type==='week' ? 'week_status' : col.key)">
                     <div class="inline-flex items-center justify-center gap-0.5 whitespace-nowrap leading-tight">
                       <span>{{ col.label }}</span>
-                      <span v-if="cIdx === 5" class="text-[9px] bg-[#4da6a0] text-white px-1 py-0.2 rounded font-bold leading-tight"></span>
+                      <span v-if="cIdx === 5" class="text-[9px] bg-[#4da6a0] text-white px-1 py-0.2 rounded font-bold leading-tight">最新</span>
                       <i v-if="sortColumn===(col.type==='week'?'week_status':col.key) || (!sortColumn && cIdx === 5)"
                          class="fa-solid text-[10px] ml-0.5 shrink-0"
                          :class="sortColumn===(col.type==='week'?'week_status':col.key) && sortOrder==='asc' ? 'fa-arrow-up' : 'fa-arrow-down'"></i>
@@ -1177,7 +1204,7 @@ export default {
                         </template>
                         <span v-else class="text-[10px] sm:text-sm font-mono text-slate-300 leading-tight">-</span>
 
-                        <i v-if="item.week_status"
+                        <i v-if="item.week_status || cIdx === 5"
                            class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-[11px] sm:text-xs shrink-0 p-0.5"
                            :title="weekChartTitle(processedData.weekDays[5])"
                            @click.stop="openWeeklyChartViewer(item)"></i>
