@@ -29,7 +29,7 @@ const BASE_COLS = [
   { key: "d2", type: "day", dayIdx: 2, label: "周三" },
   { key: "d3", type: "day", dayIdx: 3, label: "周四" },
   { key: "d4", type: "day", dayIdx: 4, label: "周五" },
-  { key: "week", type: "week", dayIdx: 5, label: "周线" },
+  { key: "week", type: "week", dayIdx: 5, label: "周六(周线)" },
 ];
 
 export default {
@@ -475,15 +475,9 @@ export default {
           row.days[itemIdx] = item;
         }
         // 只匹配属于当前周线列对应那一周（[weekRangeStart, weekColDate]）的周线数据！
-        // 如果当周已经有最新日期的周线记录（例如 10-24 为 null），绝不回退去取上周（10-17）的旧周线数据
+        // 同时兼容周线写入在周五(10-23)或周六(10-24)的情况，绝不混入上周(10-17)的旧周线数据
         if (weekColDate && itemDate >= weekRangeStart && itemDate <= weekColDate) {
-          if (maxAnySaturdayDate === weekColDate) {
-            // 当存在周六（如 2026-10-24）当天的记录时，严格以周六这天的 week_status 为准
-            if (itemDate === weekColDate) {
-              row.week_status = !isBlankStatus(item.week_status) ? item.week_status : null;
-              row.week_status_date = !isBlankStatus(item.week_status) ? itemDate : null;
-            }
-          } else if (!isBlankStatus(item.week_status)) {
+          if (!isBlankStatus(item.week_status)) {
             if (!row.week_status_date || itemDate >= row.week_status_date) {
               row.week_status = item.week_status;
               row.week_status_date = itemDate;
@@ -1116,7 +1110,7 @@ export default {
                       @click="handleSort(col.type==='week' ? 'week_status' : col.key)">
                     <div class="inline-flex items-center justify-center gap-0.5 whitespace-nowrap leading-tight">
                       <span>{{ col.label }}</span>
-                      <span v-if="cIdx === 5" class="text-[9px] bg-[#4da6a0] text-white px-1 py-0.2 rounded font-bold leading-tight"></span>
+                      <span v-if="cIdx === 5" class="text-[9px] bg-[#4da6a0] text-white px-1 py-0.2 rounded font-bold leading-tight">最新</span>
                       <i v-if="sortColumn===(col.type==='week'?'week_status':col.key) || (!sortColumn && cIdx === 5)"
                          class="fa-solid text-[10px] ml-0.5 shrink-0"
                          :class="sortColumn===(col.type==='week'?'week_status':col.key) && sortOrder==='asc' ? 'fa-arrow-up' : 'fa-arrow-down'"></i>
