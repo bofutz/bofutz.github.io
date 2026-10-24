@@ -1176,7 +1176,7 @@ export default {
           <p style="font-size: 10px;" class="font-bold text-slate-800 leading-snug tracking-normal">
             <span class="text-amber-700"><i class="fa-solid fa-circle-info mr-1"></i>使用说明：</span>
             格式：<span class="font-mono text-slate-900">上午/下午|日线</span>；
-            <span class="text-red-500">红正三角（▲）</span>代表半日/日线的行情启动;<span class="text-emerald-600">绿倒三角（▼）</span>代表半日/日线的行情结束；
+            <span class="text-red-500">红正三角（▲）</span>代表半日/日线的行情启动；<span class="text-emerald-600">绿倒三角（▼）</span>代表半日/日线的行情结束；
             <span class="text-red-500">红色代码</span>代表 T+0 标的，其余为 T+1 标的。
           </p>
         </div>
