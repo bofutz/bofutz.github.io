@@ -288,12 +288,6 @@ export default {
         : { url: raw.chart_url || raw.url || "", updated_at: raw.updated_at || null };
     };
 
-    /**
-     * 图表 ICON 显示逻辑：
-     * 1. 如果标的有独立的 updated_at，且落在某一列日期，显示在该列；
-     * 2. 否则如果系统配置了 globalChartDay，显示在该日期的列；
-     * 3. 兜底保护：只要最新交易日已有日线/半日线数据且该标的有数据，图表直接呈现在最新日线列
-     */
     const showDailyChartIcon = (etfCode, colDayIdx) => {
       if (colDayIdx < 0 || colDayIdx > 4) return false;
       const pd = processedData.value;
@@ -359,11 +353,18 @@ export default {
       });
 
       // 确定最新采集日期与最新列索引 (0:周一 ~ 4:周五, 5:周六周线)
+      // 说明：周线数据的交易日(item.date)在行情源中常记为周五(如10-23)或周六(如10-24)。
+      // 当周六运行工作流采集出本周周线数据，或当前北京时间处于周末(周六/周日)且本周周线已产出时，
+      // 最新数据列必须推进为 5 (周六周线)，使周六(10-24)排在最右列，周一~周五全部前移一列。
       let latestColIdx = 4;
       let latestDate = maxDailyDate || maxWeekDate || bjYmd(Date.now());
+      const todayBjStr = bjYmd(Date.now());
+      const todayBjWd = new Date(todayBjStr + "T12:00:00+08:00").getDay();
+      const isWeekendNow = todayBjWd === 6 || todayBjWd === 0;
+
       if (maxWeekDate && maxWeekDate >= maxDailyDate) {
         const wd = new Date(maxWeekDate + "T12:00:00+08:00").getDay();
-        if (wd === 6 || wd === 0 || maxWeekDate > maxDailyDate) {
+        if (wd === 6 || wd === 0 || maxWeekDate > maxDailyDate || isWeekendNow) {
           latestColIdx = 5;
           latestDate = maxWeekDate;
         } else {
