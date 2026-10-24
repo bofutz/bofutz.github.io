@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+  <title>波幅探长 · 管理后台</title>
+  <link rel="icon" type="image/png" href="./webpic/logo.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    [v-cloak] { display: none !important; }
+    html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+    body { background: #f4f6f8; -webkit-tap-highlight-color: transparent; }
+    .theme-bg { background-color: #4da6a0; }
+    .theme-text { color: #4da6a0; }
+    .theme-border { border-color: #4da6a0; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .modal-overlay { background: rgba(0, 0, 0, .6); backdrop-filter: blur(2px); }
+  </style>
+</head>
+<body class="text-slate-700 font-sans h-screen overflow-hidden select-none">
+
+<div id="admin-app" v-cloak class="h-full flex flex-col">
+  <div v-if="!isAuthenticated" class="fixed inset-0 z-50 bg-[#f4f6f8] flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-slate-200 text-center space-y-4">
+      <div class="w-16 h-16 theme-bg rounded-2xl flex items-center justify-center mx-auto">
+        <i class="fa-solid fa-shield-halved text-3xl text-white"></i>
+      </div>
+      <h2 class="text-xl font-bold text-slate-800">管理后台安全验证</h2>
+      <input v-model="adminSecret" @keyup.enter="login" type="password" placeholder="请输入 Admin-Secret"
+             class="w-full bg-slate-50 border px-4 py-3 rounded-lg text-center font-mono text-sm focus:theme-border outline-none">
+      <button @click="login" class="w-full theme-bg text-white font-bold py-2.5 rounded-lg hover:opacity-90">登 录</button>
+    </div>
+  </div>
+
+  <template v-else>
+    <header class="bg-white border-b h-14 sm:h-16 shrink-0 flex items-center justify-between px-4 sm:px-6 z-20">
+      <div class="flex items-center gap-2.5">
+        <button @click="sidebarOpen = !sidebarOpen" class="md:hidden w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <h1 class="text-base sm:text-lg font-bold text-slate-800">
+          波幅探长
+          <span class="text-xs text-slate-400 font-normal ml-1 bg-slate-100 px-2 py-0.5 rounded">管理后台</span>
+        </h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="./index.html" target="_blank" class="text-xs sm:text-sm text-slate-500 hover:theme-text no-underline">
+          <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>前台首页
+        </a>
+        <button @click="logout" class="text-xs sm:text-sm text-slate-500 hover:text-red-500">
+          <i class="fa-solid fa-power-off mr-1"></i>退出
+        </button>
+      </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden relative">
+      <div v-if="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 bg-black/40 z-30 md:hidden"></div>
+
+      <aside class="w-52 bg-white border-r py-4 flex flex-col shrink-0 z-40 transition-transform duration-200 fixed md:static inset-y-0 left-0"
+             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'">
+        <div class="px-4 pb-3 mb-2 border-b md:hidden flex items-center justify-between">
+          <span class="font-bold text-sm text-slate-700">导航菜单</span>
+          <button @click="sidebarOpen = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <nav class="flex-1 space-y-1 px-3 custom-scrollbar overflow-y-auto">
+          <div v-for="item in tabs" :key="item.k" @click="selectTab(item.k)"
+               class="p-2.5 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-between transition-colors"
+               :class="currentTab===item.k?'theme-bg text-white':'text-slate-600 hover:bg-slate-50'">
+            <span class="flex items-center gap-2">
+              <i :class="item.icon" class="w-4 text-center"></i> {{ item.t }}
+            </span>
+            <span v-if="item.badge && item.badge() > 0"
+                  class="px-1.5 py-0.2 rounded-full text-[10px] font-mono"
+                  :class="currentTab===item.k ? 'bg-white/25 text-white' : 'bg-orange-100 text-orange-600'">
+              {{ item.badge() }}
+            </span>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="flex-1 overflow-y-auto custom-scrollbar p-3.5 sm:p-6 bg-slate-50/50">
+        <!-- 整合精简的顶部运营数据栏 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
+          <div @click="selectTab('users')" class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm cursor-pointer hover:border-[#4da6a0]/50 transition">
+            <div class="text-[11px] text-slate-400 flex items-center justify-between">
+              <span>注册用户</span>
+              <span class="text-emerald-600 font-mono">+{{ stats.new_users_7d || 0 }} (7日)</span>
+            </div>
+            <div class="text-xl font-bold text-slate-800 font-mono mt-0.5">{{ stats.users || 0 }}</div>
+          </div>
+          <div @click="selectTab('orders')" class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm cursor-pointer hover:border-[#4da6a0]/50 transition">
+            <div class="text-[11px] text-slate-400 flex items-center justify-between">
+              <span>待审订单</span>
+              <span class="text-slate-500 font-mono">累计 ¥{{ Number(stats.revenue || 0).toFixed(0) }}</span>
+            </div>
+            <div class="text-xl font-bold font-mono mt-0.5" :class="(stats.orders_pending||0)>0 ? 'text-orange-500' : 'text-slate-800'">
+              {{ stats.orders_pending || 0 }}
+            </div>
+          </div>
+          <div @click="selectTab('shared')" class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm cursor-pointer hover:border-[#4da6a0]/50 transition">
+            <div class="text-[11px] text-slate-400 flex items-center justify-between">
+              <span>默认监控标的</span>
+              <span class="text-amber-600 font-mono">定制 {{ stats.sponsor_active || 0 }}（分享 {{ stats.custom_shared || 0 }}）</span>
+            </div>
+            <div class="text-xl font-bold text-slate-800 font-mono mt-0.5">{{ stats.shared_count || 0 }}</div>
+          </div>
+          <div @click="selectTab('tickets')" class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm cursor-pointer hover:border-[#4da6a0]/50 transition">
+            <div class="text-[11px] text-slate-400 flex items-center justify-between">
+              <span>待回工单</span>
+              <span class="text-slate-400">点击处理</span>
+            </div>
+            <div class="text-xl font-bold font-mono mt-0.5" :class="(stats.tickets_pending||0)>0 ? 'text-orange-500' : 'text-slate-800'">
+              {{ stats.tickets_pending || 0 }}
+            </div>
+          </div>
+        </div>
+
+        <component :is="currentComponent" @switch-tab="selectTab($event)" @refresh-stats="loadStats"></component>
+      </main>
+    </div>
+  </template>
+  <v-toast></v-toast>
+</div>
+
+<script type="module">
+  import { store } from "./js/store.js";
+  import { CONFIG } from "./js/config.js";
+  import { adminApi } from "./js/api/admin.js";
+  import Toast from "./js/components/common/Toast.js";
+  import UserMgmt from "./js/components/admin/UserMgmt.js";
+  import OrderMgmt from "./js/components/admin/OrderMgmt.js";
+  import SharedWatch from "./js/components/admin/SharedWatch.js";
+  import SettingsMgmt from "./js/components/admin/SettingsMgmt.js";
+  import TicketMgmt from "./js/components/admin/TicketMgmt.js";
+  import SponsorMgmt from "./js/components/admin/SponsorMgmt.js";
+
+  const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+  createApp({
+    components: {
+      "v-toast": Toast,
+      UserMgmt, OrderMgmt, SharedWatch,
+      SettingsMgmt, TicketMgmt, SponsorMgmt,
+    },
+    setup() {
+      const adminSecret = ref(localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "");
+      const isAuthenticated = ref(!!adminSecret.value);
+      const currentTab = ref("orders");
+      const sidebarOpen = ref(false);
+
+      const stats = reactive({
+        users: 0,
+        orders_pending: 0,
+        revenue: 0,
+        shared_count: 0,
+        sponsor_active: 0,
+        custom_shared: 0,
+        tickets_pending: 0,
+        new_users_7d: 0,
+      });
+
+      const loadStats = async () => {
+        if (!isAuthenticated.value) return;
+        try {
+          const res = await adminApi.fetchStats();
+          if (res.success && res.data) Object.assign(stats, res.data);
+        } catch (_) {}
+      };
+
+      const tabs = [
+        { k: "orders", t: "订单审核", icon: "fa-solid fa-file-invoice-dollar", badge: () => stats.orders_pending },
+        { k: "sponsors", t: "定制标的", icon: "fa-solid fa-sliders" },
+        { k: "shared", t: "默认监控列表", icon: "fa-solid fa-list" },
+        { k: "users", t: "用户管理", icon: "fa-solid fa-users" },
+        { k: "tickets", t: "客服工单", icon: "fa-solid fa-headset", badge: () => stats.tickets_pending },
+        { k: "settings", t: "系统设置", icon: "fa-solid fa-gear" },
+      ];
+
+      const selectTab = (k) => {
+        currentTab.value = k;
+        sidebarOpen.value = false;
+        loadStats();
+      };
+
+      const login = async () => {
+        const secret = (adminSecret.value || "").trim();
+        if (!secret) {
+          store.showToast("请输入 Admin-Secret", "error");
+          return;
+        }
+        try {
+          const res = await fetch(`${CONFIG.API_BASE}/api/admin/settings`, {
+            headers: { "Admin-Secret": secret, "Content-Type": "application/json" },
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || "鉴权失败");
+          }
+          localStorage.setItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET, secret);
+          adminSecret.value = secret;
+          isAuthenticated.value = true;
+          store.state.isAdminAuthenticated = true;
+          store.showToast("鉴权登录成功");
+          await loadStats();
+        } catch (e) {
+          localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
+          isAuthenticated.value = false;
+          store.showToast(e.message || "鉴权失败", "error");
+        }
+      };
+
+      const logout = () => {
+        localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
+        isAuthenticated.value = false;
+        adminSecret.value = "";
+      };
+
+      const currentComponent = computed(() => {
+        const map = {
+          orders: "OrderMgmt",
+          sponsors: "SponsorMgmt",
+          shared: "SharedWatch",
+          users: "UserMgmt",
+          tickets: "TicketMgmt",
+          settings: "SettingsMgmt",
+        };
+        return map[currentTab.value] || "OrderMgmt";
+      });
+
+      onMounted(() => {
+        if (isAuthenticated.value) loadStats();
+      });
+
+      return {
+        adminSecret,
+        isAuthenticated,
+        currentTab,
+        sidebarOpen,
+        stats,
+        loadStats,
+        currentComponent,
+        tabs,
+        selectTab,
+        login,
+        logout,
+      };
+    },
+  }).mount("#admin-app");
+</script>
+</body>
+</html>
