@@ -29,7 +29,7 @@ const BASE_COLS = [
   { key: "d2", type: "day", dayIdx: 2, label: "周三" },
   { key: "d3", type: "day", dayIdx: 3, label: "周四" },
   { key: "d4", type: "day", dayIdx: 4, label: "周五" },
-  { key: "week", type: "week", dayIdx: 5, label: "周六(周线)" },
+  { key: "week", type: "week", dayIdx: 5, label: "周线" },
 ];
 
 export default {
@@ -1110,7 +1110,6 @@ export default {
                       @click="handleSort(col.type==='week' ? 'week_status' : col.key)">
                     <div class="inline-flex items-center justify-center gap-0.5 whitespace-nowrap leading-tight">
                       <span>{{ col.label }}</span>
-                      <span v-if="cIdx === 5" class="text-[9px] bg-[#4da6a0] text-white px-1 py-0.2 rounded font-bold leading-tight">最新</span>
                       <i v-if="sortColumn===(col.type==='week'?'week_status':col.key) || (!sortColumn && cIdx === 5)"
                          class="fa-solid text-[10px] ml-0.5 shrink-0"
                          :class="sortColumn===(col.type==='week'?'week_status':col.key) && sortOrder==='asc' ? 'fa-arrow-up' : 'fa-arrow-down'"></i>
