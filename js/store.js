@@ -11,7 +11,7 @@ const state = reactive({
   username: "", // 注册电子邮箱
   nickname: "", // 唯一用户名（可登录，与定制标的无关）
 
-  adminSecret: localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "",
+  adminSecret: sessionStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "",
   isAdminAuthenticated: false,
 
   publicSettings: { ...CONFIG.DEFAULT_PUBLIC_SETTINGS },
