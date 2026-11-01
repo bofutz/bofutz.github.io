@@ -2,10 +2,26 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
-  <title>波幅探长 - 股票/ETF波幅异动批量监控</title>
-  <meta name="description" content="波幅探长：股票/ETF波幅异动批量监控。注册登录即可查看全量数据与图表，支持会员专属定制标的。" />
-  <link rel="icon" type="image/png" href="./webpic/logo.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+  <title>波幅探长｜A股股票与ETF波幅监控、异动追踪</title>
+  <meta name="description" content="波幅探长提供A股股票与ETF波幅异动批量监控、日线与周线数据、历史图表、个性化收藏和专属标的定制，帮助投资者更高效地观察市场波动。" />
+  <meta name="keywords" content="ETF监控,股票波幅,ETF波幅,行情异动,A股,量化观察,波幅探长" />
+  <meta name="theme-color" content="#10243b" />
+  <meta name="color-scheme" content="light" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="波幅探长" />
+  <meta property="og:title" content="波幅探长｜A股股票与ETF波幅监控" />
+  <meta property="og:description" content="批量观察股票与ETF波幅异动，结合日线、周线数据与图表，建立自己的市场观察清单。" />
+  <meta property="og:url" content="https://bofutz.github.io/" />
+  <meta property="og:image" content="https://bofutz.github.io/webpic/logo-256.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://bofutz.github.io/" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./webpic/logo-256.png" />
+  <link rel="apple-touch-icon" href="./webpic/logo-256.png" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"SoftwareApplication","name":"波幅探长","applicationCategory":"FinanceApplication","operatingSystem":"Web","description":"股票与ETF波幅异动批量监控、历史数据与图表观察工具。","url":"https://bofutz.github.io/","offers":{"@type":"Offer","price":"0","priceCurrency":"CNY","description":"基础功能免费使用，专属标的定制服务按周期收费。"}}
+  </script>
 
   <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -89,6 +105,28 @@
     .dash-board-table tbody tr {
       content-visibility: auto;
       contain-intrinsic-size: 0 40px;
+    }
+
+    /* 产品视觉升级：清晰的层级、稳定的触控尺寸与更克制的品牌色 */
+    :root { --theme: #168b83; --theme-dark: #116e69; --ink: #10243b; --surface: #ffffff; }
+    body { color: #1e293b; background: #f3f6fa; }
+    button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 3px solid rgba(22,139,131,.24); outline-offset: 2px;
+    }
+    button { min-height: 36px; }
+    input, select, textarea { scroll-margin-top: 5rem; }
+    .theme-bg { background-color: var(--theme); }
+    .theme-bg:hover { background-color: var(--theme-dark); }
+    .theme-text { color: var(--theme); }
+    .theme-border { border-color: var(--theme); }
+    @media (max-width: 640px) {
+      body { padding-bottom: env(safe-area-inset-bottom); }
+      input, select, textarea { font-size: 16px !important; }
+      .modal-overlay { padding: 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
     }
   </style>
 </head>

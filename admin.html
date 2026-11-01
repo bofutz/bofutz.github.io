@@ -146,7 +146,7 @@
       SettingsMgmt, TicketMgmt, SponsorMgmt,
     },
     setup() {
-      const adminSecret = ref(localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "");
+      const adminSecret = ref(sessionStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "");
       const isAuthenticated = ref(!!adminSecret.value);
       const currentTab = ref("orders");
       const sidebarOpen = ref(false);
@@ -199,21 +199,21 @@
             const body = await res.json().catch(() => ({}));
             throw new Error(body.error || "鉴权失败");
           }
-          localStorage.setItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET, secret);
+          sessionStorage.setItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET, secret);
           adminSecret.value = secret;
           isAuthenticated.value = true;
           store.state.isAdminAuthenticated = true;
           store.showToast("鉴权登录成功");
           await loadStats();
         } catch (e) {
-          localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
+          sessionStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
           isAuthenticated.value = false;
           store.showToast(e.message || "鉴权失败", "error");
         }
       };
 
       const logout = () => {
-        localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
+        sessionStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
         isAuthenticated.value = false;
         adminSecret.value = "";
       };
