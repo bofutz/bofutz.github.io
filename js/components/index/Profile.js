@@ -80,8 +80,8 @@ export default {
         store.showToast("请输入原密码和新密码", "error");
         return;
       }
-      if (pwdForm.newPassword.length < 6) {
-        store.showToast("新密码至少需 6 位", "error");
+      if (pwdForm.newPassword.length < 8) {
+        store.showToast("新密码至少需 8 位", "error");
         return;
       }
       if (pwdForm.newPassword !== pwdForm.confirmPassword) {
@@ -256,7 +256,7 @@ export default {
           <div class="space-y-3 max-w-md">
             <input v-model="pwdForm.oldPassword" type="password" placeholder="原密码"
                    class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
-            <input v-model="pwdForm.newPassword" type="password" placeholder="新密码（至少6位）"
+            <input v-model="pwdForm.newPassword" type="password" placeholder="新密码（至少8位）"
                    class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">
             <input v-model="pwdForm.confirmPassword" type="password" placeholder="确认新密码"
                    class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none">

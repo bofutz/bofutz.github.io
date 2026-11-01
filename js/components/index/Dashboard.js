@@ -1057,6 +1057,27 @@ export default {
   },
   template: `
     <div class="max-w-7xl mx-auto space-y-2.5 sm:space-y-3 select-none">
+      <section class="rounded-2xl overflow-hidden border border-slate-200/80 bg-white shadow-sm">
+        <div class="px-3.5 py-3 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 text-[10px] font-bold tracking-wide">MARKET MONITOR</span>
+              <span class="text-[10px] text-slate-400">股票 · ETF · 波幅异动</span>
+            </div>
+            <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-slate-900">把市场波动，变成清晰可追踪的信号</h1>
+            <p class="text-[11px] sm:text-xs text-slate-500 mt-1">集中观察日线、半日线与周线变化；收藏重点标的，按自己的节奏跟踪市场。</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <a href="#/guide" class="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold no-underline hover:bg-slate-50">使用说明</a>
+            <a href="#/sponsor" class="inline-flex items-center justify-center px-3.5 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold no-underline hover:bg-slate-700">定制我的标的 <i class="fa-solid fa-arrow-right ml-1.5"></i></a>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 border-t border-slate-100 bg-slate-50/70 divide-x divide-slate-100">
+          <div class="px-2.5 py-2 text-center"><div class="text-[10px] sm:text-[11px] text-slate-400">多周期观察</div><div class="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">半日 / 日 / 周</div></div>
+          <div class="px-2.5 py-2 text-center"><div class="text-[10px] sm:text-[11px] text-slate-400">个性化管理</div><div class="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">收藏 / 排序</div></div>
+          <div class="px-2.5 py-2 text-center"><div class="text-[10px] sm:text-[11px] text-slate-400">专属扩展</div><div class="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">自定义监控</div></div>
+        </div>
+      </section>
       <div v-if="promoBanner.visible"
            class="bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50 border border-orange-200/90 rounded-xl px-3 sm:px-3.5 py-2 sm:py-2.5 flex items-center justify-between gap-2 shadow-sm">
         <div class="flex items-center gap-2 min-w-0 text-xs sm:text-sm font-bold text-orange-800">
