@@ -1,5 +1,6 @@
 /**
  * 波幅探长 - 图表指南
+ * 说明：仅展示日线图、周线图；以 ATR 中间线颜色变化作为观察信号。
  */
 import { store } from "../../store.js";
 
@@ -8,7 +9,7 @@ const { ref, onBeforeUnmount } = Vue;
 export default {
   name: "Guide",
   setup() {
-    const activeSection = ref("value");
+    const activeSection = ref("signal");
     let viewerInstance = null;
 
     const scrollTo = (id) => {
@@ -30,7 +31,10 @@ export default {
           cursor: pointer; backdrop-filter: blur(4px);
         }
         .bofutz-viewer-nav:hover { background: rgba(15, 23, 42, 0.75); }
-        .bofutz-viewer-nav svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+        .bofutz-viewer-nav svg {
+          width: 18px; height: 18px; fill: none; stroke: currentColor;
+          stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+        }
         .bofutz-viewer-prev { left: 16px; }
         .bofutz-viewer-next { right: 16px; }
         @media (max-width: 640px) {
@@ -43,37 +47,37 @@ export default {
     };
 
     const openGuideViewer = (startIndex = 0) => {
+      const images = [
+        { src: "./webpic/chart1.png", alt: "日线图：ATR 中间线由绿变橙，分批买入示例" },
+        { src: "./webpic/chart2.png", alt: "周线图：ATR 中间线由橙变绿，分批卖出示例" },
+      ];
+
       if (!window.Viewer) {
-        window.open(startIndex === 1 ? "./webpic/chart2.png" : "./webpic/chart1.png", "_blank");
+        window.open(images[startIndex]?.src || images[0].src, "_blank");
         return;
       }
+
       ensureViewerNavStyle();
+
       if (viewerInstance) {
-        try {
-          viewerInstance.destroy();
-        } catch (_) {}
+        try { viewerInstance.destroy(); } catch (_) {}
         viewerInstance = null;
       }
+
       const wrap = document.createElement("div");
       wrap.style.display = "none";
-      const imgs = [
-        { src: "./webpic/chart1.png", alt: "半日线：趋势线与涨跌标签" },
-        { src: "./webpic/chart2.png", alt: "日线：评分与阶段涨跌幅" },
-      ];
-      imgs.forEach((it) => {
+      images.forEach((item) => {
         const img = document.createElement("img");
-        img.src = it.src;
-        img.alt = it.alt;
+        img.src = item.src;
+        img.alt = item.alt;
         wrap.appendChild(img);
       });
       document.body.appendChild(wrap);
 
-      let navPrev = null;
-      let navNext = null;
       viewerInstance = new window.Viewer(wrap, {
         initialViewIndex: startIndex,
         navbar: false,
-        title: (image) => image.alt || "图表说明",
+        title: (image) => image.alt || "图表示例",
         toolbar: {
           zoomIn: 1,
           zoomOut: 1,
@@ -90,53 +94,47 @@ export default {
         viewed() {
           const root = document.querySelector(".viewer-container");
           if (!root || root.querySelector(".bofutz-viewer-nav")) return;
-          navPrev = document.createElement("button");
-          navPrev.type = "button";
-          navPrev.className = "bofutz-viewer-nav bofutz-viewer-prev";
-          navPrev.setAttribute("aria-label", "上一张");
-          navPrev.innerHTML =
+
+          const prev = document.createElement("button");
+          prev.type = "button";
+          prev.className = "bofutz-viewer-nav bofutz-viewer-prev";
+          prev.setAttribute("aria-label", "上一张图表");
+          prev.innerHTML =
             '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 6 9 12 15 18"></polyline></svg>';
-          navPrev.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-              viewerInstance.prev(true);
-            } catch (_) {}
+          prev.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            try { viewerInstance && viewerInstance.prev(true); } catch (_) {}
           });
-          navNext = document.createElement("button");
-          navNext.type = "button";
-          navNext.className = "bofutz-viewer-nav bofutz-viewer-next";
-          navNext.setAttribute("aria-label", "下一张");
-          navNext.innerHTML =
+
+          const next = document.createElement("button");
+          next.type = "button";
+          next.className = "bofutz-viewer-nav bofutz-viewer-next";
+          next.setAttribute("aria-label", "下一张图表");
+          next.innerHTML =
             '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
-          navNext.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-              viewerInstance.next(true);
-            } catch (_) {}
+          next.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            try { viewerInstance && viewerInstance.next(true); } catch (_) {}
           });
-          root.appendChild(navPrev);
-          root.appendChild(navNext);
+
+          root.appendChild(prev);
+          root.appendChild(next);
         },
         hidden() {
-          try {
-            viewerInstance && viewerInstance.destroy();
-          } catch (_) {}
+          try { viewerInstance && viewerInstance.destroy(); } catch (_) {}
           viewerInstance = null;
-          try {
-            wrap.remove();
-          } catch (_) {}
+          try { wrap.remove(); } catch (_) {}
         },
       });
+
       viewerInstance.show();
     };
 
     onBeforeUnmount(() => {
       if (viewerInstance) {
-        try {
-          viewerInstance.destroy();
-        } catch (_) {}
+        try { viewerInstance.destroy(); } catch (_) {}
         viewerInstance = null;
       }
     });
@@ -148,223 +146,196 @@ export default {
       openGuideViewer,
     };
   },
+
   template: `
-    <div class="max-w-4xl mx-auto space-y-8 select-none pb-10">
-      <!-- 标题 -->
-      <div class="text-center space-y-3">
-        <h1 class="text-3xl font-bold text-slate-800">图表指南</h1>
-        <p class="text-slate-500 text-sm max-w-2xl mx-auto leading-relaxed">
-          本站用 ATR 筛选波动变大的标的，并提供半日线 / 日线 / 周线图表。
-          配色按<strong class="text-slate-700">A股习惯</strong>：<span class="text-orange-500 font-bold">橙色=上涨趋势</span>，
-          <span class="text-emerald-600 font-bold">绿色=下跌趋势</span>。
-          以下为读图与示例纪律，<strong class="text-slate-700">不构成投资建议</strong>。
+    <div class="max-w-4xl mx-auto space-y-7 select-none pb-10">
+      <!-- 页面标题 -->
+      <header class="text-center space-y-3">
+        <h1 class="text-3xl font-bold text-slate-800">图表说明</h1>
+        <p class="text-sm text-slate-500 leading-relaxed max-w-2xl mx-auto">
+          波幅探长目前提供<strong class="text-slate-700">日线图与周线图</strong>。
+          重点观察 ATR 中间线的颜色变化，并参考前一根已完成 K 线的三个价位进行分批操作。
         </p>
-      </div>
+      </header>
 
-      <!-- 导航 -->
-      <div class="flex flex-wrap justify-center gap-2 text-xs">
-        <button type="button" @click="scrollTo('value')" class="px-4 py-1.5 rounded-full border transition-all"
-                :class="activeSection==='value' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">功能说明</button>
-        <button type="button" @click="scrollTo('board')" class="px-4 py-1.5 rounded-full border transition-all"
-                :class="activeSection==='board' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">数据看板</button>
-        <button type="button" @click="scrollTo('read')" class="px-4 py-1.5 rounded-full border transition-all"
-                :class="activeSection==='read' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">怎么读图</button>
-        <button type="button" @click="scrollTo('trade')" class="px-4 py-1.5 rounded-full border transition-all"
-                :class="activeSection==='trade' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">买卖示例</button>
-        <button type="button" @click="scrollTo('risk')" class="px-4 py-1.5 rounded-full border transition-all"
-                :class="activeSection==='risk' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">风险说明</button>
-      </div>
+      <!-- 页面导航 -->
+      <nav class="flex flex-wrap justify-center gap-2 text-xs">
+        <button type="button" @click="scrollTo('signal')"
+          class="px-4 py-1.5 rounded-full border transition-all"
+          :class="activeSection==='signal' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">
+          买卖信号
+        </button>
+        <button type="button" @click="scrollTo('examples')"
+          class="px-4 py-1.5 rounded-full border transition-all"
+          :class="activeSection==='examples' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">
+          图表示例
+        </button>
+        <button type="button" @click="scrollTo('discipline')"
+          class="px-4 py-1.5 rounded-full border transition-all"
+          :class="activeSection==='discipline' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">
+          交易纪律
+        </button>
+        <button type="button" @click="scrollTo('disclaimer')"
+          class="px-4 py-1.5 rounded-full border transition-all"
+          :class="activeSection==='disclaimer' ? 'theme-bg text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">
+          免责声明
+        </button>
+      </nav>
 
-      <!-- 1. 功能说明 -->
-      <section id="value" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div class="theme-bg px-6 py-4">
+      <!-- 一、核心买卖信号 -->
+      <section id="signal" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden scroll-mt-5">
+        <div class="theme-bg px-5 sm:px-6 py-4">
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-crown"></i> 注册看全量图表 · 会员专属定制标的
+            <i class="fa-solid fa-chart-line"></i> 核心买卖信号
           </h2>
         </div>
-        <div class="p-6 space-y-4">
-          <div class="grid sm:grid-cols-3 gap-4">
-            <div class="bg-slate-50 rounded-xl p-4">
-              <div class="font-bold text-slate-800 mb-1 text-sm">1. 波动过滤</div>
-              <p class="text-xs text-slate-600 leading-relaxed">用 ATR 判断波动是否够大，达到阈值才在看板标出，减少噪音。</p>
+
+        <div class="p-5 sm:p-6 space-y-5 text-sm text-slate-700 leading-relaxed">
+          <div class="rounded-xl border border-orange-100 bg-orange-50/70 p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-block w-3 h-3 rounded-full bg-orange-500"></span>
+              <h3 class="font-bold text-orange-900 text-base">ATR 中间线由绿变橙</h3>
+              <span class="ml-auto text-xs font-bold text-orange-800 bg-orange-100 rounded-full px-2.5 py-1">买入观察</span>
             </div>
-            <div class="bg-slate-50 rounded-xl p-4">
-              <div class="font-bold text-slate-800 mb-1 text-sm">2. 全量列表 + 图</div>
-              <p class="text-xs text-slate-600 leading-relaxed">池内标的都会列出；未触发显示 “-”，仍可打开半日 / 日 / 周线图。</p>
-            </div>
-            <div class="bg-slate-50 rounded-xl p-4">
-              <div class="font-bold text-slate-800 mb-1 text-sm">3. 专属定制与分享</div>
-              <p class="text-xs text-slate-600 leading-relaxed">半日看节奏，日线看结构，周线看方向。注册登录即可查看全部图表；会员定制标的默认仅自己可见并置顶，也可自主选择公开分享。</p>
-            </div>
+            <p class="text-orange-950">
+              当 ATR 中间线由绿色转为橙色，代表指标状态发生转变。可参考前一根已完成 K 线的以下三个价位，分批安排买入：
+            </p>
+            <ol class="list-decimal pl-5 mt-3 space-y-1.5 text-orange-950">
+              <li><strong>前一根 K 线的收盘价</strong></li>
+              <li><strong>ATR 中间线对应价</strong></li>
+              <li><strong>前一根 K 线实体的 1/2 位置</strong></li>
+            </ol>
           </div>
-          <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-amber-900">
-            <strong>一句话：</strong>波动筛选 + 多周期图表，用来观察与复盘，不是荐股工具。
+
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-block w-3 h-3 rounded-full bg-emerald-600"></span>
+              <h3 class="font-bold text-emerald-900 text-base">ATR 中间线由橙变绿</h3>
+              <span class="ml-auto text-xs font-bold text-emerald-800 bg-emerald-100 rounded-full px-2.5 py-1">卖出观察</span>
+            </div>
+            <p class="text-emerald-950">
+              当 ATR 中间线由橙色转为绿色，反向参考相同的三个价位，分批安排卖出：
+            </p>
+            <ol class="list-decimal pl-5 mt-3 space-y-1.5 text-emerald-950">
+              <li><strong>前一根 K 线的收盘价</strong></li>
+              <li><strong>ATR 中间线对应价</strong></li>
+              <li><strong>前一根 K 线实体的 1/2 位置</strong></li>
+            </ol>
+          </div>
+
+          <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
+            <p class="font-bold text-slate-800">如何计算 K 线实体的 1/2 位置？</p>
+            <p>实体中点 =（该根 K 线开盘价 + 收盘价）÷ 2。</p>
+            <p class="text-xs text-slate-500">
+              注意：这里指 K 线实体的中点，不是最高价与最低价之间的中点。
+            </p>
+          </div>
+
+          <div class="text-xs text-slate-500 leading-relaxed">
+            <strong class="text-slate-700">周期说明：</strong>
+            日线图以此前一个已完成的日 K 线作为参考；周线图以此前一个已完成的周 K 线作为参考。
+            周线信号应等待当周 K 线收盘确认。不要把尚未收盘的 K 线颜色变化当作最终信号。
           </div>
         </div>
       </section>
 
-      <!-- 2. 看板 -->
-      <section id="board" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div class="theme-bg px-6 py-4">
+      <!-- 二、图表示例 -->
+      <section id="examples" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden scroll-mt-5">
+        <div class="theme-bg px-5 sm:px-6 py-4">
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-table"></i> 数据看板怎么读
+            <i class="fa-solid fa-images"></i> 图表示例
           </h2>
         </div>
-        <div class="p-6 text-sm text-slate-700 leading-relaxed space-y-3">
-          <ul class="list-disc pl-5 space-y-2">
-            <li><strong>标的列：</strong>名称与代码（<span class="text-red-500 font-bold">红色代码</span>代表 T+0 标的，默认颜色代表 T+1 标的）；定制会员的定制标的排在首位，非定制用户按「收藏、最近异动、分享的定制标的、其它」顺序排列。</li>
-            <li><strong>最新采集列在最右：</strong>最新采集的数据始终固定在表格最右列，其余列按正序排列；当出现新数据时，上一周期数据自动向左前移。</li>
-            <li><strong>红正三角与绿倒三角：</strong>触发波幅阈值时，<span class="text-red-500 font-bold">红正三角（▲）</span>代表上涨异动，<span class="text-emerald-600 font-bold">绿倒三角（▼）</span>代表下跌异动，未触发为 “-”。</li>
-            <li><strong>图表图标：</strong>点击查看半日线 / 日线 / 周线大图（可放大翻页）。</li>
-          </ul>
-          <p class="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
-            看板数字回答「波动大不大」；趋势线与评分回答「结构与节奏」。两者对照看，不要当成单一买卖信号。
+        <div class="p-5 sm:p-6 space-y-6 text-sm text-slate-700 leading-relaxed">
+          <p class="text-xs text-slate-500">
+            以下示例图用于说明颜色变化及三个参考价位。点击图片可放大查看，也可左右切换。
           </p>
-        </div>
-      </section>
-
-      <!-- 3. 怎么读图 -->
-      <section id="read" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div class="theme-bg px-6 py-4">
-          <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-chart-line"></i> 怎么读图（对照示例）
-          </h2>
-        </div>
-        <div class="p-6 space-y-6 text-sm text-slate-700 leading-relaxed">
-          <div class="bg-slate-50 rounded-xl p-4 space-y-2">
-            <p class="font-bold text-slate-800">配色（A股习惯）</p>
-            <ul class="list-disc pl-5 text-xs sm:text-sm space-y-1">
-              <li><span class="text-orange-500 font-bold">橙色趋势线</span>：当前偏上涨 / 转强</li>
-              <li><span class="text-emerald-600 font-bold">绿色趋势线</span>：当前偏下跌 / 转弱</li>
-              <li><span class="text-red-500 font-bold">红色标签</span>：上涨波幅或阶段涨幅标注</li>
-              <li><span class="text-emerald-600 font-bold">绿色标签</span>：下跌波幅或阶段跌幅标注</li>
-              <li><strong>K 线旁数字</strong>：评分（1、2、3…），表示该段被指标标记的强度</li>
-            </ul>
-          </div>
 
           <figure class="space-y-2">
             <div class="flex items-center justify-between gap-2 flex-wrap">
-              <span class="bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded">图 1 · 半日线</span>
-              <span class="text-xs text-slate-400">点击图片可放大、左右翻页</span>
+              <span class="bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">示例一 · 绿变橙 / 分批买入</span>
+              <span class="text-xs text-slate-400">点击图片放大</span>
             </div>
             <button type="button" class="block w-full text-left group" @click="openGuideViewer(0)">
-              <img src="./webpic/chart1.png" alt="半日线：半日趋势线、2日趋势线、涨跌标签"
-                   class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[420px] cursor-zoom-in group-hover:opacity-95 transition"
-                   loading="lazy"
-                   onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='flex');">
+              <img src="./webpic/chart1.png"
+                alt="ATR 中间线由绿变橙，参考三个价位分批买入"
+                class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[520px] cursor-zoom-in group-hover:opacity-95 transition"
+                loading="lazy"
+                onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='flex');">
               <div style="display:none" class="text-xs text-slate-400 justify-center py-10 border border-dashed rounded-xl">
-                请将 webpic/chart1.png 放到网站根目录（与 index.html 同级）
+                请将买入示例图片保存为 webpic/chart1.png
               </div>
             </button>
-            <figcaption class="text-xs text-slate-600 space-y-1 bg-slate-50 rounded-lg p-3">
-              <p><strong>半日趋势线：</strong>跟踪盘中节奏，绿→橙表示节奏转强，橙→绿表示转弱。</p>
-              <p><strong>2 日趋势线：</strong>偏结构方向，变化通常慢于半日线，用来确认是否同向。</p>
-              <p><strong>红/绿标签 + 数值：</strong>该段相对波幅或涨跌幅度的标记，便于复盘，不是保证收益。</p>
+            <figcaption class="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
+              建议在图中标出：颜色由绿变橙的位置、前一根 K 线收盘价、ATR 中间线对应价，以及前一根 K 线实体中点。
             </figcaption>
           </figure>
 
           <figure class="space-y-2">
             <div class="flex items-center justify-between gap-2 flex-wrap">
-              <span class="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded">图 2 · 日线</span>
-              <span class="text-xs text-slate-400">点击图片可放大、左右翻页</span>
+              <span class="bg-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full">示例二 · 橙变绿 / 分批卖出</span>
+              <span class="text-xs text-slate-400">点击图片放大</span>
             </div>
             <button type="button" class="block w-full text-left group" @click="openGuideViewer(1)">
-              <img src="./webpic/chart2.png" alt="日线：评分与阶段涨跌幅"
-                   class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[420px] cursor-zoom-in group-hover:opacity-95 transition"
-                   loading="lazy"
-                   onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='flex');">
+              <img src="./webpic/chart2.png"
+                alt="ATR 中间线由橙变绿，参考三个价位分批卖出"
+                class="w-full rounded-xl border border-slate-200 shadow-sm bg-slate-50 object-contain max-h-[520px] cursor-zoom-in group-hover:opacity-95 transition"
+                loading="lazy"
+                onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='flex');">
               <div style="display:none" class="text-xs text-slate-400 justify-center py-10 border border-dashed rounded-xl">
-                请将 webpic/chart2.png 放到网站根目录（与 index.html 同级）
+                请将卖出示例图片保存为 webpic/chart2.png
               </div>
             </button>
-            <figcaption class="text-xs text-slate-600 space-y-1 bg-slate-50 rounded-lg p-3">
-              <p><strong>评分数字：</strong>出现在 K 线附近的 1、2、3…，表示该段被连续标记的程度。</p>
-              <p><strong>阶段涨跌幅 + 时间：</strong>如标签中的百分比与「5w」等，表示一段行情的幅度与跨度，用于对照，不是下单指令。</p>
-              <p><strong>阅读顺序建议：</strong>先看 2 日线方向 → 再看半日/日线是否转色 → 再看评分是否连续 → 最后看位置与波动大小。</p>
+            <figcaption class="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
+              建议在图中标出：颜色由橙变绿的位置，以及对应的三个分批参考价位。
             </figcaption>
           </figure>
         </div>
       </section>
 
-      <!-- 4. 买卖示例 -->
-      <section id="trade" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div class="theme-bg px-6 py-4">
+      <!-- 三、交易纪律 -->
+      <section id="discipline" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden scroll-mt-5">
+        <div class="theme-bg px-5 sm:px-6 py-4">
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-list-check"></i> 买卖示例纪律（非投资建议）
+            <i class="fa-solid fa-list-check"></i> 交易纪律
           </h2>
         </div>
-        <div class="p-6 space-y-5 text-sm text-slate-700 leading-relaxed">
-          <p class="text-xs text-slate-500">
-            下列比例与条件仅作「可检查步骤」的示例，方便统一观察习惯。不保证收益，不构成买卖推荐。
-          </p>
-
-          <div class="border border-orange-100 bg-orange-50/40 rounded-xl p-4 space-y-2">
-            <p class="font-bold text-orange-900">买入观察（分两步，各约 50%）</p>
-            <ol class="list-decimal pl-5 space-y-1.5">
-              <li>
-                <strong>半日线或日线趋势：由绿转橙</strong>
-                → 可准备约 <strong>50%</strong> 仓位（节奏/当日结构转强）。
-              </li>
-              <li>
-                <strong>2 日趋势线：由绿转橙</strong>
-                → 可再准备约 <strong>50%</strong> 仓位（结构确认同向）。
-              </li>
-            </ol>
-            <p class="text-xs text-orange-900/80">若快线已橙、2 日仍绿：示例中只按半仓逻辑观察，不写「一次做满」。</p>
-          </div>
-
-          <div class="border border-emerald-100 bg-emerald-50/40 rounded-xl p-4 space-y-2">
-            <p class="font-bold text-emerald-900">卖出观察（同理，分两步）</p>
-            <ol class="list-decimal pl-5 space-y-1.5">
-              <li><strong>半日线或日线：由橙转绿</strong> → 先减约 <strong>50%</strong>。</li>
-              <li><strong>2 日趋势线：由橙转绿</strong> → 计划仓位再减至清零。</li>
-            </ol>
-            <p class="text-xs text-emerald-900/80">两线冲突时，示例优先服从更快周期的减仓信号，降低硬扛。</p>
-          </div>
-
-          <div class="border border-slate-200 bg-slate-50 rounded-xl p-4 space-y-2">
-            <p class="font-bold text-slate-800">评分过滤（重要）</p>
-            <ul class="list-disc pl-5 space-y-1.5">
-              <li><strong>单独突然出现的「3 分」：不买入，继续观望。</strong></li>
-              <li>
-                同一段结构里<strong>已经连续出现过评分</strong>，再出现 3 分（或你设定的门槛）时，才把该 3 分纳入可观察的买入条件。
-              </li>
-              <li>目的：过滤孤立噪声，只重视「被指标连续标记」的波段。</li>
-            </ul>
-          </div>
-
-          <div class="border border-amber-100 bg-amber-50/50 rounded-xl p-4 space-y-2">
-            <p class="font-bold text-amber-900">止损（必须）</p>
-            <ul class="list-disc pl-5 space-y-1">
-              <li>所有交易示例都要求<strong>事先设好止损</strong>。</li>
-              <li>可按标的波动大小，在约 <strong>2%～5%</strong> 区间调整；波动大的主题 ETF 可取偏上限。</li>
-              <li>也可与结构低点/高点外侧比较，取更严格者。</li>
-              <li>触发止损后，示例中<strong>当日不再按同一方向立刻加回</strong>。</li>
-            </ul>
-          </div>
+        <div class="p-5 sm:p-6 text-sm text-slate-700 leading-relaxed">
+          <ul class="list-disc pl-5 space-y-3">
+            <li><strong>等待信号确认：</strong>以已收盘 K 线确认 ATR 中间线颜色变化，避免盘中颜色反复变化造成误操作。</li>
+            <li><strong>坚持分批操作：</strong>根据三个参考价位分批执行，不要因为一次信号就把全部资金一次性买入或卖出。</li>
+            <li><strong>不盲目追价：</strong>市场价格未到参考价位时，不必为了成交而追涨杀跌；参考价位也不保证一定能够成交。</li>
+            <li><strong>控制仓位：</strong>提前规划单笔投入、总仓位和可承受亏损，保留必要的备用资金，避免满仓操作。</li>
+            <li><strong>遵守交易规则：</strong>结合标的流动性、买卖价差、交易费用及自身持仓情况执行，不因情绪或短期消息随意改变计划。</li>
+            <li><strong>做好交易记录：</strong>记录信号、参考价位、实际成交价及交易结果，定期复盘，不要因一两次盈亏就随意改变方法。</li>
+          </ul>
         </div>
       </section>
 
-      <!-- 5. 风险 -->
-      <section id="risk" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div class="bg-slate-800 px-6 py-4">
+      <!-- 四、免责声明 -->
+      <section id="disclaimer" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden scroll-mt-5">
+        <div class="bg-slate-800 px-5 sm:px-6 py-4">
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-shield-halved"></i> 风险与免责
+            <i class="fa-solid fa-shield-halved"></i> 风险提示与免责声明
           </h2>
         </div>
-        <div class="p-6 space-y-3 text-sm text-slate-700 leading-relaxed">
-          <ul class="list-disc pl-5 space-y-2">
-            <li>趋势线变色与评分多为确认型信息，存在滞后。</li>
-            <li>跳空、流动性、费率与滑点可能导致止损无法按预期成交。</li>
-            <li>同主题多只 ETF 信号相关，重复加仓会放大同源风险。</li>
-            <li>历史图表与波幅不代表未来表现。</li>
-          </ul>
-          <div class="bg-red-50 border border-red-100 rounded-xl p-4 text-xs sm:text-sm text-red-900">
-            <strong>免责声明：</strong>图表及指标仅供参考，不作为投资建议、收益承诺或买卖推荐。
-            市场有风险，决策与后果由使用者自行承担。
-          </div>
+        <div class="p-5 sm:p-6 space-y-3 text-sm text-slate-700 leading-relaxed">
+          <p>
+            波幅探长提供的图表、ATR 中间线颜色变化及相关价位，仅用于行情观察、技术分析和信息参考，
+            不构成任何证券、基金或其他金融产品的投资建议、买卖推荐或收益承诺。
+          </p>
+          <p>
+            金融市场存在价格波动、流动性不足、跳空、滑点及本金损失等风险。
+            历史数据和技术指标不代表未来表现，任何指标或交易方法都可能出现滞后、失效或连续错误信号。
+            参考价位不保证能够成交，也不保证交易结果。
+          </p>
+          <p>
+            投资者应结合自身投资目标、风险承受能力及实际情况独立判断并自主决策。
+            因使用本站图表、指标信号或据此进行交易而产生的任何盈亏，均由投资者自行承担。
+          </p>
           <div class="pt-2 text-center">
-            <a href="#/sponsor" class="inline-block theme-bg text-white text-xs font-bold px-5 py-2.5 rounded-lg no-underline">
+            <a href="#/sponsor"
+              class="inline-block theme-bg text-white text-xs font-bold px-5 py-2.5 rounded-lg no-underline">
               前往定制标的
             </a>
           </div>
