@@ -23,7 +23,7 @@ export async function request(endpoint, options = {}) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const adminSecret = (localStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "").trim();
+  const adminSecret = (sessionStorage.getItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET) || "").trim();
   if (adminSecret && !headers["Admin-Secret"]) {
     headers["Admin-Secret"] = adminSecret;
   }
@@ -34,7 +34,7 @@ export async function request(endpoint, options = {}) {
     if (response.status === 401 && !endpoint.includes("/api/login")) {
       if (endpoint.startsWith("/api/admin/")) {
         store.state.isAdminAuthenticated = false;
-        localStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
+        sessionStorage.removeItem(CONFIG.STORAGE_KEYS.ADMIN_SECRET);
         throw new Error("管理员鉴权失败，请重新输入 Admin-Secret");
       }
       store.clearUserState();
