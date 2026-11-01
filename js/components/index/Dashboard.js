@@ -899,6 +899,11 @@ export default {
     };
 
     const viewableBoardItems = () => (processedData.value?.list || []).filter((r) => r && canViewChart(r.etf_code));
+    const chartImageUrl = (code, interval) => {
+      const token = localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN) || "";
+      const base = `${CONFIG.API_BASE.replace(/\/$/, "")}/api/chart/image?code=${encodeURIComponent(code)}&interval=${encodeURIComponent(interval)}`;
+      return token ? `${base}&token=${encodeURIComponent(token)}` : base;
+    };
 
     const openDailyChartViewer = async (item, colDate = "") => {
       if (!canViewChart(item.etf_code)) return openGuestChartPrompt(item);
@@ -911,11 +916,10 @@ export default {
         const code = normCode(row.etf_code);
         const name = formatEtfName(row.etf_name) || code;
         const entry = resolveChartEntry(code);
-        const r2Daily = `${CONFIG.R2_CHART_BASE}/${code}_daily.png`;
-        const r2Half = `${CONFIG.R2_CHART_BASE}/${code}_half_day.png`;
-        // 日线必须固定读取 *_daily.png；charts_map.url 是通用映射，周末周线任务曾把它覆盖成 *_weekly.png。
-        candidates.push({ title: `${name} (${code}) ${dayLabel}日线`.trim(), url: r2Daily, code, kind: "daily" });
-        candidates.push({ title: `${name} (${code}) ${dayLabel}半日线`.trim(), url: r2Half, code, kind: "half_day" });
+        const dailyUrl = chartImageUrl(code, "daily");
+        const halfUrl = chartImageUrl(code, "half_day");
+        candidates.push({ title: `${name} (${code}) ${dayLabel}日线`.trim(), url: dailyUrl, code, kind: "daily" });
+        candidates.push({ title: `${name} (${code}) ${dayLabel}半日线`.trim(), url: halfUrl, code, kind: "half_day" });
       }
       const images = await probeImagesBatch(candidates, 12);
       if (!images.length) return store.showToast("暂无可用日线/半日线图表", "error");
@@ -935,7 +939,7 @@ export default {
         const code = normCode(row.etf_code);
         const name = formatEtfName(row.etf_name) || code;
         const dLabel = formatDateCN(row.week_status_date || weeklyChartDay.value || weekColDate || globalChartDay.value) || "";
-        return { title: `${name} (${code}) ${dLabel}周线`.trim(), url: `${CONFIG.R2_CHART_BASE}/${code}_weekly.png`, code };
+        return { title: `${name} (${code}) ${dLabel}周线`.trim(), url: chartImageUrl(code, "weekly"), code };
       });
       const images = await probeImagesBatch(candidates, 12);
       if (!images.length) return store.showToast("暂无可用周线图表", "error");

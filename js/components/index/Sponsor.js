@@ -1,8 +1,8 @@
 /**
  * 会员定制监控标的（js/components/index/Sponsor.js）
- * 1. 「发起定制 / 定制分享」与「我的定制」整合在同一页面展示，不独立分页
+ * 1. 「发起定制」与「我的定制」整合在同一页面展示
  * 2. 注册会员可定制标的，套餐价格保持原赞助不变
- * 3. 会员定制标的默认只有自己能看到（is_shared = false），可由购买的会员自主选择是否公开分享（is_shared = true）
+ * 3. 所有会员定制标的均为私人专属，不提供公开分享功能
  * 4. 输入 6 位代码自动识别股票/ETF名称及是 t+0 还是 t+1（复用 fetchSecurityInfo）
  * 5. 针对手机界面优化：移动端卡片列表自适应布局，操作便捷美观
  */
@@ -25,7 +25,6 @@ export default {
       code: "",
       name: "",
       trade_mode: "t+1",
-      is_shared: false, // 默认仅自己可见，由购买会员自主勾选是否分享
     });
     const searching = ref(false);
     const selectedDays = ref(30);
@@ -33,11 +32,6 @@ export default {
     const txId = ref("");
     const showPay = ref(false);
     const submitLoading = ref(false);
-    const canSubmitOrder = computed(() => /^\d{6}$/.test(String(txId.value || "")));
-    const onTxIdInput = (event) => {
-      const raw = event && event.target ? event.target.value : txId.value;
-      txId.value = String(raw || "").replace(/\D/g, "").slice(0, 6);
-    };
     const floatingCents = ref(0.01);
 
     const promoInput = ref("");
@@ -99,7 +93,6 @@ export default {
       etf_code: "",
       etf_name: "",
       trade_mode: "t+1",
-      is_shared: false,
     });
     const editLoading = ref(false);
 
@@ -148,8 +141,7 @@ export default {
           etf_code: rawCode,
           etf_name: form.name || info.name || rawCode,
           trade_mode: form.trade_mode || info.trade_mode,
-          is_shared: form.is_shared ? 1 : 0,
-        });
+          });
         form.code = "";
         form.name = "";
         form.trade_mode = "t+1";
@@ -216,7 +208,6 @@ export default {
         etf_code: code,
         etf_name: finalName,
         trade_mode: mode,
-        is_shared: form.is_shared ? 1 : 0,
       });
       form.code = "";
       form.name = "";
@@ -232,9 +223,6 @@ export default {
       regenFloat();
     };
 
-    const toggleCartItemShare = (item) => {
-      item.is_shared = item.is_shared ? 0 : 1;
-    };
 
     const selectPeriod = (days) => {
       selectedDays.value = days;
@@ -265,8 +253,7 @@ export default {
     };
 
     const submitOrder = async () => {
-      txId.value = String(txId.value || "").replace(/\D/g, "").slice(0, 6);
-      if (!canSubmitOrder.value) {
+      if (!/^\d{6}$/.test(txId.value)) {
         store.showToast("请填写 6 位数字支付凭证", "error");
         return;
       }
@@ -278,8 +265,7 @@ export default {
           amount: Number(payableAmount.value),
           original_amount: Number(totalBase.value),
           promo_code: appliedPromo.value ? appliedPromo.value.code : undefined,
-          is_shared: form.is_shared ? 1 : 0,
-          tx_id_last6: txId.value.trim(),
+            tx_id_last6: txId.value.trim(),
         });
         store.showToast("定制订单已提交！审核通过后标的将在您的数据看板置顶生效");
         cart.value = [];
@@ -326,7 +312,6 @@ export default {
       editModal.etf_code = row.etf_code;
       editModal.etf_name = row.etf_name || "";
       editModal.trade_mode = getTradeTag(row);
-      editModal.is_shared = Number(row.is_shared) === 1;
     };
 
     const onEditCodeInput = async () => {
@@ -350,34 +335,14 @@ export default {
           etf_code: code,
           etf_name: editModal.etf_name,
           trade_mode: editModal.trade_mode,
-          is_shared: editModal.is_shared ? 1 : 0,
         });
-        store.showToast("定制标的已更新");
+        store.showToast("定制标的已更换；旧标的停止您的采集，新标的已加入采集清单");
         editModal.visible = false;
         await Promise.all([loadMine(), loadActive()]);
       } catch (e) {
         store.showToast(e.message || "更新失败", "error");
       } finally {
         editLoading.value = false;
-      }
-    };
-
-    /** 在「我的定制」列表中一键切换私密 / 公开分享状态 */
-    const toggleShareStatus = async (row) => {
-      if (!row || !isActive(row)) return;
-      const nextShared = Number(row.is_shared) === 1 ? 0 : 1;
-      try {
-        await sponsorApi.updateSymbol(row.id, {
-          etf_code: row.etf_code,
-          etf_name: row.etf_name,
-          trade_mode: row.trade_mode,
-          is_shared: nextShared,
-        });
-        row.is_shared = nextShared;
-        store.showToast(nextShared ? "已开启公开分享，其他用户可在定制分享中查看" : "已设为私密，仅您自己可见");
-        await loadActive();
-      } catch (e) {
-        store.showToast(e.message || "设置失败", "error");
       }
     };
 
@@ -400,6 +365,7 @@ export default {
     };
 
     const remainText = (row) => {
+      if (row?.status === "replaced") return "已更换";
       if (!isActive(row)) return "已过期";
       const d = remainDays(row);
       if (d <= 0) return "即将到期";
@@ -428,7 +394,6 @@ export default {
       store: store.state,
       loading,
       mine,
-      activeList,
       prices,
       cart,
       form,
@@ -448,8 +413,6 @@ export default {
       clearPromo,
       payChannel,
       txId,
-      onTxIdInput,
-      canSubmitOrder,
       showPay,
       submitLoading,
       qrSrc,
@@ -459,12 +422,10 @@ export default {
       onEditCodeInput,
       addToCart,
       removeCart,
-      toggleCartItemShare,
       openPay,
       submitOrder,
       openEdit,
       saveEdit,
-      toggleShareStatus,
       formatTime,
       isActive,
       remainDays,
@@ -476,19 +437,21 @@ export default {
   },
   template: `
     <div class="max-w-4xl mx-auto space-y-4 sm:space-y-5 select-none">
-      <!-- 顶部标题（无独立分页切换，单页完整呈现「发起定制 / 我的定制 / 定制分享」） -->
+      <!-- 顶部标题：私人定制与我的定制 -->
       <div>
         <h2 class="text-xl sm:text-2xl font-bold text-slate-800">定制监控标的</h2>
         <p class="text-xs text-slate-500 mt-1 leading-relaxed">
-          注册会员可定制专属股票/ETF标的；<strong>默认仅您自己可见并在看板置顶</strong>，也可由您自主选择是否公开分享。
+          注册会员可定制专属股票/ETF标的；<strong>所有定制标的均为私人专属，仅本人可见并在看板置顶</strong>。
         </p>
       </div>
 
       <!-- 模块 1：发起定制 -->
       <div class="bg-white rounded-xl border border-slate-100 p-4 sm:p-5 shadow-sm space-y-4">
         <div class="flex items-center justify-between flex-wrap gap-2">
-          <span class="text-sm font-bold text-slate-700">① 选择定制周期、添加标的与分享设置</span>
-
+          <span class="text-sm font-bold text-slate-700">① 选择定制周期、添加私人定制标的</span>
+          <span class="text-[11px] text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200 font-bold">
+            <i class="fa-solid fa-ticket mr-1"></i>支持优惠码立减抵扣
+          </span>
         </div>
 
         <!-- 周期选择（套餐价格保持不变） -->
@@ -522,23 +485,37 @@ export default {
           <i class="fa-solid fa-spinner animate-spin mr-1"></i>正在自动识别标的名称与交易制度…
         </p>
 
-        <!-- 私密 / 分享自主选择开关 -->
-        <div class="bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div class="text-xs text-slate-600 flex items-center gap-2">
-            <i class="fa-solid text-sm" :class="form.is_shared ? 'fa-share-nodes theme-text' : 'fa-lock text-slate-500'"></i>
-            <span>
-              <strong>可见性设置：</strong>
-              <span v-if="!form.is_shared">默认<strong>仅自己可见</strong>（私密专属定制，其他人无法看到）</span>
-              <span v-else class="theme-text font-bold">已选择<strong>公开分享</strong>（审核通过后将同步展示在「定制分享」供全员参考）</span>
+        <!-- 优惠码输入栏 -->
+        <div class="bg-gradient-to-r from-orange-50/80 via-amber-50/50 to-white border border-orange-200/80 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <i class="fa-solid fa-ticket text-xs"></i>
             </span>
+            <div>
+              <div class="font-bold text-slate-800">优惠码折扣（选填）</div>
+              <div class="text-[11px] text-slate-500">输入优惠码点击「使用优惠码」，支付时自动减免对应金额</div>
+            </div>
           </div>
-          <label class="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer shrink-0">
-            <input type="checkbox" v-model="form.is_shared" class="rounded border-slate-300">
-            <span>公开分享该定制标的</span>
-          </label>
-        </div>
 
-        <!-- 优惠码统一在支付弹窗中输入，避免与支付时的优惠码入口重复 -->
+          <div v-if="!appliedPromo" class="flex items-center gap-2 sm:w-80">
+            <input v-model="promoInput" type="text" placeholder="请输入优惠码（如 VIP88）"
+                   class="flex-1 border border-orange-200 bg-white rounded-lg px-3 py-2 text-xs font-mono uppercase focus:theme-border outline-none"
+                   @keyup.enter="applyPromoCode">
+            <button type="button" @click="applyPromoCode" :disabled="promoChecking || !promoInput.trim()"
+                    class="px-3.5 py-2 rounded-lg text-xs font-bold bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 shrink-0 shadow-sm">
+              {{ promoChecking ? '校验中...' : '使用优惠码' }}
+            </button>
+          </div>
+          <div v-else class="flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700 sm:w-auto">
+            <span>
+              <i class="fa-solid fa-circle-check mr-1"></i>已绑定优惠码 <strong>{{ appliedPromo.code }}</strong>
+              <template v-if="appliedPromo.discount_type === 'percent'">（减免 {{ appliedPromo.discount_value }}%）</template>
+              <template v-else-if="appliedPromo.discount_type === 'fixed'">（立减 ¥{{ appliedPromo.discount_value }}）</template>
+              <template v-if="totalBase > 0"> · 已减 <strong>¥{{ discountSaved.toFixed(2) }}</strong></template>
+            </span>
+            <button type="button" @click="clearPromo" class="text-xs text-slate-500 hover:text-red-500 underline ml-2 shrink-0">取消</button>
+          </div>
+        </div>
 
         <!-- 待定制清单 -->
         <div v-if="cart.length" class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -560,13 +537,7 @@ export default {
                 <span class="font-mono font-bold"
                       :class="(c.trade_mode || getTradeTag(c)) === 't+0' ? 'text-red-500' : 'text-slate-800'">{{ c.etf_code }}</span>
                 <span class="text-slate-700 font-medium">{{ c.etf_name }}</span>
-                <button type="button" @click="toggleCartItemShare(c)"
-                        class="text-[11px] px-2 py-0.5 rounded-full border font-bold transition"
-                        :class="c.is_shared ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-slate-100 text-slate-600 border-slate-200'"
-                        title="点击切换私密/公开分享">
-                  <i class="fa-solid mr-1" :class="c.is_shared ? 'fa-share-nodes' : 'fa-lock'"></i>
-                  {{ c.is_shared ? '公开分享' : '仅自己可见' }}
-                </button>
+                <span class="text-[11px] px-2 py-0.5 rounded-full border font-bold bg-slate-100 text-slate-600">私人定制</span>
               </div>
               <button type="button" @click="removeCart(c.etf_code)" class="text-xs text-red-500 hover:underline">移除</button>
             </div>
@@ -591,7 +562,7 @@ export default {
         </div>
       </div>
 
-      <!-- 模块 2：我的定制（与发起定制/定制分享放在同一页面展示，不独立分页） -->
+      <!-- 模块 2：我的私人定制 -->
       <div class="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
         <div class="px-4 sm:px-5 py-3.5 border-b flex justify-between items-center flex-wrap gap-2">
           <div class="flex items-center gap-2 flex-wrap">
@@ -599,7 +570,7 @@ export default {
             <span v-if="mine.length" class="px-2 py-0.2 rounded-full text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
               {{ mine.length }} 只
             </span>
-            <span class="text-xs text-slate-400">有效期内可随时免费更换标的，或自由切换「私密 / 公开分享」</span>
+            <span class="text-xs text-slate-400">有效期内可随时免费更换标的；更换后旧标的立即退出您的采集清单</span>
           </div>
           <button v-if="store.isLoggedIn" type="button" @click="loadMine" class="text-xs text-slate-400 hover:theme-text">
             <i class="fa-solid fa-rotate-right mr-1"></i>刷新
@@ -622,7 +593,7 @@ export default {
               <tr>
                 <th class="py-2.5 sm:py-3 px-3 sm:px-4">标的代码（红色=T+0）</th>
                 <th class="py-2.5 sm:py-3 px-3 sm:px-4">标的名称</th>
-                <th class="py-2.5 sm:py-3 px-3 sm:px-4">可见性（点击切换）</th>
+                <th class="py-2.5 sm:py-3 px-3 sm:px-4">权限</th>
                 <th class="py-2.5 sm:py-3 px-3 sm:px-4">购买周期</th>
                 <th class="py-2.5 sm:py-3 px-3 sm:px-4">到期日</th>
                 <th class="py-2.5 sm:py-3 px-3 sm:px-4">剩余时间</th>
@@ -638,16 +609,9 @@ export default {
                 </td>
                 <td class="py-2.5 sm:py-3 px-3 sm:px-4 font-medium">{{ r.etf_name }}</td>
                 <td class="py-2.5 sm:py-3 px-3 sm:px-4">
-                  <button type="button"
-                          :disabled="!isActive(r)"
-                          @click="toggleShareStatus(r)"
-                          class="text-xs font-bold px-2.5 py-1 rounded-full border transition disabled:opacity-50"
-                          :class="Number(r.is_shared) === 1
-                            ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
-                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'">
-                    <i class="fa-solid mr-1" :class="Number(r.is_shared) === 1 ? 'fa-share-nodes' : 'fa-lock'"></i>
-                    {{ Number(r.is_shared) === 1 ? '已公开分享' : '仅自己可见' }}
-                  </button>
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                    <i class="fa-solid fa-lock mr-1"></i>仅本人可见
+                  </span>
                 </td>
                 <td class="py-2.5 sm:py-3 px-3 sm:px-4 text-xs font-bold text-slate-600">{{ r.days || '-' }} 天</td>
                 <td class="py-2.5 sm:py-3 px-3 sm:px-4 text-xs font-mono text-slate-500">{{ formatTime(r.expire_at) }}</td>
@@ -658,7 +622,7 @@ export default {
                 <td class="py-2.5 sm:py-3 px-3 sm:px-4">
                   <span class="text-xs font-bold px-2 py-0.5 rounded-full"
                         :class="isActive(r) ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'">
-                    {{ isActive(r) ? '监控生效中·看板置顶' : '已过期' }}
+                    {{ isActive(r) ? '监控生效中·看板置顶' : (r.status === 'replaced' ? '已更换' : '已过期') }}
                   </span>
                 </td>
                 <td class="py-2.5 sm:py-3 px-3 sm:px-4 text-right">
@@ -670,43 +634,6 @@ export default {
               </tr>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <!-- 模块 3：定制分享池（仅展示购买会员主动开启分享的标的） -->
-      <div class="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
-        <div class="px-4 sm:px-5 py-3.5 border-b flex justify-between items-center">
-          <div>
-            <span class="font-bold text-slate-700 text-sm">定制分享标的池</span>
-            <span class="text-xs text-slate-400 ml-2">由定制会员自主选择公开分享的监控标的</span>
-          </div>
-          <button type="button" @click="loadActive" class="text-xs text-slate-400 hover:theme-text">
-            <i class="fa-solid fa-rotate-right mr-1"></i>刷新
-          </button>
-        </div>
-        <div v-if="loading" class="py-10 text-center text-slate-400 text-sm">加载中…</div>
-        <div v-else-if="!activeList.length" class="py-10 text-center text-sm text-slate-400">
-          暂无公开分享的定制标的
-        </div>
-        <div v-else class="divide-y divide-slate-50">
-          <div v-for="r in activeList" :key="r.id" class="px-4 sm:px-5 py-3.5 flex flex-wrap items-center gap-3 justify-between hover:bg-slate-50/60">
-            <div>
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="font-mono font-bold"
-                      :class="getTradeTag(r) === 't+0' ? 'text-red-500' : 'text-slate-800'">{{ r.etf_code }}</span>
-                <span class="font-bold text-slate-700 text-sm ml-0.5">{{ r.etf_name }}</span>
-                <span class="text-[11px] bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full font-bold">
-                  定制分享
-                </span>
-              </div>
-              <div class="text-[11px] text-slate-400 mt-1">
-                定制周期 {{ r.days || '-' }} 天 · 有效期至 {{ formatTime(r.expire_at) }}（{{ remainText(r) }}）
-              </div>
-            </div>
-            <a href="#/" class="text-xs theme-text font-bold hover:underline no-underline">
-              去看板查看 <i class="fa-solid fa-angle-right"></i>
-            </a>
-          </div>
         </div>
       </div>
 
@@ -767,10 +694,7 @@ export default {
                       :class="(c.trade_mode || getTradeTag(c)) === 't+0' ? 'text-red-500' : 'text-slate-800'">{{ c.etf_code }}</span>
                 <span class="text-slate-500 ml-2">{{ c.etf_name }}</span>
               </div>
-              <span class="text-[10px] px-1.5 py-0.5 rounded"
-                    :class="c.is_shared ? 'bg-teal-50 text-teal-700' : 'bg-slate-200 text-slate-600'">
-                {{ c.is_shared ? '公开分享' : '仅自己可见' }}
-              </span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">私人定制</span>
             </div>
           </div>
 
@@ -794,16 +718,14 @@ export default {
             <label class="text-xs text-slate-600 font-bold block mb-1.5 text-center">
               支付完成后，请填写支付订单号/流水号后 6 位数字
             </label>
-            <input v-model="txId" @input="onTxIdInput" type="text" inputmode="numeric"
-                   autocomplete="one-time-code" maxlength="6" placeholder="请输入 6 位数字凭证（如 123456）"
+            <input v-model="txId" maxlength="6" placeholder="请输入 6 位数字凭证（如 123456）"
                    class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-center font-mono text-sm tracking-widest focus:theme-border outline-none">
           </div>
 
           <div class="flex gap-2 justify-end pt-1">
             <button type="button" @click="showPay=false" class="text-sm text-slate-500 px-3 py-2">取消</button>
-            <button type="button" @click="submitOrder" :disabled="submitLoading || !canSubmitOrder"
-                    :class="canSubmitOrder && !submitLoading ? 'theme-bg text-white hover:opacity-90 cursor-pointer' : 'bg-slate-300 text-white cursor-not-allowed'"
-                    class="px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors">
+            <button type="button" @click="submitOrder" :disabled="submitLoading || !/^\d{6}$/.test(txId)"
+                    class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50 shadow-sm">
               {{ submitLoading ? '提交中…' : '我已支付 · 提交审核' }}
             </button>
           </div>
@@ -814,7 +736,7 @@ export default {
       <div v-if="editModal.visible" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center p-4" @click.self="editModal.visible=false">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3.5 shadow-2xl">
           <h3 class="font-bold text-slate-800">更换定制监控标的</h3>
-          <p class="text-xs text-slate-400">定制有效期内可随时更换为其他 6 位股票/ETF代码，并设置是否分享</p>
+          <p class="text-xs text-slate-400">定制有效期内可随时更换为其他 6 位股票/ETF代码；更换后旧标的立即停止采集（若其他会员仍在使用则保留共享采集）</p>
           <input v-model="editModal.etf_code" @input="onEditCodeInput" maxlength="6" placeholder="新 6 位代码"
                  class="w-full border rounded-lg px-3 py-2 font-mono text-sm focus:theme-border outline-none">
           <input v-model="editModal.etf_name" placeholder="标的名称（自动识别）"
@@ -823,10 +745,6 @@ export default {
             <option value="t+0">T+0（红色代码）</option>
             <option value="t+1">T+1（常规代码）</option>
           </select>
-          <label class="flex items-center gap-2 text-xs font-bold text-slate-700 pt-1 cursor-pointer">
-            <input type="checkbox" v-model="editModal.is_shared" class="rounded border-slate-300">
-            <span>公开分享该定制标的（不勾选则仅自己可见）</span>
-          </label>
           <div class="flex justify-end gap-2 pt-1">
             <button type="button" @click="editModal.visible=false" class="text-sm text-slate-500 px-3">取消</button>
             <button type="button" @click="saveEdit" :disabled="editLoading"
