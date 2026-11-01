@@ -913,7 +913,8 @@ export default {
         const entry = resolveChartEntry(code);
         const r2Daily = `${CONFIG.R2_CHART_BASE}/${code}_daily.png`;
         const r2Half = `${CONFIG.R2_CHART_BASE}/${code}_half_day.png`;
-        candidates.push({ title: `${name} (${code}) ${dayLabel}日线`.trim(), url: entry?.url || r2Daily, code, kind: "daily" });
+        // 日线必须固定读取 *_daily.png；charts_map.url 是通用映射，周末周线任务曾把它覆盖成 *_weekly.png。
+        candidates.push({ title: `${name} (${code}) ${dayLabel}日线`.trim(), url: r2Daily, code, kind: "daily" });
         candidates.push({ title: `${name} (${code}) ${dayLabel}半日线`.trim(), url: r2Half, code, kind: "half_day" });
       }
       const images = await probeImagesBatch(candidates, 12);

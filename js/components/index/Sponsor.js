@@ -33,6 +33,11 @@ export default {
     const txId = ref("");
     const showPay = ref(false);
     const submitLoading = ref(false);
+    const canSubmitOrder = computed(() => /^\d{6}$/.test(String(txId.value || "")));
+    const onTxIdInput = (event) => {
+      const raw = event && event.target ? event.target.value : txId.value;
+      txId.value = String(raw || "").replace(/\D/g, "").slice(0, 6);
+    };
     const floatingCents = ref(0.01);
 
     const promoInput = ref("");
@@ -260,7 +265,8 @@ export default {
     };
 
     const submitOrder = async () => {
-      if (!/^\d{6}$/.test(txId.value)) {
+      txId.value = String(txId.value || "").replace(/\D/g, "").slice(0, 6);
+      if (!canSubmitOrder.value) {
         store.showToast("请填写 6 位数字支付凭证", "error");
         return;
       }
@@ -442,6 +448,8 @@ export default {
       clearPromo,
       payChannel,
       txId,
+      onTxIdInput,
+      canSubmitOrder,
       showPay,
       submitLoading,
       qrSrc,
@@ -480,9 +488,7 @@ export default {
       <div class="bg-white rounded-xl border border-slate-100 p-4 sm:p-5 shadow-sm space-y-4">
         <div class="flex items-center justify-between flex-wrap gap-2">
           <span class="text-sm font-bold text-slate-700">① 选择定制周期、添加标的与分享设置</span>
-          <span class="text-[11px] text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200 font-bold">
-            <i class="fa-solid fa-ticket mr-1"></i>支持优惠码立减抵扣
-          </span>
+
         </div>
 
         <!-- 周期选择（套餐价格保持不变） -->
@@ -532,37 +538,7 @@ export default {
           </label>
         </div>
 
-        <!-- 优惠码输入栏 -->
-        <div class="bg-gradient-to-r from-orange-50/80 via-amber-50/50 to-white border border-orange-200/80 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div class="flex items-center gap-2 text-xs">
-            <span class="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <i class="fa-solid fa-ticket text-xs"></i>
-            </span>
-            <div>
-              <div class="font-bold text-slate-800">优惠码折扣（选填）</div>
-              <div class="text-[11px] text-slate-500">输入优惠码点击「使用优惠码」，支付时自动减免对应金额</div>
-            </div>
-          </div>
-
-          <div v-if="!appliedPromo" class="flex items-center gap-2 sm:w-80">
-            <input v-model="promoInput" type="text" placeholder="请输入优惠码（如 VIP88）"
-                   class="flex-1 border border-orange-200 bg-white rounded-lg px-3 py-2 text-xs font-mono uppercase focus:theme-border outline-none"
-                   @keyup.enter="applyPromoCode">
-            <button type="button" @click="applyPromoCode" :disabled="promoChecking || !promoInput.trim()"
-                    class="px-3.5 py-2 rounded-lg text-xs font-bold bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 shrink-0 shadow-sm">
-              {{ promoChecking ? '校验中...' : '使用优惠码' }}
-            </button>
-          </div>
-          <div v-else class="flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700 sm:w-auto">
-            <span>
-              <i class="fa-solid fa-circle-check mr-1"></i>已绑定优惠码 <strong>{{ appliedPromo.code }}</strong>
-              <template v-if="appliedPromo.discount_type === 'percent'">（减免 {{ appliedPromo.discount_value }}%）</template>
-              <template v-else-if="appliedPromo.discount_type === 'fixed'">（立减 ¥{{ appliedPromo.discount_value }}）</template>
-              <template v-if="totalBase > 0"> · 已减 <strong>¥{{ discountSaved.toFixed(2) }}</strong></template>
-            </span>
-            <button type="button" @click="clearPromo" class="text-xs text-slate-500 hover:text-red-500 underline ml-2 shrink-0">取消</button>
-          </div>
-        </div>
+        <!-- 优惠码统一在支付弹窗中输入，避免与支付时的优惠码入口重复 -->
 
         <!-- 待定制清单 -->
         <div v-if="cart.length" class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -818,14 +794,16 @@ export default {
             <label class="text-xs text-slate-600 font-bold block mb-1.5 text-center">
               支付完成后，请填写支付订单号/流水号后 6 位数字
             </label>
-            <input v-model="txId" maxlength="6" placeholder="请输入 6 位数字凭证（如 123456）"
+            <input v-model="txId" @input="onTxIdInput" type="text" inputmode="numeric"
+                   autocomplete="one-time-code" maxlength="6" placeholder="请输入 6 位数字凭证（如 123456）"
                    class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-center font-mono text-sm tracking-widest focus:theme-border outline-none">
           </div>
 
           <div class="flex gap-2 justify-end pt-1">
             <button type="button" @click="showPay=false" class="text-sm text-slate-500 px-3 py-2">取消</button>
-            <button type="button" @click="submitOrder" :disabled="submitLoading || !/^\d{6}$/.test(txId)"
-                    class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50 shadow-sm">
+            <button type="button" @click="submitOrder" :disabled="submitLoading || !canSubmitOrder"
+                    :class="canSubmitOrder && !submitLoading ? 'theme-bg text-white hover:opacity-90 cursor-pointer' : 'bg-slate-300 text-white cursor-not-allowed'"
+                    class="px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors">
               {{ submitLoading ? '提交中…' : '我已支付 · 提交审核' }}
             </button>
           </div>
