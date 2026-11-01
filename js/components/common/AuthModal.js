@@ -202,8 +202,8 @@ export default {
           store.showToast("请输入 6 位邮箱验证码", "error");
           return;
         }
-        if (!form.password || form.password.length < 6) {
-          store.showToast("登录密码至少需要 6 位", "error");
+        if (!form.password || (store.state.authMode === "register" && form.password.length < 8)) {
+          store.showToast("注册密码至少需要 8 位", "error");
           return;
         }
       } else {
@@ -257,8 +257,8 @@ export default {
         store.showToast("请输入 6 位数字邮箱验证码", "error");
         return;
       }
-      if (!resetForm.newPassword || String(resetForm.newPassword).length < 6) {
-        store.showToast("新密码至少需要 6 位", "error");
+      if (!resetForm.newPassword || String(resetForm.newPassword).length < 8) {
+        store.showToast("新密码至少需要 8 位", "error");
         return;
       }
 
@@ -363,7 +363,7 @@ export default {
             若收件箱未收到验证码，请查看邮箱的<strong class="text-slate-600">垃圾邮件 / 广告邮件</strong>。
           </p>
 
-          <input v-model="form.password" type="password" :placeholder="store.authMode==='register'?'设置登录密码（至少6位）':'请输入登录密码'"
+          <input v-model="form.password" type="password" :placeholder="store.authMode==='register'?'设置登录密码（至少8位）':'请输入登录密码'"
                  class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
                  @keyup.enter="submit">
 
@@ -409,7 +409,7 @@ export default {
             若收件箱未收到验证码，请查看邮箱的<strong class="text-slate-600">垃圾邮件 / 广告邮件</strong>。
           </p>
 
-          <input v-model="resetForm.newPassword" type="password" placeholder="重新输入新密码（至少6位）"
+          <input v-model="resetForm.newPassword" type="password" placeholder="重新输入新密码（至少8位）"
                  class="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:theme-border outline-none"
                  @keyup.enter="confirmReset">
 
