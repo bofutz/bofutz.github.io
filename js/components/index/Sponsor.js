@@ -30,6 +30,13 @@ export default {
     const selectedDays = ref(30);
     const payChannel = ref("wechat");
     const txId = ref("");
+    // 只保留数字，最多 6 位；避免输入空格或其他字符导致校验不一致。
+    watch(txId, (value) => {
+      const digits = String(value || "").replace(/\D/g, "").slice(0, 6);
+      if (digits !== value) txId.value = digits;
+    });
+    // 在 setup 中计算有效性，避免模板字符串中的正则反斜杠被转义。
+    const isTxIdValid = computed(() => /^\d{6}$/.test(String(txId.value || "")));
     const showPay = ref(false);
     const submitLoading = ref(false);
     const floatingCents = ref(0.01);
@@ -253,7 +260,7 @@ export default {
     };
 
     const submitOrder = async () => {
-      if (!/^\d{6}$/.test(txId.value)) {
+      if (!isTxIdValid.value) {
         store.showToast("请填写 6 位数字支付凭证", "error");
         return;
       }
@@ -413,6 +420,7 @@ export default {
       clearPromo,
       payChannel,
       txId,
+      isTxIdValid,
       showPay,
       submitLoading,
       qrSrc,
@@ -683,14 +691,15 @@ export default {
             <label class="text-xs text-slate-600 font-bold block mb-1.5 text-center">
               支付完成后，请填写支付订单号/流水号后 6 位数字
             </label>
-            <input v-model="txId" maxlength="6" placeholder="请输入 6 位数字凭证（如 123456）"
+            <input v-model="txId" type="tel" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入 6 位数字凭证（如 123456）"
                    class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-center font-mono text-sm tracking-widest focus:theme-border outline-none">
           </div>
 
           <div class="flex gap-2 justify-end pt-1">
             <button type="button" @click="showPay=false" class="text-sm text-slate-500 px-3 py-2">取消</button>
-            <button type="button" @click="submitOrder" :disabled="submitLoading || !/^\d{6}$/.test(txId)"
-                    class="theme-bg text-white px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50 shadow-sm">
+            <button type="button" @click="submitOrder" :disabled="submitLoading || !isTxIdValid"
+                    :class="isTxIdValid && !submitLoading ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer opacity-100' : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70'"
+                    class="px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors">
               {{ submitLoading ? '提交中…' : '我已支付 · 提交审核' }}
             </button>
           </div>
