@@ -1,12 +1,12 @@
 /**
  * 会员定制监控标的 & 优惠码 & 自由打赏 API
- * 支持定制标的默认仅本人可见，购买会员可自主选择是否公开分享（is_shared）
+ * 所有会员定制标的均为私人专属，不支持公开分享
  * 已删除点赞相关接口
  */
 import { request } from "./http.js";
 
 export const sponsorApi = {
-  /** 公开分享的定制标的列表（仅返回会员主动选择分享的有效定制标的） */
+  /** 兼容旧版接口；定制标的已取消公开分享 */
   async fetchActive() {
     return request("/api/sponsor/active");
   },
@@ -47,13 +47,12 @@ export const sponsorApi = {
     });
   },
 
-  /** 有效期内修改标的代码、名称、交易规则或是否公开分享 */
-  async updateSymbol(id, { etf_code, etf_name, trade_mode, is_shared }) {
+  /** 有效期内更换私人定制标的；服务端保留更换历史及原到期时间 */
+  async updateSymbol(id, { etf_code, etf_name, trade_mode }) {
     const body = { id: Number(id) };
     if (etf_code !== undefined) body.etf_code = String(etf_code || "").trim().toUpperCase();
     if (etf_name !== undefined) body.etf_name = String(etf_name || "").trim();
     if (trade_mode !== undefined) body.trade_mode = trade_mode;
-    if (is_shared !== undefined) body.is_shared = is_shared ? 1 : 0;
     return request("/api/sponsor/update", {
       method: "POST",
       body: JSON.stringify(body),
