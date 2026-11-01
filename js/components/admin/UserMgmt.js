@@ -93,12 +93,17 @@ export default {
     };
 
     const resetPwd = async (user) => {
-      const secret = prompt(`重置 ${user.username} 密码为 bofutz\n请输入管理密钥确认：`);
+      const secret = prompt(`为 ${user.username} 生成临时密码？\n请输入管理密钥确认：`);
       if (!secret) return;
       actionLoading.value = true;
       try {
-        await adminApi.resetPassword(user.id, secret);
-        store.showToast("密码已重置为 bofutz");
+        const res = await adminApi.resetPassword(user.id, secret);
+        const temp = res.temporary_password || "";
+        if (temp) {
+          try { await navigator.clipboard.writeText(temp); } catch (_) {}
+          alert(`临时密码：${temp}\n\n请通过安全渠道转交用户，并提醒用户登录后立即修改。临时密码已尝试复制到剪贴板。`);
+        }
+        store.showToast("已生成临时密码，请安全转交用户");
       } catch (err) {
         store.showToast(err.message || "失败", "error");
       } finally {
