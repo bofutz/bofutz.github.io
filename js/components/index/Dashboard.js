@@ -666,10 +666,21 @@ export default {
         });
       }
 
-      const freeTopN = Math.max(0, parseInt(settings.value.free_top_n_charts, 10) || 0);
-      const freeTopCodes = (sharedList.value || [])
+      // 游客免费 TOP N 与 Worker /api/chart/image 的授权顺序保持一致：
+      // 按后台共享监控列表 sort_order 排序，而不是按行情波幅动态排序。
+      // 设置缺失时回退为 3；明确设置为 0 时仍允许管理员关闭免费名额。
+      const rawFreeTopN = settings.value.free_top_n_charts;
+      const parsedFreeTopN = rawFreeTopN == null || rawFreeTopN === ""
+        ? 3
+        : parseInt(rawFreeTopN, 10);
+      const freeTopN = Number.isFinite(parsedFreeTopN)
+        ? Math.max(0, Math.min(500, parsedFreeTopN))
+        : 3;
+      const freeTopCodes = [...(sharedList.value || [])]
+        .filter((row) => row && row.enabled !== 0 && row.enabled !== "0")
+        .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || (Number(a.id) || 0) - (Number(b.id) || 0))
         .map((row) => normCode(row.etf_code || row.code))
-        .filter((code) => code.length === 6)
+        .filter((code, index, list) => code.length === 6 && list.indexOf(code) === index)
         .slice(0, freeTopN);
 
       const totalCount = items.length;
@@ -714,8 +725,12 @@ export default {
     });
 
     const visibleCols = computed(() => processedData.value?.displayCols || BASE_COLS);
-    // 以后端 /api/etfs 返回的授权清单为准，避免“登录即全量”的前端绕过。
-    const canViewChart = (etfCode) => !!(chartsMap.value || {})[normCode(etfCode)];
+    // 图表映射优先；若映射接口暂时未返回该标的，游客 TOP N 名单仍可显示入口。
+    // 实际图片请求仍由 Worker /api/chart/image 再次鉴权，不会仅凭前端名单绕过权限。
+    const canViewChart = (etfCode) => {
+      const code = normCode(etfCode);
+      return !!(chartsMap.value || {})[code] || processedData.value.freeTopCodes.includes(code);
+    };
     const isFavorite = (code) => (favCodes.value || []).includes(normCode(code));
     const canCustomizeBoard = computed(() => !!store.state.isLoggedIn);
 
