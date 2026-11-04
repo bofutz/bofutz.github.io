@@ -92,6 +92,22 @@ export default {
       }
     };
 
+    const manageMembership = async (user) => {
+      const current = user.chart_expire_at ? formatDate(user.chart_expire_at) : "无有效全站会员";
+      const raw = prompt(`用户：${user.username}\n当前会员到期：${current}\n输入赠送/延长天数（1～3650），输入 0 取消全站会员：`, "30");
+      if (raw === null) return;
+      const days = Number(raw);
+      if (!Number.isInteger(days) || days < 0 || days > 3650) return store.showToast("请输入 0～3650 的整数", "error");
+      if (!confirm(days === 0 ? "确认取消该用户的全站图表会员？" : `确认赠送/延长 ${days} 天？`)) return;
+      actionLoading.value = true;
+      try {
+        const res = await adminApi.manageUserMembership(user.id, days === 0 ? "cancel" : "grant", days);
+        store.showToast(res.message || "会员权益已更新");
+        await loadUsers();
+      } catch (err) { store.showToast(err.message || "操作失败", "error"); }
+      finally { actionLoading.value = false; }
+    };
+
     const resetPwd = async (user) => {
       const secret = prompt(`为 ${user.username} 生成临时密码？\n请输入管理密钥确认：`);
       if (!secret) return;
@@ -149,6 +165,7 @@ export default {
       submitNickname,
       purgeInactive,
       resetPwd,
+      manageMembership,
       removeUser,
       formatDate,
     };
@@ -183,6 +200,7 @@ export default {
                 <th class="py-2.5 px-4">ID</th>
                 <th class="py-2.5 px-4">注册邮箱</th>
                 <th class="py-2.5 px-4">唯一用户名（可登录）</th>
+                <th class="py-2.5 px-4">全站会员到期</th>
                 <th class="py-2.5 px-4">有效定制</th>
                 <th class="py-2.5 px-4">注册日期</th>
                 <th class="py-2.5 px-4">最后登录</th>
@@ -199,6 +217,7 @@ export default {
                   </span>
                   <span v-else class="text-xs text-slate-400">未设置</span>
                 </td>
+                <td class="py-2.5 px-4 text-xs font-mono" :class="u.chart_expire_at ? 'text-emerald-600 font-bold' : 'text-slate-400'">{{ formatDate(u.chart_expire_at) }}</td>
                 <td class="py-2.5 px-4 font-mono font-bold"
                     :class="(u.active_sponsors || 0) > 0 ? 'text-emerald-600' : 'text-slate-400'">
                   {{ u.active_sponsors || 0 }} 只
@@ -206,13 +225,14 @@ export default {
                 <td class="py-2.5 px-4 text-xs text-slate-400 font-mono">{{ formatDate(u.created_at) }}</td>
                 <td class="py-2.5 px-4 text-xs text-slate-400 font-mono">{{ formatDate(u.last_login_at) }}</td>
                 <td class="py-2.5 px-4 text-right space-x-2">
+                  <button @click="manageMembership(u)" class="text-xs text-emerald-700 font-bold hover:underline">会员权益</button>
                   <button @click="openNickModal(u)" class="text-xs theme-text font-bold hover:underline">改用户名</button>
                   <button @click="resetPwd(u)" class="text-xs text-slate-500 hover:underline">重置密码</button>
                   <button @click="removeUser(u)" class="text-xs text-red-500 hover:underline">删除</button>
                 </td>
               </tr>
               <tr v-if="!filtered.length">
-                <td colspan="7" class="py-10 text-center text-slate-400 text-sm">暂无用户</td>
+                <td colspan="8" class="py-10 text-center text-slate-400 text-sm">暂无用户</td>
               </tr>
             </tbody>
           </table>

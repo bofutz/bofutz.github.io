@@ -1,6 +1,6 @@
 /**
  * 波幅探长 - 后台【订单审核】组件
- * 审核定制标的订单与温暖打赏订单
+ * 审核全站图表会员、定制标的与打赏订单
  */
 import { store } from "../../store.js";
 import { adminApi } from "../../api/admin.js";
@@ -42,7 +42,7 @@ export default {
       if (
         !confirm(
           `确认通过该订单？\n用户：${userLabel}\n类型：${
-            isCustomOrder(order) ? "定制标的" : "打赏支持"
+            isCustomOrder(order) ? "定制标的" : order.order_type === "chart_membership" ? "全站图表会员" : "打赏支持"
           }\n金额：¥${order.amount}`
         )
       )
@@ -196,7 +196,7 @@ export default {
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 class="text-xl font-bold text-slate-800">订单审核</h2>
-          <p class="text-xs text-slate-400 mt-0.5">审核会员定制标的与打赏支持订单</p>
+          <p class="text-xs text-slate-400 mt-0.5">审核全站会员、定制标的与打赏支持订单</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <div class="flex bg-slate-100 rounded-lg p-0.5 text-xs">
@@ -252,7 +252,7 @@ export default {
                     class="text-[10px] ml-1.5 px-1.5 py-0.5 rounded font-bold"
                     :class="isCustomOrder(o) ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'"
                   >
-                    {{ isCustomOrder(o) ? '定制标的' : '打赏支持' }}
+                    {{ isCustomOrder(o) ? '定制标的' : o.order_type === 'chart_membership' ? '全站图表会员' : '打赏支持' }}
                   </span>
                   <span v-if="o.promo_code" class="text-[10px] ml-1 bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-mono">
                     {{ o.promo_code }}
