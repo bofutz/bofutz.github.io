@@ -11,6 +11,12 @@ export const adminApi = {
   async fetchUsers() {
     return request("/api/admin/users");
   },
+  async manageUserMembership(userId, action, days = 30) {
+    return request("/api/admin/users/membership", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, action, days }),
+    });
+  },
   async updateUserNickname(userId, nickname) {
     return request("/api/admin/users/nickname", {
       method: "POST",
@@ -126,6 +132,9 @@ export const adminApi = {
     });
   },
 
+  async fetchChartHealth() {
+    return request("/api/admin/charts/health");
+  },
   async fetchSettings() {
     return request("/api/admin/settings");
   },
