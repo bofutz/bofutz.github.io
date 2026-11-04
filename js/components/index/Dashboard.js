@@ -281,8 +281,8 @@ export default {
       const raw = (chartsMap.value || {})[key6] || (chartsMap.value || {})[rawCode];
       if (!raw) return null;
       return typeof raw === "string"
-        ? { url: raw, updated_at: null }
-        : { url: raw.chart_url || raw.url || "", updated_at: raw.updated_at || null };
+        ? { url: raw, updated_at: null, intervals: { daily: raw } }
+        : { url: raw.chart_url || raw.url || "", updated_at: raw.updated_at || null, intervals: raw.intervals || {} };
     };
 
     /**
@@ -317,6 +317,7 @@ export default {
      * 严格按图表采集日期匹配所在列的日期，确保图表与数据各自独立且准确落位
      */
     const showDailyChartIcon = (etfCode, colDayIdx) => {
+      if (settings.value.chart_interval_daily === "0" && settings.value.chart_interval_half_day !== "1") return false;
       if (colDayIdx < 0 || colDayIdx > 4) return false;
       const pd = processedData.value;
       if (!pd) return false;
@@ -665,12 +666,11 @@ export default {
         });
       }
 
-      const freeTopN = Math.max(1, parseInt(settings.value.free_top_n_charts, 10) || 3);
-      const freeTopCodes = [...items]
-        .filter((i) => isLatestActive(i))
-        .sort(cmpLatestColActiveRank)
-        .slice(0, freeTopN)
-        .map((i) => i.etf_code);
+      const freeTopN = Math.max(0, parseInt(settings.value.free_top_n_charts, 10) || 0);
+      const freeTopCodes = (sharedList.value || [])
+        .map((row) => normCode(row.etf_code || row.code))
+        .filter((code) => code.length === 6)
+        .slice(0, freeTopN);
 
       const totalCount = items.length;
       const t0Count = items.filter((i) => i.trade_rule === "t+0").length;
@@ -714,7 +714,8 @@ export default {
     });
 
     const visibleCols = computed(() => processedData.value?.displayCols || BASE_COLS);
-    const canViewChart = (etfCode) => store.state.isLoggedIn || processedData.value.freeTopCodes.includes(etfCode);
+    // 以后端 /api/etfs 返回的授权清单为准，避免“登录即全量”的前端绕过。
+    const canViewChart = (etfCode) => !!(chartsMap.value || {})[normCode(etfCode)];
     const isFavorite = (code) => (favCodes.value || []).includes(normCode(code));
     const canCustomizeBoard = computed(() => !!store.state.isLoggedIn);
 
@@ -916,10 +917,12 @@ export default {
         const code = normCode(row.etf_code);
         const name = formatEtfName(row.etf_name) || code;
         const entry = resolveChartEntry(code);
-        const dailyUrl = chartImageUrl(code, "daily");
-        const halfUrl = chartImageUrl(code, "half_day");
-        candidates.push({ title: `${name} (${code}) ${dayLabel}日线`.trim(), url: dailyUrl, code, kind: "daily" });
-        candidates.push({ title: `${name} (${code}) ${dayLabel}半日线`.trim(), url: halfUrl, code, kind: "half_day" });
+        if (settings.value.chart_interval_daily !== "0" && entry?.intervals?.daily) {
+          candidates.push({ title: `${name} (${code}) ${dayLabel}日线`.trim(), url: chartImageUrl(code, "daily"), code, kind: "daily" });
+        }
+        if (settings.value.chart_interval_half_day === "1" && entry?.intervals?.half_day) {
+          candidates.push({ title: `${name} (${code}) ${dayLabel}半日线`.trim(), url: chartImageUrl(code, "half_day"), code, kind: "half_day" });
+        }
       }
       const images = await probeImagesBatch(candidates, 12);
       if (!images.length) return store.showToast("暂无可用日线/半日线图表", "error");
@@ -930,19 +933,20 @@ export default {
     };
 
     const openWeeklyChartViewer = async (item) => {
+      if (settings.value.chart_interval_weekly === "0") return store.showToast("周线图表当前未开放", "error");
       if (!canViewChart(item.etf_code)) return openGuestChartPrompt(item);
       const rows = viewableBoardItems();
       if (!rows.length) return store.showToast("暂无可查看的图表", "error");
       store.showToast("正在加载图库…");
       const weekColDate = processedData.value?.weekDays?.[5] || "";
-      const candidates = rows.map((row) => {
+      const candidates = rows.filter(row => resolveChartEntry(normCode(row.etf_code))?.intervals?.weekly).map((row) => {
         const code = normCode(row.etf_code);
         const name = formatEtfName(row.etf_name) || code;
         const dLabel = formatDateCN(row.week_status_date || weeklyChartDay.value || weekColDate || globalChartDay.value) || "";
         return { title: `${name} (${code}) ${dLabel}周线`.trim(), url: chartImageUrl(code, "weekly"), code };
       });
       const images = await probeImagesBatch(candidates, 12);
-      if (!images.length) return store.showToast("暂无可用周线图表", "error");
+      if (!images.length) return store.showToast("暂无已开放或已生成的周线图表", "error");
       const clickCode = normCode(item.etf_code);
       const idx = Math.max(0, images.findIndex((g) => g.code === clickCode));
       showViewerWithMultiImages(images, idx);
@@ -1073,14 +1077,8 @@ export default {
             <p class="text-[11px] sm:text-xs text-slate-500 mt-1">集中观察日线、半日线与周线变化；收藏重点标的，按自己的节奏跟踪市场。</p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <a href="#/guide" class="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold no-underline hover:bg-slate-50">使用说明</a>
             <a href="#/sponsor" class="inline-flex items-center justify-center px-3.5 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold no-underline hover:bg-slate-700">定制我的标的 <i class="fa-solid fa-arrow-right ml-1.5"></i></a>
           </div>
-        </div>
-        <div class="grid grid-cols-3 border-t border-slate-100 bg-slate-50/70 divide-x divide-slate-100">
-          <div class="px-2.5 py-2 text-center"><div class="text-[10px] sm:text-[11px] text-slate-400">多周期观察</div><div class="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">半日 / 日 / 周</div></div>
-          <div class="px-2.5 py-2 text-center"><div class="text-[10px] sm:text-[11px] text-slate-400">个性化管理</div><div class="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">收藏 / 排序</div></div>
-          <div class="px-2.5 py-2 text-center"><div class="text-[10px] sm:text-[11px] text-slate-400">专属扩展</div><div class="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">自定义监控</div></div>
         </div>
       </section>
       <div v-if="promoBanner.visible"
@@ -1274,7 +1272,7 @@ export default {
                         </template>
                         <span v-else class="text-[10px] sm:text-sm font-mono text-slate-300 leading-tight">-</span>
 
-                        <i v-if="item.week_status || cIdx === 5"
+                        <i v-if="settings.chart_interval_weekly !== '0' && (item.week_status || cIdx === 5)"
                            class="fa-regular fa-image text-slate-400 hover:text-blue-500 cursor-pointer text-[11px] sm:text-xs shrink-0 p-0.5"
                            :title="weekChartTitle(processedData.weekDays[5])"
                            @click.stop="openWeeklyChartViewer(item)"></i>
@@ -1290,10 +1288,9 @@ export default {
         <!-- 页面下方使用说明 -->
         <div class="bg-amber-50/95 border border-amber-300 rounded-lg px-2.5 sm:px-3 py-1.5 text-center shadow-sm">
           <p class="text-[10px] sm:text-[11px] font-bold text-slate-800 leading-snug tracking-normal">
-            <span class="text-amber-700"><i class="fa-solid fa-circle-info mr-1"></i>使用说明：</span>
-            格式：<span class="font-mono text-slate-900">上午/下午|日线</span>；
-            <span class="text-red-500">红正三角（▲）</span>代表半日/日线的行情启动；<span class="text-emerald-600">绿倒三角（▼）</span>代表半日/日线的行情结束；
-            <span class="text-red-500">红色代码</span>代表 T+0 标的，其余为 T+1 标的。手机端支持双指缩放页面。
+            <span class="text-amber-700"><i class="fa-solid fa-circle-info mr-1"></i>图例：</span>
+            <span class="text-red-500">▲ 红色</span>行情启动；<span class="text-emerald-600">▼ 绿色</span>行情结束；
+            <span class="text-red-500">红色代码</span>为 T+0，其余为 T+1；上午 / 下午表示数据采集时段。
           </p>
         </div>
 
@@ -1309,7 +1306,7 @@ export default {
                 {{ settings.tip_note || '觉得波幅探长对您有帮助？请作者喝杯咖啡吧' }}
               </h3>
               <p class="text-xs text-slate-500 leading-relaxed">
-                本站注册即可查看全量数据与图表。您可以输入任意金额打赏支持服务器与算力维护。
+                注册可享免费体验期，体验结束后可订阅全站图表会员。您也可以输入任意金额支持服务器与算力维护。
               </p>
             </div>
 

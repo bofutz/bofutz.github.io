@@ -15,6 +15,39 @@ export default {
   setup() {
     const orders = ref([]);
     const loading = ref(false);
+    const membership = ref(null);
+    const customMemberships = ref([]);
+    const selectedPlanDays = ref(30);
+    const membershipTx = ref("");
+    const membershipChannel = ref("wechat");
+    const membershipSubmitting = ref(false);
+    const membershipPrices = [
+      { days: 30, label: "月费", fallback: "8.8" },
+      { days: 90, label: "季费", fallback: "26.8" },
+      { days: 180, label: "半年费", fallback: "48.8" },
+      { days: 365, label: "年费", fallback: "88.8" },
+    ];
+    const membershipPrice = (days) => Number(store.state.publicSettings[`chart_price_${days}`] ?? membershipPrices.find(x => x.days === days)?.fallback ?? 0).toFixed(2);
+    const membershipQr = () => membershipChannel.value === "alipay"
+      ? (store.state.publicSettings.alipay_qr_url || "")
+      : (store.state.publicSettings.wechat_qr_url || "");
+    const submitMembershipOrder = async () => {
+      if (!/^\d{6}$/.test(String(membershipTx.value || "").trim())) {
+        store.showToast("请填写支付凭证后 6 位数字", "error"); return;
+      }
+      membershipSubmitting.value = true;
+      try {
+        const res = await request("/api/membership/order", {
+          method: "POST",
+          body: JSON.stringify({ days: Number(selectedPlanDays.value), tx_id_last6: String(membershipTx.value).trim() }),
+        });
+        store.showToast(res.message || "会员订单已提交，等待审核");
+        membershipTx.value = "";
+        await loadProfileData();
+      } catch (err) {
+        store.showToast(err.message || "提交失败", "error");
+      } finally { membershipSubmitting.value = false; }
+    };
 
     const nicknameInput = ref("");
     const nicknameSaving = ref(false);
@@ -62,11 +95,10 @@ export default {
 
         if (meRes && (meRes.data || meRes.username)) {
           const d = meRes.data || meRes;
-          store.setUserState({
-            username: d.username,
-            nickname: d.nickname || "",
-          });
+          store.setUserState({ username: d.username, nickname: d.nickname || "" });
           nicknameInput.value = d.nickname || "";
+          membership.value = d.chart_membership || null;
+          customMemberships.value = Array.isArray(d.custom_memberships) ? d.custom_memberships : [];
         }
       } catch (err) {
         store.showToast(err.message, "error");
@@ -119,18 +151,30 @@ export default {
 
     const formatOrderType = (o) => {
       if (o.order_type === "symbol_custom" || o.order_type === "symbol_sponsor") return "定制标的";
+      if (o.order_type === "chart_membership") return "全站图表会员";
       if (o.order_type === "tip") return "温暖打赏";
       return "历史订单";
     };
 
     onMounted(() => {
       nicknameInput.value = store.state.nickname || "";
+      membershipChannel.value = store.state.publicSettings.default_pay_channel || "wechat";
       if (store.state.isLoggedIn) loadProfileData();
     });
 
     return {
       store: store.state,
       orders,
+      membership,
+      customMemberships,
+      selectedPlanDays,
+      membershipTx,
+      membershipChannel,
+      membershipSubmitting,
+      membershipPrices,
+      membershipPrice,
+      membershipQr,
+      submitMembershipOrder,
       loading,
       nicknameInput,
       nicknameSaving,
@@ -196,7 +240,57 @@ export default {
           </div>
         </div>
 
-        <!-- 2. 我的订单记录 -->
+        <!-- 2. 全站图表会员权益 -->
+        <section class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 sm:p-6 space-y-4">
+          <div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h3 class="font-bold text-slate-800">全站图表会员</h3>
+              <p class="text-xs text-slate-400 mt-1">免费体验与付费会员独立记录；续费将在当前有效期后顺延。</p>
+            </div>
+            <span v-if="membership && membership.expire_at > Date.now()" class="text-xs rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 font-bold">权益有效</span>
+            <span v-else class="text-xs rounded-full bg-slate-100 text-slate-500 px-2.5 py-1 font-bold">普通访问</span>
+          </div>
+          <div v-if="membership && membership.expire_at > Date.now()" class="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div><span class="text-slate-400">会员类型</span><div class="font-bold mt-1">{{ membership.source === 'trial' ? '注册免费体验' : '付费图表会员' }}</div></div>
+            <div><span class="text-slate-400">开始时间</span><div class="font-bold mt-1">{{ formatDateExact(membership.start_at) }}</div></div>
+            <div><span class="text-slate-400">到期时间</span><div class="font-bold mt-1">{{ formatDateExact(membership.expire_at) }}</div></div>
+          </div>
+          <div v-if="customMemberships.length" class="border-t pt-3 space-y-2">
+            <div class="text-xs font-bold text-slate-700">私人定制标的权益</div>
+            <div v-for="item in customMemberships" :key="item.etf_code+'-'+item.created_at" class="flex flex-wrap justify-between gap-2 text-xs border-b border-slate-50 pb-2">
+              <span class="font-mono font-bold text-slate-700">{{item.etf_code}} · {{item.etf_name}}</span>
+              <span :class="item.status==='active' && item.expire_at>Date.now() ? 'text-emerald-600' : 'text-slate-400'">{{item.status==='active' && item.expire_at>Date.now() ? '有效至 ' : '已到期 '}}{{formatDateExact(item.expire_at)}}</span>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-700">选择续费套餐</div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button v-for="plan in membershipPrices" :key="plan.days" type="button" @click="selectedPlanDays=plan.days"
+                      :class="selectedPlanDays===plan.days ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900' : 'border-slate-200 bg-white'"
+                      class="rounded-lg border p-3 text-left">
+                <div class="text-xs text-slate-500">{{plan.label}}</div>
+                <div class="text-lg font-extrabold text-slate-900 mt-1">¥{{membershipPrice(plan.days)}}</div>
+                <div class="text-[10px] text-slate-400">{{plan.days}} 天</div>
+              </button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-start">
+              <div class="space-y-2">
+                <div class="flex gap-2">
+                  <select v-model="membershipChannel" class="border rounded-lg px-3 py-2 text-xs"><option value="wechat">微信支付</option><option value="alipay">支付宝</option></select>
+                  <input v-model="membershipTx" maxlength="6" inputmode="numeric" placeholder="支付凭证后 6 位" class="flex-1 min-w-0 border rounded-lg px-3 py-2 text-xs">
+                </div>
+                <button type="button" @click="submitMembershipOrder" :disabled="membershipSubmitting" class="theme-bg text-white rounded-lg px-4 py-2 text-xs font-bold disabled:opacity-50">
+                  {{membershipSubmitting ? '提交中...' : '提交会员订单 · ¥'+membershipPrice(selectedPlanDays)}}
+                </button>
+                <p class="text-[10px] text-slate-400">支付后提交凭证，管理员人工核对；审核通过后自动开通。不会自动续费。</p>
+              </div>
+              <img v-if="membershipQr()" :src="membershipQr()" alt="会员支付收款码" class="w-32 h-32 object-contain border rounded-lg p-1 bg-white">
+              <div v-else class="w-32 h-32 border border-dashed rounded-lg flex items-center justify-center text-[10px] text-slate-400 text-center p-2">管理员尚未配置收款码</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. 我的订单记录 -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
             <div class="font-bold text-slate-700 text-base">我的订单与支持记录</div>
