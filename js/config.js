@@ -6,8 +6,6 @@ export const CONFIG = {
   API_BASE: "https://" + "vip.hahagw.eu.org",
   MAIL_API_BASE: "https://" + "mail.hahagw.eu.org",
   TURNSTILE_SITEKEY: "0x4AAAAAAEDLWs232Np7X0xa",
-  R2_CHART_BASE: "https://" + "pub-973330e118204686a625fe51431d4336.r2.dev/charts",
-
   STORAGE_KEYS: {
     TOKEN: "etf_token",
     USER_ID: "etf_user_id",
@@ -26,14 +24,23 @@ export const CONFIG = {
 
   DEFAULT_PUBLIC_SETTINGS: {
     free_top_n_charts: "3",
+    free_trial_days: "7",
+    chart_price_30: "8.8",
+    chart_price_90: "26.8",
+    chart_price_180: "48.8",
+    chart_price_365: "88.8",
+    chart_retention_days: "7",
+    chart_interval_half_day: "0",
+    chart_interval_daily: "1",
+    chart_interval_weekly: "1",
     promo_enabled: "1",
     alipay_qr_url: "",
     wechat_qr_url: "",
     default_pay_channel: "wechat",
     symbol_prices:
       '[{"days":30,"price":30,"label":"1个月"},{"days":90,"price":88,"label":"季度"},{"days":180,"price":168,"label":"半年"},{"days":365,"price":328,"label":"全年"}]',
-    tip_enabled: "1",
-    tip_note: "本站注册即免费开放全量数据与图表 · 您的打赏支持将直接用于服务器与算力维护",
+    tip_enabled: "0",
+    tip_note: "注册赠送 7 天全站图表体验 · 您的支持将用于服务器与算力维护",
     ad_enabled: "0",
     ad_content: "",
     ad_link_url: "",
