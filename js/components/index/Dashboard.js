@@ -41,6 +41,7 @@ export default {
     const loading = ref(false);
     const allData = ref([]);
     const chartsMap = ref({});
+    const serverFreeTopCodes = ref(null);
     const globalChartDay = ref(null);
     const weeklyChartDay = ref(null);
     const sharedList = ref([]);
@@ -666,22 +667,22 @@ export default {
         });
       }
 
-      // 游客免费 TOP N 与 Worker /api/chart/image 的授权顺序保持一致：
-      // 按后台共享监控列表 sort_order 排序，而不是按行情波幅动态排序。
-      // 设置缺失时回退为 3；明确设置为 0 时仍允许管理员关闭免费名额。
+      // 游客免费名单由 Worker 根据最新行情绝对值计算并返回，前后端共用同一名单。
+      // 仅在旧版接口未返回名单时，才用当前页面数据按相同最新列规则兜底计算。
       const rawFreeTopN = settings.value.free_top_n_charts;
-      const parsedFreeTopN = rawFreeTopN == null || rawFreeTopN === ""
-        ? 3
-        : parseInt(rawFreeTopN, 10);
-      const freeTopN = Number.isFinite(parsedFreeTopN)
-        ? Math.max(0, Math.min(500, parsedFreeTopN))
-        : 3;
-      const freeTopCodes = [...(sharedList.value || [])]
+      const parsedFreeTopN = rawFreeTopN == null || rawFreeTopN === "" ? 3 : parseInt(rawFreeTopN, 10);
+      const freeTopN = Number.isFinite(parsedFreeTopN) ? Math.max(0, Math.min(500, parsedFreeTopN)) : 3;
+      const sharedCodes = new Set((sharedList.value || [])
         .filter((row) => row && row.enabled !== 0 && row.enabled !== "0")
-        .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || (Number(a.id) || 0) - (Number(b.id) || 0))
-        .map((row) => normCode(row.etf_code || row.code))
-        .filter((code, index, list) => code.length === 6 && list.indexOf(code) === index)
-        .slice(0, freeTopN);
+        .map((row) => normCode(row.etf_code || row.code)).filter((code) => code.length === 6));
+      const fallbackTopCodes = [...items]
+        .filter((row) => sharedCodes.has(normCode(row.etf_code)) && isLatestActive(row))
+        .sort(cmpLatestColActiveRank)
+        .slice(0, freeTopN)
+        .map((row) => normCode(row.etf_code));
+      const freeTopCodes = Array.isArray(serverFreeTopCodes.value)
+        ? serverFreeTopCodes.value.map(normCode).filter((code) => code.length === 6)
+        : fallbackTopCodes;
 
       const totalCount = items.length;
       const t0Count = items.filter((i) => i.trade_rule === "t+0").length;
@@ -986,6 +987,7 @@ export default {
         if (store.state.isLoggedIn) await loadDashboardPrefs();
         if (Array.isArray(data)) allData.value = data;
         chartsMap.value = chartsRes.charts || chartsRes || {};
+        serverFreeTopCodes.value = Array.isArray(chartsRes?.free_top_codes) ? chartsRes.free_top_codes : null;
         sharedList.value = Array.isArray(sharedRes?.data ?? sharedRes) ? (sharedRes?.data ?? sharedRes) : [];
 
         const spMap = {};
