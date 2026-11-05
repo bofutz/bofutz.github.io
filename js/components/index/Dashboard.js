@@ -666,9 +666,8 @@ export default {
         });
       }
 
-      // 游客免费 TOP N 与 Worker /api/chart/image 的授权顺序保持一致：
-      // 按后台共享监控列表 sort_order 排序，而不是按行情波幅动态排序。
-      // 设置缺失时回退为 3；明确设置为 0 时仍允许管理员关闭免费名额。
+      // 游客免费 TOP N：使用首页同一份最新行情数据及同一套最新列绝对值排序。
+      // 仅纳入默认共享监控标的；会员定制标的不参与免费名额竞争。
       const rawFreeTopN = settings.value.free_top_n_charts;
       const parsedFreeTopN = rawFreeTopN == null || rawFreeTopN === ""
         ? 3
@@ -676,12 +675,17 @@ export default {
       const freeTopN = Number.isFinite(parsedFreeTopN)
         ? Math.max(0, Math.min(500, parsedFreeTopN))
         : 3;
-      const freeTopCodes = [...(sharedList.value || [])]
-        .filter((row) => row && row.enabled !== 0 && row.enabled !== "0")
-        .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || (Number(a.id) || 0) - (Number(b.id) || 0))
-        .map((row) => normCode(row.etf_code || row.code))
-        .filter((code, index, list) => code.length === 6 && list.indexOf(code) === index)
-        .slice(0, freeTopN);
+      const sharedBaseCodes = new Set(
+        (sharedList.value || [])
+          .filter((row) => row && row.enabled !== 0 && row.enabled !== "0" && row.source !== "custom" && row.source !== "sponsor")
+          .map((row) => normCode(row.etf_code || row.code))
+          .filter((code) => code.length === 6)
+      );
+      const freeTopCodes = [...items]
+        .filter((row) => sharedBaseCodes.has(normCode(row.etf_code)) && isLatestActive(row))
+        .sort(cmpLatestColActiveRank)
+        .slice(0, freeTopN)
+        .map((row) => normCode(row.etf_code));
 
       const totalCount = items.length;
       const t0Count = items.filter((i) => i.trade_rule === "t+0").length;
